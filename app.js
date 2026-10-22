@@ -583,6 +583,22 @@ function viewPainel() {
       }).join("")}
       </tbody><tfoot><tr><td>Total</td><td class="num">${brl(r.receita)}</td><td class="num">${brl(r.lucro)}</td><td class="num">${pct(margem)}</td></tr></tfoot></table></div>
     </div>
+  </div>
+  ${resumoMensalDoces()}`;
+}
+// Histórico mês a mês dos doces finos (mesma ideia do resumo da paçoca)
+function resumoMensalDoces() {
+  const meses = mesesComDados("doces");
+  if (!meses.length) return "";
+  const rs = meses.map((m) => ({ m, r: resumo(m, "doces") }));
+  const outros = (r) => r.comissoes + r.perdas + r.custosVar;
+  const tot = resumo(0, "doces");
+  return `<div class="card mt"><div class="card-head"><div><h3>Resumo por mês</h3><div class="sub">Totais consolidados dos lançamentos semanais de vendas</div></div><a class="btn btn-sm" href="#vendas">Ver lançamentos</a></div>
+    <div class="table-wrap"><table><thead><tr><th>Mês</th><th class="num hide-m">Semanas</th><th class="num">Vendas</th><th class="num">Faturamento</th><th class="num hide-m">Insumos</th><th class="num hide-m">Gasolina</th><th class="num hide-m">Outros custos</th><th class="num">Lucro</th><th class="num">Margem</th></tr></thead>
+    <tbody>${rs.map(({ m, r }) => `<tr class="${ui.mes === m ? "row-sel" : ""}"><td><b>${MESES_FULL[m - 1]}</b></td><td class="num hide-m">${r.vendas.length}</td><td class="num">${int(r.qtd)}</td><td class="num">${brl(r.receita)}</td>
+      <td class="num hide-m">${brl(r.insumos)}</td><td class="num hide-m">${brl(r.gasolina)}</td><td class="num hide-m">${brl(outros(r))}</td>
+      <td class="num ${r.lucro >= 0 ? "pos" : "neg"}"><b>${brl(r.lucro)}</b></td><td class="num">${pct(r.receita ? (r.lucro / r.receita) * 100 : 0)}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td>Total</td><td class="num hide-m">${tot.vendas.length}</td><td class="num">${int(tot.qtd)}</td><td class="num">${brl(tot.receita)}</td><td class="num hide-m">${brl(tot.insumos)}</td><td class="num hide-m">${brl(tot.gasolina)}</td><td class="num hide-m">${brl(outros(tot))}</td><td class="num">${brl(tot.lucro)}</td><td class="num">${pct(tot.receita ? (tot.lucro / tot.receita) * 100 : 0)}</td></tr></tfoot></table></div>
   </div>`;
 }
 function afterPainel() {
