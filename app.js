@@ -1,0 +1,2228 @@
+/* ================= HA Gourmet · Plataforma de Gestão ================= */
+const STORE_KEY = "hagourmet_gestao_v1";
+const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const MESES_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const CANAIS_VENDA = ["Outbound", "iFood", "Revenda", "Encomenda"];
+const CORES = { Outbound: "#5a3826", iFood: "#d24b4b", Revenda: "#c8963e", Encomenda: "#3c78c8", "Paçoca": "#2f9e6b" };
+
+const $ = (s) => document.querySelector(s);
+const uid = () => Math.random().toString(36).slice(2, 10);
+const sum = (arr, fn) => arr.reduce((a, x) => a + (fn ? fn(x) : x), 0);
+const parseNum = (v) => {
+  if (typeof v === "number") return v;
+  let s = String(v || "").replace(/[R$\s]/g, "");
+  if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+};
+const brl = (v) => (v < 0 ? "-" : "") + "R$ " + Math.abs(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const brlU = (v) => "R$ " + (v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: v < 0.1 ? 4 : 2 });
+const pct = (v) => (isFinite(v) ? v : 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "%";
+const int = (v) => Math.round(v || 0).toLocaleString("pt-BR");
+const ddmm = (iso) => { const [, m, d] = iso.split("-"); return `${d}/${m}`; };
+const monthOf = (iso) => +iso.slice(5, 7);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ---------- Ícones ---------- */
+const ICONS = {
+  dash: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  trend: '<path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/>',
+  cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  tag: '<path d="M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z"/><circle cx="7.5" cy="7.5" r="1"/>',
+  book: '<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>',
+  pkg: '<path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/>',
+  gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5"/>',
+  calc: '<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M16 14v4M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M8 18h.01M12 18h.01"/>',
+  pie: '<path d="M21.2 15.9A10 10 0 1 1 8 2.8"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  edit: '<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  alert: '<path d="m21.7 18-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4M12 17h.01"/>',
+  check: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  money: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>',
+  percent: '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+  cart: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L22 7H5.1"/>',
+  wallet: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  gear: '<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+};
+const icon = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n] || ""}</svg>`;
+
+/* ---------- Dados ---------- */
+function linkReceitas(insumos) {
+  const s = JSON.parse(JSON.stringify(SEED));
+  const link = (nome) => { const ins = insumos.find((i) => i.nome === nome); return ins ? { insumoId: ins.id } : { nome }; };
+  return {
+    sabores: s.sabores.map((sb) => ({
+      nome: sb.nome,
+      rend: sb.rend,
+      lote: sb.lote.map(([n, q]) => ({ ...link(n), qtd: q })),
+      porUn: sb.porUn.map(([n, q]) => ({ ...link(n), qtd: q })),
+    })),
+    barras: s.barras.map((b) => ({
+      nome: b.nome,
+      linha: s.barrasTrufadas.includes(b.nome) ? "trufada" : "gourmet",
+      itens: b.itens.map(([n, q, unid, valorUnit]) => (unid ? { nome: n, qtd: q, unid, valorUnit } : { ...link(n), qtd: q })),
+    })),
+  };
+}
+function buildSeed() {
+  const s = JSON.parse(JSON.stringify(SEED));
+  const item = ([nome, custo, rend, unid]) => ({ id: uid(), nome, custo, rend, unid });
+  const produtos = s.produtos.map((p) => ({ id: uid(), ...p }));
+  const qtdInicial = {};
+  const pre = { "Outbound|Caixa Copinho 4un": 20, "Outbound|Caixa Copinho 9un": 100, "Revenda|Caixa Bolinha 9un": 30, "Revenda|Copinho unidade": 20 };
+  produtos.forEach((p) => { if (pre[p.canal + "|" + p.nome]) qtdInicial[p.id] = pre[p.canal + "|" + p.nome]; });
+  const insumos = s.insumos.map(item);
+  return {
+    config: s.config,
+    insumos,
+    ...linkReceitas(insumos),
+    materiais: s.materiais.map(item),
+    variaveis: s.variaveis.map(item),
+    embalagens: s.embalagens.map((e) => ({ id: uid(), nome: e.nome, uso: e.uso, itens: e.itens.map(([material, qtd]) => ({ material, qtd })) })),
+    formatos: s.formatos,
+    canais: s.canais,
+    params: s.params,
+    produtos,
+    vendas: s.vendas.map((v) => ({ id: uid(), ...v })),
+    pacoca: s.pacoca.map(([data, qtd, pix, especie, insumos, gasolina, maoObra]) => ({ id: uid(), data, qtd, pix, especie, insumos, gasolina, maoObra })),
+    fixos: [
+      { id: uid(), nome: "Pró-labore", valor: 0 },
+      { id: uid(), nome: "Marketing", valor: 0 },
+      { id: uid(), nome: "Contabilidade", valor: 0 },
+      { id: uid(), nome: "Telefonia / Internet", valor: 0 },
+    ],
+    sim: { canal: "Outbound", semanas: 4, qtd: qtdInicial, fixos: { Gasolina: 107.4, "Comissão vendedor": 0, "Alimentação vendedor": 0, Marketing: 0, "Pró-labore": 0 } },
+    pacocaCusto: s.pacocaCusto.map(([nome, valor]) => ({ id: uid(), nome, valor })),
+    pacocaCompra: s.pacocaCompra.map(([nome, qtd, valor]) => ({ id: uid(), nome, qtd, valor })),
+    pacocaSim: s.pacocaSim,
+    receitasVistas: true,
+    pagamentos: [],
+    custosVar: [],
+    estoque: {
+      saldos: {},
+      movs: [],
+      pacocaItens: [
+        { id: uid(), nome: "Paçoquita", unid: "un", consumo: 1, custo: 1.07 },
+        { id: uid(), nome: "Saquinho", unid: "un", consumo: 1, custo: 0.05 },
+        { id: uid(), nome: "Papel", unid: "folha", consumo: 1, custo: 0.03 },
+        { id: uid(), nome: "Fita durex", unid: "rolo", consumo: 0, custo: 3.64 },
+      ],
+    },
+    vendedor: {
+      tipos: s.vendedor.tipos,
+      combos: {
+        doces: s.vendedor.combos.doces.map((c) => ({ id: uid(), ...c })),
+        pacoca: s.vendedor.combos.pacoca.map((c) => ({ id: uid(), ...c })),
+      },
+      pag: { doces: "pix", pacoca: "pix" },
+      registros: [],
+    },
+  };
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) return migrar(JSON.parse(raw));
+  } catch (e) { /* dados corrompidos */ }
+  return buildSeed();
+}
+// Completa dados salvos por versões anteriores da plataforma
+function migrar(data) {
+  const seed = buildSeed();
+  // Receitas e insumos acrescentados depois (Café, Beijinho, Ganache, Essência de coco)
+  if (!data.receitasVistas && data.insumos && data.sabores?.[0]?.lote) {
+    seed.insumos.forEach((si) => { if (!data.insumos.some((i) => i.nome === si.nome)) data.insumos.push(si); });
+    linkReceitas(data.insumos).sabores.forEach((s) => { if (!data.sabores.some((x) => x.nome === s.nome)) data.sabores.push(s); });
+    data.receitasVistas = true;
+  }
+  Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
+  data.vendedor.registros = data.vendedor.registros || [];
+  (data.pagamentos || []).forEach((p) => { if (p.categoria === "Fornecedor / insumos") p.categoria = "Insumos"; });
+  if (!data.sabores?.[0]?.lote || !data.barras?.[0]?.itens) Object.assign(data, linkReceitas(data.insumos));
+  Object.entries(seed.canais).forEach(([k, c]) => { if (data.canais[k] && !data.canais[k].taxas) data.canais[k].taxas = c.taxas; });
+  const nomesAntigos = { Pequena: "Cx P", Grande: "Cx G", "1 Pequena": "1 Cx P", "2 Pequenas": "2 Cx P", "1 Grande": "1 Cx G" };
+  data.vendedor.tipos.doces.forEach((t) => { if (nomesAntigos[t.nome]) t.nome = nomesAntigos[t.nome]; });
+  data.vendedor.combos.doces.forEach((c) => { if (nomesAntigos[c.nome]) c.nome = nomesAntigos[c.nome]; });
+  data.vendedor.combos.pacoca = data.vendedor.combos.pacoca.filter((c) => !(c.nome === "1 Paçoca" && c.itens.U === 1));
+  // Kits antigos tinham valores fixos; agora cada item aponta para um material da tela Insumos
+  if (Array.isArray(data.embalagens?.[0]?.itens?.[0])) data.embalagens = seed.embalagens;
+  seed.params.forEach((sp) => {
+    const p = data.params.find((x) => x.key === sp.key);
+    if (!p) data.params.push(sp);
+    else if (sp.fonte && !("fonte" in p)) p.fonte = sp.fonte;
+  });
+  data.barras.forEach((b) => { if (!b.linha) b.linha = SEED.barrasTrufadas.includes(b.nome) ? "trufada" : "gourmet"; });
+  data.params.forEach((p) => { if (p.fonte?.tipo === "barra" && p.fonte.criterio !== "barra" && !p.fonte.linha) p.fonte.linha = "gourmet"; });
+  data.variaveis.forEach((v) => { if (/^Mão-de-obra Cx[49]$/.test(v.nome) && +v.custo === 600 && +v.rend === 1000) v.rend = 1200; });
+  data.produtos.forEach((p) => (p.itens || []).forEach((i) => {
+    if (i.regra?.formato === "Bolinha") { delete i.regra; i.param = "massaBol4"; i.nome = "Massa bolinha"; }
+  }));
+  const ligado = (p) => p.itens?.some((i) => i.param || i.kit || i.material);
+  data.produtos.forEach((p) => {
+    const s = seed.produtos.find((x) => x.canal === p.canal && x.nome === p.nome);
+    if (s && !ligado(p)) { p.itens = s.itens; delete p.custoFixo; delete p.taxaPct; }
+  });
+  return data;
+}
+const salvarLocal = () => localStorage.setItem(STORE_KEY, JSON.stringify(db));
+// Estado compartilhado na nuvem; as vendas do vendedor sincronizam uma a uma (ver Sync.putRegistro)
+const estadoSemRegistros = () => ({ ...db, vendedor: { ...db.vendedor, registros: [] } });
+function save() { salvarLocal(); if (typeof Sync !== "undefined") Sync.saveEstado(estadoSemRegistros()); }
+let db = load();
+
+const ui = { mes: 0, vendasCanal: "Todos", vendasMes: 0, pacMes: null, prodCanal: "Outbound", insTab: "insumos", busca: "", recTab: "doces", sabor: 0, barra: 0, dreMes: 0, pgTipo: "pagar", pgStatus: "pendente", pgMes: 0, estTab: { doces: "prontos", pacoca: "itens" }, estSoAlerta: false };
+
+/* ---------- Cálculos ---------- */
+const recVenda = (v) => (+v.cartao || 0) + (+v.pix || 0) + (+v.especie || 0);
+const custoVenda = (v) => (+v.insumos || 0) + (+v.gasolina || 0) + (+v.comissoes || 0) + (+v.perdas || 0) + (+v.outros || 0);
+const lucroVenda = (v) => recVenda(v) - custoVenda(v);
+const custoUnitPacoca = () => sum(db.pacocaCusto, (c) => +c.valor || 0);
+const recPac = (p) => (+p.pix || 0) + (+p.especie || 0);
+const custoPac = (p) => (+p.insumos || 0) + (+p.gasolina || 0) + (+p.maoObra || 0);
+const lucroPac = (p) => recPac(p) - custoPac(p);
+const esperadoPac = (p) => (+p.qtd || 0) * db.config.precoPacoca;
+const naoRecPac = (p) => esperadoPac(p) - recPac(p);
+
+const insById = (id) => db.insumos.find((i) => i.id === id);
+const custoUnitItem = (it) => { const ins = it.insumoId && insById(it.insumoId); return ins ? (ins.rend ? ins.custo / ins.rend : 0) : +it.valorUnit || 0; };
+const nomeItem = (it) => (it.insumoId && insById(it.insumoId)?.nome) || it.nome || "Item removido";
+const unidItem = (it) => (it.insumoId && insById(it.insumoId)?.unid) || it.unid || "";
+const custoLote = (s) => sum(s.lote, (it) => (+it.qtd || 0) * custoUnitItem(it));
+const custoSabor = (s, j) => (s.rend[j] ? custoLote(s) / s.rend[j] : 0) + sum(s.porUn, (it) => (+it.qtd[j] || 0) * custoUnitItem(it));
+const custoBarra = (b) => sum(b.itens, (it) => (+it.qtd || 0) * custoUnitItem(it));
+// Arredondado ao centavo, como aparece na ficha técnica
+function massaMax(regra) {
+  const i = db.formatos.findIndex((f) => f.nome === regra.formato);
+  const vals = db.sabores.filter((s) => !(regra.ignorar || []).includes(s.nome) && +s.rend[i] > 0).map((s) => custoSabor(s, i));
+  return vals.length ? Math.round(Math.max(...vals) * 100) / 100 : 0;
+}
+const materialUnit = (nome) => { const m = db.materiais.find((x) => x.nome === nome); return m && m.rend ? m.custo / m.rend : 0; };
+const kitItemValor = (i) => (+i.qtd || 0) * materialUnit(i.material);
+const kitTotal = (nome) => { const k = db.embalagens.find((e) => e.nome === nome); return k ? sum(k.itens, kitItemValor) : 0; };
+const round2 = (v) => Math.round(v * 100) / 100;
+// Valor de um custo padrão a partir da tela de origem (arredondado ao centavo, como aparece nas fichas)
+function valorFonte(f) {
+  if (f.tipo === "variavel") { const v = db.variaveis.find((x) => x.nome === f.nome); return v && v.rend ? v.custo / v.rend : 0; }
+  let vals = [];
+  if (f.tipo === "receita") {
+    const j = db.formatos.findIndex((x) => x.nome === f.formato);
+    const sabs = (f.criterio === "sabor" ? db.sabores.filter((s) => s.nome === f.sabor) : db.sabores.filter((s) => !(f.ignorar || []).includes(s.nome))).filter((s) => +s.rend[j] > 0);
+    vals = sabs.map((s) => custoSabor(s, j));
+  }
+  if (f.tipo === "barra") {
+    const bs = f.criterio === "barra" ? db.barras.filter((b) => b.nome === f.barra) : db.barras.filter((b) => !f.linha || b.linha === f.linha);
+    vals = bs.map(custoBarra);
+  }
+  if (!vals.length) return 0;
+  return round2(f.criterio === "media" ? sum(vals) / vals.length : Math.max(...vals));
+}
+function paramVal(key) {
+  const p = db.params.find((x) => x.key === key);
+  return p ? (p.fonte ? valorFonte(p.fonte) : +p.valor || 0) : 0;
+}
+function descFonte(f) {
+  if (!f) return "Valor digitado";
+  if (f.tipo === "variavel") return `Insumos › Custos variáveis: ${f.nome}`;
+  if (f.tipo === "receita") return f.criterio === "sabor" ? `Ficha: ${f.sabor} (${f.formato.toLowerCase()})` : `Fichas: ${f.criterio === "media" ? "média" : "maior custo"} de ${f.formato.toLowerCase()}${f.ignorar?.length ? ` (sem ${f.ignorar.join(", ")})` : ""}`;
+  if (f.tipo === "barra") return f.criterio === "barra" ? `Ficha: barra ${f.barra}` : `Fichas: ${f.criterio === "media" ? "média" : "maior custo"} das barras${f.linha ? ` ${f.linha === "gourmet" ? "gourmet" : "trufadas"}` : ""}`;
+  return "";
+}
+function valorItem(it) {
+  if (it.regra) return massaMax(it.regra);
+  if (it.param) return paramVal(it.param);
+  if (it.kit) return kitTotal(it.kit);
+  if (it.material) return materialUnit(it.material);
+  return +it.valor || 0;
+}
+// Onde o valor do item é alterado (null = valor próprio do produto)
+function fonteItem(it) {
+  if (it.regra) return { tag: "regra", onde: "Fichas Técnicas (maior custo de massa)", href: "receitas" };
+  if (it.param) {
+    const f = db.params.find((x) => x.key === it.param)?.fonte;
+    if (f?.tipo === "receita" || f?.tipo === "barra") return { tag: "ficha", onde: descFonte(f), href: "receitas" };
+    if (f?.tipo === "variavel") return { tag: "insumo", onde: descFonte(f), href: "insumos" };
+    return { tag: "padrão", onde: "Personalizar custos", href: "personalizar" };
+  }
+  if (it.kit) return { tag: "kit", onde: `Embalagens (kit ${it.kit})`, href: "embalagens" };
+  if (it.material) return { tag: "insumo", onde: "Insumos > Embalagens & materiais", href: "insumos" };
+  return null;
+}
+const custoBase = (p) => (p.itens ? sum(p.itens, (it) => (+it.qtd || 0) * valorItem(it)) : +p.custoFixo || 0);
+const taxaCanal = (canal) => sum(db.canais[canal]?.taxas || [], (t) => +t.pct || 0);
+const custoProd = (p) => custoBase(p) + (p.preco * taxaCanal(p.canal)) / 100;
+const lucroProd = (p) => p.preco - custoProd(p);
+const margemProd = (p) => (p.preco ? (lucroProd(p) / p.preco) * 100 : 0);
+const precoAlvo = (p, alvo) => { const d = 1 - taxaCanal(p.canal) / 100 - alvo / 100; return d > 0 ? custoBase(p) / d : null; };
+function statusMargem(m, canal) {
+  const c = db.canais[canal] || { alvoMin: 30 };
+  if (m >= c.alvoMin) return "green";
+  if (m >= c.alvoMin * 0.75 && m > 0) return "yellow";
+  return "red";
+}
+const statusLabel = { green: "Saudável", yellow: "Atenção", red: "Crítico" };
+
+// area: "doces" (só canais de doces finos), "pacoca" (só paçoca) ou vazio (negócio todo)
+function mesesComDados(area) {
+  const set = new Set([
+    ...(area === "pacoca" ? [] : db.vendas.map((v) => monthOf(v.inicio))),
+    ...(area === "doces" ? [] : db.pacoca.map((p) => monthOf(p.data))),
+    ...(area === "pacoca" ? [] : db.custosVar.map((c) => +c.mes)),
+  ]);
+  return [...set].sort((a, b) => a - b);
+}
+function resumo(m, area) {
+  const vendas = area === "pacoca" ? [] : db.vendas.filter((v) => !m || monthOf(v.inicio) === m);
+  const pac = area === "doces" ? [] : db.pacoca.filter((p) => !m || monthOf(p.data) === m);
+  const porCanal = {};
+  CANAIS_VENDA.forEach((c) => { const r = sum(vendas.filter((v) => v.canal === c), recVenda); if (r) porCanal[c] = r; });
+  const pacRec = sum(pac, recPac);
+  if (pacRec) porCanal["Paçoca"] = pacRec;
+  const receita = sum(vendas, recVenda) + pacRec;
+  const insumos = sum(vendas, (v) => +v.insumos || 0) + sum(pac, (p) => +p.insumos || 0);
+  const gasolina = sum(vendas, (v) => +v.gasolina || 0) + sum(pac, (p) => +p.gasolina || 0);
+  const comissoes = sum(vendas, (v) => +v.comissoes || 0) + sum(pac, (p) => +p.maoObra || 0);
+  const perdas = sum(vendas, (v) => (+v.perdas || 0) + (+v.outros || 0));
+  // Custos variáveis lançados no DRE (doces finos), pelo mês de referência
+  const cvs = area === "pacoca" ? [] : db.custosVar.filter((c) => !m || +c.mes === m);
+  const custosVar = sum(cvs, (c) => +c.valor || 0);
+  const custos = insumos + gasolina + comissoes + perdas + custosVar;
+  const qtd = sum(vendas, (v) => +v.qtd || 0) + sum(pac, (p) => +p.qtd || 0);
+  return { receita, custos, lucro: receita - custos, qtd, porCanal, insumos, gasolina, comissoes, perdas, custosVar, cvs, vendas, pac };
+}
+
+/* ---------- Gráficos ---------- */
+let charts = [];
+function destroyCharts() { charts.forEach((c) => c.destroy()); charts = []; }
+function chart(id, cfg) {
+  const el = document.getElementById(id);
+  if (!el || !window.Chart) return;
+  charts.push(new Chart(el, cfg));
+}
+if (window.Chart) {
+  Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+  Chart.defaults.color = "#8a7d74";
+  Chart.defaults.plugins.legend.labels.usePointStyle = true;
+  Chart.defaults.plugins.legend.labels.boxWidth = 8;
+}
+const moneyTick = (v) => "R$ " + Number(v).toLocaleString("pt-BR");
+const tooltipBRL = { callbacks: { label: (c) => ` ${c.dataset.label || c.label}: ${brl(c.parsed.y ?? c.parsed)}` } };
+
+/* ---------- UI helpers ---------- */
+function toast(msg) {
+  const t = document.createElement("div");
+  t.className = "toast"; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2200);
+}
+const kpi = (label, value, foot, ic, cls = "") => `
+  <div class="card kpi">
+    <div class="kpi-label"><span class="kpi-icon">${icon(ic)}</span>${label}</div>
+    <div class="kpi-value ${cls}">${value}</div>
+    ${foot ? `<div class="kpi-foot">${foot}</div>` : ""}
+  </div>`;
+const tabs = (items, active, act) => `<div class="tabs">${items.map((i) => {
+  const [val, label] = Array.isArray(i) ? i : [i, i];
+  return `<button class="${String(val) === String(active) ? "active" : ""}" data-act="${act}" data-val="${esc(val)}">${label}</button>`;
+}).join("")}</div>`;
+const rowActions = (kind, id) => `<div class="row-actions">
+  <button class="btn btn-ghost btn-sm" title="Editar" data-act="edit-${kind}" data-id="${id}">${icon("edit")}</button>
+  <button class="btn btn-ghost btn-sm btn-danger" title="Excluir" data-act="del-${kind}" data-id="${id}">${icon("trash")}</button></div>`;
+const setActions = (html) => { $("#topActions").innerHTML = html; };
+const mesSelect = (val, act, area, todos = "Todos os meses") => `<select class="inline" data-act="${act}">
+  <option value="0">${todos}</option>
+  ${mesesComDados(area).map((m) => `<option value="${m}" ${+val === m ? "selected" : ""}>${MESES_FULL[m - 1]}</option>`).join("")}
+</select>`;
+
+/* ---------- Formulário modal ---------- */
+function openForm({ title, fields, values = {}, preview, onSave, saveLabel = "Salvar" }) {
+  const bg = document.createElement("div");
+  bg.className = "modal-bg";
+  const fieldHtml = fields.map((f) => {
+    const v = values[f.key] ?? f.default ?? "";
+    let input;
+    if (f.type === "select") {
+      input = `<select name="${f.key}">${f.options.map((o) => `<option ${o === v ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+    } else if (f.type === "date") {
+      input = `<input type="date" name="${f.key}" value="${esc(v)}" />`;
+    } else if (f.type === "num") {
+      const shown = v === "" ? "" : String(v).replace(".", ",");
+      input = `<input type="text" inputmode="decimal" name="${f.key}" value="${esc(shown)}" placeholder="0" />`;
+    } else {
+      input = `<input type="text" name="${f.key}" value="${esc(v)}" ${f.readonly ? 'readonly style="background:#f6f1ea"' : ""} />`;
+    }
+    return `<label class="${f.full ? "full" : ""}">${f.label}${input}</label>`;
+  }).join("");
+  bg.innerHTML = `<div class="modal" role="dialog">
+    <div class="modal-head"><h3>${title}</h3><button class="btn btn-ghost" data-close>${icon("x")}</button></div>
+    <form class="modal-body">${fieldHtml}${preview ? '<div class="modal-preview" id="formPreview"></div>' : ""}</form>
+    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn-primary" data-save>${saveLabel}</button></div>
+  </div>`;
+  document.body.appendChild(bg);
+  const form = bg.querySelector("form");
+  const read = () => {
+    const out = {};
+    fields.forEach((f) => { const el = form.elements[f.key]; out[f.key] = f.type === "num" ? parseNum(el.value) : el.value.trim(); });
+    return out;
+  };
+  const upd = () => { if (preview) bg.querySelector("#formPreview").innerHTML = preview(read()); };
+  upd();
+  form.addEventListener("input", upd);
+  const close = () => bg.remove();
+  bg.addEventListener("click", (e) => {
+    if (e.target === bg || e.target.closest("[data-close]")) close();
+    if (e.target.closest("[data-save]")) {
+      const vals = read();
+      const req = fields.find((f) => f.required && !vals[f.key]);
+      if (req) { toast(`Preencha o campo "${req.label}"`); return; }
+      onSave(vals); save(); close(); render();
+    }
+  });
+  form.addEventListener("submit", (e) => e.preventDefault());
+  setTimeout(() => form.querySelector("input,select")?.focus(), 30);
+}
+function confirmDel(msg, fn) { if (confirm(msg)) { fn(); save(); render(); toast("Excluído"); } }
+
+/* =================== PÁGINAS =================== */
+const AREAS = {
+  pacoca: { nome: "Paçoca", desc: "Vendas diárias, recebimentos, custos e compra mensal da paçoca", inicial: "pacoca-painel", cor: "#2f9e6b" },
+  doces: { nome: "Doces Finos", desc: "Brigadeiros, mousses e barras: vendas por canal, preços, fichas técnicas e DRE", inicial: "painel", cor: "#c8963e" },
+};
+const PAGES = [
+  { id: "inicio", label: "Início", icon: "dash", sub: "Escolha a área que deseja gerenciar" },
+  { id: "pacoca-painel", area: "pacoca", label: "Painel", icon: "dash", sub: "Visão geral da paçoca", section: "Visão geral" },
+  { id: "vendedor-pacoca", area: "pacoca", label: "Área do vendedor", icon: "cart", sub: "Contador rápido de vendas da paçoca", section: "Operação" },
+  { id: "pacoca", area: "pacoca", label: "Vendas diárias", icon: "cal", sub: "Registro diário de vendas da paçoca" },
+  { id: "estoque-pacoca", area: "pacoca", label: "Estoque", icon: "pkg", sub: "Saldo de paçoquitas e materiais, com baixa automática das vendas" },
+  { id: "pagamentos-pacoca", area: "pacoca", label: "Pagamentos", icon: "wallet", sub: "Contas a pagar e a receber: o que já foi pago e o que está pendente", section: "Financeiro" },
+  { id: "pacoca-custos", area: "pacoca", label: "Personalizar custos", icon: "gear", sub: "Custo por paçoca, preço, compra mensal e simulador", section: "Configurações" },
+  { id: "equipe-pacoca", area: "pacoca", label: "Equipe & App", icon: "cart", sub: "Sincronização entre celulares e app do vendedor" },
+  { id: "painel", area: "doces", label: "Painel", icon: "dash", sub: "Visão geral dos doces finos", section: "Visão geral" },
+  { id: "vendedor-doces", area: "doces", label: "Área do vendedor", icon: "cart", sub: "Contador rápido de vendas com combos", section: "Operação" },
+  { id: "vendas", area: "doces", label: "Vendas", icon: "trend", sub: "Faturamento semanal por canal de venda" },
+  { id: "estoque", area: "doces", label: "Estoque", icon: "pkg", sub: "Caixas prontas, ingredientes e embalagens, com baixa automática" },
+  { id: "produtos", area: "doces", label: "Produtos & Preços", icon: "tag", sub: "Custo, preço e margem de cada produto por canal" },
+  { id: "simulador", area: "doces", label: "Simulador", icon: "calc", sub: "Projete quanto vai lucrar no mês" },
+  { id: "receitas", area: "doces", label: "Fichas Técnicas", icon: "book", sub: "Custo por receita, sabor e formato", section: "Cadastros" },
+  { id: "insumos", area: "doces", label: "Insumos", icon: "pkg", sub: "Tabela de custos de compra e custo unitário" },
+  { id: "embalagens", area: "doces", label: "Embalagens", icon: "gift", sub: "Kits de embalagem e custo por unidade" },
+  { id: "dre", area: "doces", label: "DRE", icon: "pie", sub: "Demonstrativo de resultado dos doces finos", section: "Financeiro" },
+  { id: "pagamentos", area: "doces", label: "Pagamentos", icon: "wallet", sub: "Contas a pagar e a receber: o que já foi pago e o que está pendente" },
+  { id: "personalizar", area: "doces", label: "Personalizar custos", icon: "gear", sub: "Taxas, metas de margem e custos padrão — tudo que mexe no custo", section: "Configurações" },
+  { id: "equipe", area: "doces", label: "Equipe & App", icon: "cart", sub: "Sincronização entre celulares e app do vendedor" },
+];
+
+/* ---------- Personalizar custos ---------- */
+// Opções de origem de um custo padrão: valor digitado, fichas técnicas ou insumos
+const SEM_PISTACHE = ["Brigadeiro de Pistache"];
+function opcoesFonte(p) {
+  const o = [["manual", "Valor digitado"]];
+  if (/^massaB(ol)/.test(p.key) || /^massaCop/.test(p.key)) {
+    const formato = /Cop/.test(p.key) ? "Copinho" : "Bolinha";
+    o.push([`max:${formato}`, `Fichas: maior custo de ${formato.toLowerCase()} (sem pistache)`], [`media:${formato}`, `Fichas: média de ${formato.toLowerCase()} (sem pistache)`]);
+    db.sabores.forEach((s) => o.push([`sabor:${formato}:${s.nome}`, `Ficha: ${s.nome}`]));
+  } else if (p.key === "massaBarra" || p.key === "massaTrufada") {
+    [["gourmet", "gourmet"], ["trufada", "trufadas"]].forEach(([l, n]) => o.push([`bmax:${l}`, `Fichas: maior custo das barras ${n}`], [`bmedia:${l}`, `Fichas: média das barras ${n}`]));
+    db.barras.forEach((b) => o.push([`barra:${b.nome}`, `Ficha: barra ${b.nome}`]));
+  } else if (/^maoObra/.test(p.key)) {
+    db.variaveis.forEach((v) => o.push([`var:${v.nome}`, `Insumos › ${v.nome}`]));
+  }
+  return o;
+}
+function fonteAtual(p) {
+  const f = p.fonte;
+  if (!f) return "manual";
+  if (f.tipo === "variavel") return `var:${f.nome}`;
+  if (f.tipo === "barra") return f.criterio === "barra" ? `barra:${f.barra}` : `${f.criterio === "media" ? "bmedia" : "bmax"}:${f.linha || "gourmet"}`;
+  return f.criterio === "sabor" ? `sabor:${f.formato}:${f.sabor}` : `${f.criterio}:${f.formato}`;
+}
+function aplicarFonte(p, v) {
+  if (v === "manual") { p.valor = paramVal(p.key); delete p.fonte; return; }
+  const [t, a] = v.split(":");
+  if (t === "var") p.fonte = { tipo: "variavel", nome: v.slice(4) };
+  else if (t === "bmax" || t === "bmedia") p.fonte = { tipo: "barra", criterio: t === "bmax" ? "max" : "media", linha: a };
+  else if (t === "barra") p.fonte = { tipo: "barra", criterio: "barra", barra: v.slice(6) };
+  else if (t === "sabor") p.fonte = { tipo: "receita", formato: a, criterio: "sabor", sabor: v.split(":").slice(2).join(":") };
+  else p.fonte = { tipo: "receita", formato: a, criterio: t, ignorar: SEM_PISTACHE };
+}
+function resumoCanaisHtml() {
+  return Object.keys(db.canais).map((k) => {
+    const ps = db.produtos.filter((p) => p.canal === k);
+    const m = ps.length ? sum(ps, margemProd) / ps.length : 0;
+    const ruins = ps.filter((p) => statusMargem(margemProd(p), k) !== "green").length;
+    return `<div class="stat"><small>${k} · margem média</small><strong class="${statusMargem(m, k) === "green" ? "pos" : "neg"}">${pct(m)}</strong>
+      <div class="hint">${ruins ? `${ruins} produto(s) abaixo da meta` : "Todos dentro da meta"}</div></div>`;
+  }).join("");
+}
+function viewPersonalizar() {
+  const usos = (key) => db.produtos.filter((p) => p.itens?.some((i) => i.param === key)).length;
+  const grupos = [...new Set(db.params.map((p) => p.grupo))];
+  const onde = [
+    ["Gramas das receitas e rendimento", "Fichas Técnicas", "receitas"],
+    ["Preço de compra de ingredientes e materiais", "Insumos", "insumos"],
+    ["Itens e valores de cada kit de embalagem", "Embalagens", "embalagens"],
+    ["Preço de venda e quantidades de cada produto", "Produtos & Preços", "produtos"],
+    ["Despesas semanais (gasolina, vendedor, marketing)", "Simulador", "simulador"],
+    ["Despesas fixas do mês (pró-labore, contador...)", "DRE", "dre"],
+    ["Custo, preço e compra da paçoca", "Paçoca · Personalizar custos", "pacoca-custos"],
+  ];
+  return `
+  <div class="card"><div class="card-head"><div><h3>Impacto nas margens</h3><div class="sub">Atualiza enquanto você altera os valores abaixo</div></div></div>
+    <div class="grid g-3" id="persResumo" style="gap:12px">${resumoCanaisHtml()}</div></div>
+
+  <div class="card mt"><div class="card-head"><div><h3>Canais de venda: metas e taxas</h3><div class="sub">As taxas são cobradas sobre o preço de venda de todos os produtos do canal</div></div></div>
+    <div class="grid g-3">${Object.entries(db.canais).map(([k, c]) => `
+      <div class="prod">
+        <h4>${k}</h4>
+        <div class="sim-row" style="grid-template-columns:1fr 90px"><span>Meta mínima de margem (%)</span>${numIn("can-min", c.alvoMin, `data-canal="${k}"`)}</div>
+        <div class="sim-row" style="grid-template-columns:1fr 90px"><span>Meta máxima de margem (%)</span>${numIn("can-max", c.alvoMax, `data-canal="${k}"`)}</div>
+        <div class="hint" style="margin-top:4px"><b>Taxas sobre o preço</b></div>
+        ${(c.taxas || []).map((t, i) => `<div class="sim-row" style="grid-template-columns:1fr 80px 34px">
+          <input data-act="tx-nome" data-canal="${k}" data-i="${i}" value="${esc(t.nome)}" style="text-align:left" />${numIn("tx-pct", t.pct, `data-canal="${k}" data-i="${i}"`)}
+          <button class="btn btn-ghost btn-sm btn-danger" data-act="del-taxa" data-val="${k}" data-i="${i}">${icon("trash")}</button></div>`).join("") || '<div class="hint">Nenhuma taxa neste canal.</div>'}
+        <button class="btn btn-sm" data-act="add-taxa" data-val="${k}">${icon("plus")}Adicionar taxa</button>
+      </div>`).join("")}</div></div>
+
+  <div class="card mt"><div class="card-head"><div><h3>Custos padrão dos produtos</h3><div class="sub">Escolha de onde vem cada valor. Ligado a uma ficha ou insumo, ele se atualiza sozinho quando a origem muda.</div></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Custo</th><th>Vem de</th><th class="num">Valor atual</th><th class="num">Usado em</th></tr></thead><tbody>
+    ${grupos.map((g) => `<tr><td colspan="4" class="vend-sec" style="padding-top:16px">${esc(g)}</td></tr>
+      ${db.params.filter((p) => p.grupo === g).map((p) => { const o = opcoesFonte(p); return `<tr>
+        <td><b>${esc(p.nome)}</b></td>
+        <td>${o.length > 1 ? `<select class="inline" data-act="par-fonte" data-key="${p.key}">${o.map(([v, l]) => `<option value="${esc(v)}" ${v === fonteAtual(p) ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` : '<span class="hint">Valor digitado</span>'}</td>
+        <td class="num">${p.fonte ? `<b data-pv="${p.key}">${brlU(paramVal(p.key))}</b>` : numIn("par-val", p.valor, `data-key="${p.key}"`)}</td>
+        <td class="num hint">${usos(p.key)} produto(s)</td></tr>`; }).join("")}`).join("")}
+    </tbody></table></div></div>
+
+  <div class="card mt"><div class="card-head"><div><h3>Outros lugares onde você altera custos</h3><div class="sub">Tudo que entra no custo pode ser editado — veja onde fica cada coisa</div></div></div>
+    <div class="table-wrap"><table><tbody>${onde.map(([o, t, h]) => `<tr><td>${o}</td><td class="num"><a class="btn btn-sm" href="#${h}">Abrir ${t} →</a></td></tr>`).join("")}</tbody></table></div></div>`;
+}
+
+/* ---------- Início ---------- */
+function viewInicio() {
+  const card = (key) => {
+    const a = AREAS[key];
+    const meses = mesesComDados(key);
+    const ult = meses[meses.length - 1];
+    const r = resumo(ult, key);
+    const m = r.receita ? (r.lucro / r.receita) * 100 : 0;
+    const tot = resumo(0, key);
+    return `<a class="area-card" href="#${a.inicial}" style="--area:${a.cor}">
+      <div class="area-top"><span class="area-icon">${icon(key === "pacoca" ? "cal" : "gift")}</span><span class="area-go">Entrar →</span></div>
+      <h2>${a.nome}</h2><p>${a.desc}</p>
+      <div class="hint" style="margin-top:6px">Último mês com movimento: <b>${ult ? MESES_FULL[ult - 1] : "—"}</b></div>
+      <div class="area-stats" style="margin-top:0">
+        <div><small>Faturamento</small><strong>${brl(r.receita)}</strong></div>
+        <div><small>Lucro</small><strong class="${r.lucro >= 0 ? "pos" : "neg"}">${brl(r.lucro)}</strong></div>
+        <div><small>Margem</small><strong>${pct(m)}</strong></div>
+      </div>
+      <div class="area-foot">Acumulado no ano: ${brl(tot.receita)} faturados · ${brl(tot.lucro)} de lucro</div>
+    </a>`;
+  };
+  const g = resumo(0);
+  return `<div class="home">
+    <div class="home-head"><div class="brand-logo big">H&amp;A</div><h1>HA Gourmet</h1><p>Escolha a área que deseja gerenciar</p></div>
+    <div class="area-grid">${card("pacoca")}${card("doces")}</div>
+    <div class="home-total">Negócio todo em ${db.config.ano}: <b>${brl(g.receita)}</b> faturados e <b class="${g.lucro >= 0 ? "pos" : "neg"}">${brl(g.lucro)}</b> de lucro</div>
+  </div>`;
+}
+
+/* ---------- Painel (Doces Finos) ---------- */
+function alertas() {
+  const out = [];
+  db.produtos.forEach((p) => {
+    const m = margemProd(p);
+    const st = statusMargem(m, p.canal);
+    if (st !== "green") {
+      const alvo = db.canais[p.canal]?.alvoMin ?? 30;
+      const sug = precoAlvo(p, alvo);
+      out.push({ tipo: st === "red" ? "red" : "yellow", t: `${p.nome} (${p.canal}) com margem de ${pct(m)}`, d: `Meta do canal: a partir de ${alvo}%. ${sug ? `Preço sugerido: ${brl(sug)}.` : ""}` });
+    }
+  });
+  const est = alertasEstoque("doces");
+  if (est.length) out.push({ tipo: "yellow", t: `${est.length} item(ns) do estoque abaixo do mínimo`, d: `${est.slice(0, 4).map((i) => i.nome).join(", ")}${est.length > 4 ? "…" : ""}. Veja a tela Estoque.` });
+  const semanasPrejuizo = db.vendas.filter((v) => v.canal === "Outbound" && lucroVenda(v) < 0);
+  if (semanasPrejuizo.length) out.push({ tipo: "yellow", t: `${semanasPrejuizo.length} semana(s) com prejuízo no Outbound`, d: `Semanas com custos (gasolina/insumos) e sem vendas lançadas. Confira se faltam lançamentos.` });
+  const melhores = [...db.produtos].sort((a, b) => margemProd(b) - margemProd(a))[0];
+  if (melhores) out.push({ tipo: "green", t: `Destaque: ${melhores.nome} (${melhores.canal})`, d: `Melhor margem da casa: ${pct(margemProd(melhores))} — lucro de ${brl(lucroProd(melhores))} por venda.` });
+  return out;
+}
+
+function viewPainel() {
+  setActions(mesSelect(ui.mes, "set-mes", "doces"));
+  const r = resumo(ui.mes, "doces");
+  const margem = r.receita ? (r.lucro / r.receita) * 100 : 0;
+  const ticket = r.qtd ? r.receita / r.qtd : 0;
+  const canais = Object.keys(r.porCanal);
+  const al = alertas();
+  return `
+  <div class="grid g-4">
+    ${kpi("Faturamento", brl(r.receita), ui.mes ? MESES_FULL[ui.mes - 1] : "Todo o período", "money")}
+    ${kpi("Lucro líquido", brl(r.lucro), `Custos: ${brl(r.custos)}`, "wallet", r.lucro >= 0 ? "pos" : "neg")}
+    ${kpi("Margem de lucro", pct(margem), margem >= 50 ? '<span class="badge b-green">Saudável</span>' : '<span class="badge b-yellow">Abaixo de 50%</span>', "percent")}
+    ${kpi("Itens vendidos", int(r.qtd), `Ticket médio: ${brl(ticket)}`, "cart")}
+  </div>
+  <div class="grid g-21 mt">
+    <div class="card"><div class="card-head"><div><h3>Faturamento x Lucro por mês</h3><div class="sub">Todos os canais de doces finos</div></div></div><div class="chart-box"><canvas id="chMes"></canvas></div></div>
+    <div class="card"><div class="card-head"><div><h3>Faturamento por canal</h3><div class="sub">${ui.mes ? MESES_FULL[ui.mes - 1] : "Todo o período"}</div></div></div>
+      ${canais.length ? '<div class="chart-box"><canvas id="chCanal"></canvas></div>' : '<div class="empty">Sem vendas no período</div>'}</div>
+  </div>
+  <div class="grid g-2 mt">
+    <div class="card"><div class="card-head"><div><h3>Pontos de atenção</h3><div class="sub">Gerados automaticamente a partir dos seus dados</div></div></div>
+      <div class="alert-list">${al.map((a) => `<div class="alert ${a.tipo}">${icon(a.tipo === "green" ? "check" : "alert")}<div><b>${esc(a.t)}</b><span>${esc(a.d)}</span></div></div>`).join("")}</div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Resultado por canal</h3><div class="sub">${ui.mes ? MESES_FULL[ui.mes - 1] : "Todo o período"}</div></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Canal</th><th class="num">Faturamento</th><th class="num">Lucro</th><th class="num">Margem</th></tr></thead><tbody>
+      ${CANAIS_VENDA.map((c) => {
+        const rec = sum(r.vendas.filter((v) => v.canal === c), recVenda);
+        const luc = sum(r.vendas.filter((v) => v.canal === c), lucroVenda);
+        if (!rec && !luc) return "";
+        const m = rec ? (luc / rec) * 100 : 0;
+        return `<tr><td><span class="badge" style="background:${CORES[c]}1a;color:${CORES[c]}">● ${c}</span></td><td class="num">${brl(rec)}</td><td class="num ${luc >= 0 ? "pos" : "neg"}">${brl(luc)}</td><td class="num">${pct(m)}</td></tr>`;
+      }).join("")}
+      </tbody><tfoot><tr><td>Total</td><td class="num">${brl(r.receita)}</td><td class="num">${brl(r.lucro)}</td><td class="num">${pct(margem)}</td></tr></tfoot></table></div>
+    </div>
+  </div>`;
+}
+function afterPainel() {
+  const meses = mesesComDados("doces");
+  const rs = meses.map((m) => resumo(m, "doces"));
+  chart("chMes", {
+    type: "bar",
+    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [
+      { label: "Faturamento", data: rs.map((r) => r.receita), backgroundColor: "#c8963e", borderRadius: 8, maxBarThickness: 46 },
+      { label: "Lucro", data: rs.map((r) => r.lucro), backgroundColor: "#5a3826", borderRadius: 8, maxBarThickness: 46 },
+    ] },
+    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+  });
+  const r = resumo(ui.mes, "doces");
+  const labels = Object.keys(r.porCanal);
+  chart("chCanal", {
+    type: "doughnut",
+    data: { labels, datasets: [{ data: labels.map((l) => r.porCanal[l]), backgroundColor: labels.map((l) => CORES[l]), borderWidth: 0 }] },
+    options: { maintainAspectRatio: false, cutout: "68%", plugins: { legend: { position: "bottom" }, tooltip: { callbacks: { label: (c) => ` ${c.label}: ${brl(c.parsed)}` } } } },
+  });
+}
+
+/* ---------- Vendas ---------- */
+const vendaFields = [
+  { key: "canal", label: "Canal de venda", type: "select", options: CANAIS_VENDA, full: true },
+  { key: "inicio", label: "Início da semana", type: "date", required: true },
+  { key: "fim", label: "Fim da semana", type: "date", required: true },
+  { key: "qtd", label: "Nº de vendas", type: "num" },
+  { key: "cartao", label: "Recebido no cartão (R$)", type: "num" },
+  { key: "pix", label: "Recebido no Pix (R$)", type: "num" },
+  { key: "especie", label: "Recebido em espécie (R$)", type: "num" },
+  { key: "insumos", label: "Gasto com insumos (R$)", type: "num" },
+  { key: "gasolina", label: "Gasolina (R$)", type: "num" },
+  { key: "comissoes", label: "Comissões / vendedor (R$)", type: "num" },
+  { key: "perdas", label: "Perdas (R$)", type: "num" },
+  { key: "outros", label: "Outras despesas (R$)", type: "num", full: true },
+];
+const vendaPreview = (v) => `<span>Faturamento: ${brl(recVenda(v))}</span><span class="${lucroVenda(v) >= 0 ? "pos" : "neg"}">Lucro: ${brl(lucroVenda(v))}</span>`;
+function formVenda(v) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  openForm({
+    title: v ? "Editar venda" : "Lançar vendas da semana",
+    fields: vendaFields,
+    values: v || { canal: ui.vendasCanal !== "Todos" ? ui.vendasCanal : "Outbound", inicio: hoje, fim: hoje },
+    preview: vendaPreview,
+    onSave: (vals) => { if (v) Object.assign(v, vals); else db.vendas.push({ id: uid(), ...vals }); toast("Venda salva"); },
+  });
+}
+function viewVendas() {
+  setActions(`${mesSelect(ui.vendasMes, "set-vmes")}<button class="btn btn-primary" data-act="new-venda">${icon("plus")}Lançar vendas</button>`);
+  const lista = db.vendas
+    .filter((v) => (ui.vendasCanal === "Todos" || v.canal === ui.vendasCanal) && (!ui.vendasMes || monthOf(v.inicio) === ui.vendasMes))
+    .sort((a, b) => b.inicio.localeCompare(a.inicio));
+  const rec = sum(lista, recVenda), cus = sum(lista, custoVenda), qtd = sum(lista, (v) => +v.qtd || 0);
+  return `
+  <div class="toolbar">${tabs(["Todos", ...CANAIS_VENDA], ui.vendasCanal, "set-vcanal")}</div>
+  <div class="grid g-4">
+    ${kpi("Faturamento", brl(rec), `${lista.length} lançamento(s)`, "money")}
+    ${kpi("Custos", brl(cus), "Insumos, gasolina, comissões e perdas", "wallet")}
+    ${kpi("Lucro", brl(rec - cus), rec ? `Margem de ${pct(((rec - cus) / rec) * 100)}` : "", "trend", rec - cus >= 0 ? "pos" : "neg")}
+    ${kpi("Nº de vendas", int(qtd), `Ticket médio: ${brl(qtd ? rec / qtd : 0)}`, "cart")}
+  </div>
+  <div class="card mt">
+    <div class="card-head"><div><h3>Lançamentos semanais</h3><div class="sub">Clique no lápis para editar qualquer linha</div></div></div>
+    ${lista.length ? `<div class="table-wrap"><table>
+      <thead><tr><th>Semana</th><th>Canal</th><th class="num">Vendas</th><th class="num">Cartão</th><th class="num">Pix</th><th class="num">Espécie</th><th class="num">Faturamento</th><th class="num">Insumos</th><th class="num">Gasolina</th><th class="num">Comissões</th><th class="num">Perdas</th><th class="num">Lucro</th><th></th></tr></thead>
+      <tbody>${lista.map((v) => `<tr>
+        <td>${ddmm(v.inicio)} a ${ddmm(v.fim)}</td>
+        <td><span class="badge" style="background:${CORES[v.canal]}1a;color:${CORES[v.canal]}">${v.canal}</span></td>
+        <td class="num">${int(v.qtd)}</td><td class="num">${brl(v.cartao)}</td><td class="num">${brl(v.pix)}</td><td class="num">${brl(v.especie)}</td>
+        <td class="num"><b>${brl(recVenda(v))}</b></td><td class="num">${brl(v.insumos)}</td><td class="num">${brl(v.gasolina)}</td><td class="num">${brl(v.comissoes)}</td><td class="num">${brl((+v.perdas || 0) + (+v.outros || 0))}</td>
+        <td class="num ${lucroVenda(v) >= 0 ? "pos" : "neg"}"><b>${brl(lucroVenda(v))}</b></td>
+        <td>${rowActions("venda", v.id)}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td colspan="2">Total</td><td class="num">${int(qtd)}</td><td class="num">${brl(sum(lista, (v) => +v.cartao || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.pix || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.especie || 0))}</td><td class="num">${brl(rec)}</td><td class="num">${brl(sum(lista, (v) => +v.insumos || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.gasolina || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.comissoes || 0))}</td><td class="num">${brl(sum(lista, (v) => (+v.perdas || 0) + (+v.outros || 0)))}</td><td class="num">${brl(rec - cus)}</td><td></td></tr></tfoot>
+    </table></div>` : `<div class="empty">Nenhuma venda lançada aqui ainda.<br/><br/><button class="btn btn-primary" data-act="new-venda">${icon("plus")}Lançar primeira venda</button></div>`}
+  </div>`;
+}
+
+/* ---------- Paçoca ---------- */
+const pacFields = [
+  { key: "data", label: "Data", type: "date", required: true, full: true },
+  { key: "qtd", label: "Paçocas vendidas", type: "num" },
+  { key: "pix", label: "Recebido no Pix (R$)", type: "num" },
+  { key: "especie", label: "Recebido em espécie (R$)", type: "num" },
+  { key: "insumos", label: "Custo de insumos (R$)", type: "num" },
+  { key: "gasolina", label: "Gasolina (R$)", type: "num" },
+  { key: "maoObra", label: "Mão de obra (R$)", type: "num" },
+];
+function formPac(p) {
+  openForm({
+    title: p ? "Editar dia" : "Registrar dia de vendas",
+    fields: pacFields,
+    values: p || { data: new Date().toISOString().slice(0, 10), gasolina: 11.02 },
+    preview: (v) => `<span>Recebido: ${brl(recPac(v))}</span><span>Não recebido: ${brl(naoRecPac(v))}</span><span class="${lucroPac(v) >= 0 ? "pos" : "neg"}">Lucro: ${brl(lucroPac(v))}</span>`,
+    onSave: (vals) => { if (p) Object.assign(p, vals); else db.pacoca.push({ id: uid(), ...vals }); toast("Dia registrado"); },
+  });
+}
+function viewPacoca() {
+  const meses = [...new Set(db.pacoca.map((p) => monthOf(p.data)))].sort((a, b) => a - b);
+  if (ui.pacMes === null) ui.pacMes = meses[meses.length - 1] || 0;
+  setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Preço unitário
+    <input class="inline" style="width:90px" inputmode="decimal" data-act="set-preco-pac" value="${String(db.config.precoPacoca).replace(".", ",")}" /></label>
+    <button class="btn btn-primary" data-act="new-pac">${icon("plus")}Registrar dia</button>`);
+  const lista = db.pacoca.filter((p) => !ui.pacMes || monthOf(p.data) === ui.pacMes).sort((a, b) => a.data.localeCompare(b.data));
+  const qtd = sum(lista, (p) => +p.qtd || 0), rec = sum(lista, recPac), luc = sum(lista, lucroPac), nr = sum(lista, naoRecPac), esp = sum(lista, esperadoPac);
+  const taxa = esp ? (nr / esp) * 100 : 0;
+  return `
+  <div class="toolbar">${tabs([[0, "Todos"], ...meses.map((m) => [m, MESES_FULL[m - 1]])], ui.pacMes, "set-pmes")}</div>
+  <div class="grid g-4">
+    ${kpi("Paçocas vendidas", int(qtd), `${lista.length} dia(s) de venda · média ${int(lista.length ? qtd / lista.length : 0)}/dia`, "cart")}
+    ${kpi("Recebido", brl(rec), `Esperado: ${brl(esp)}`, "money")}
+    ${kpi("Lucro", brl(luc), rec ? `Margem de ${pct((luc / rec) * 100)}` : "", "wallet", luc >= 0 ? "pos" : "neg")}
+    ${kpi("Não recebido", brl(nr), `<span class="badge ${taxa > 20 ? "b-red" : taxa > 10 ? "b-yellow" : "b-green"}">${pct(taxa)} do esperado</span>`, "alert", nr > 0 ? "neg" : "")}
+  </div>
+  <div class="card mt"><div class="card-head"><div><h3>Vendas por dia</h3><div class="sub">Recebido x lucro de cada dia</div></div></div>
+    ${lista.length ? '<div class="chart-box sm"><canvas id="chPac"></canvas></div>' : '<div class="empty">Sem registros</div>'}</div>
+  <div class="card mt"><div class="card-head"><div><h3>Registro diário</h3><div class="sub">"Não recebido" = vendas × preço unitário − valor recebido</div></div></div>
+    ${lista.length ? `<div class="table-wrap"><table>
+    <thead><tr><th>Data</th><th class="num">Vendidas</th><th class="num">Pix</th><th class="num">Espécie</th><th class="num">Recebido</th><th class="num">Não recebido</th><th class="num">Insumos</th><th class="num">Gasolina</th><th class="num">Mão de obra</th><th class="num">Lucro</th><th></th></tr></thead>
+    <tbody>${lista.map((p) => { const n = naoRecPac(p); return `<tr>
+      <td>${ddmm(p.data)}</td><td class="num">${int(p.qtd)}</td><td class="num">${brl(p.pix)}</td><td class="num">${brl(p.especie)}</td><td class="num"><b>${brl(recPac(p))}</b></td>
+      <td class="num">${n > 0 ? `<span class="badge b-red">${brl(n)}</span>` : `<span class="badge b-green">${brl(n)}</span>`}</td>
+      <td class="num">${brl(p.insumos)}</td><td class="num">${brl(p.gasolina)}</td><td class="num">${brl(p.maoObra)}</td>
+      <td class="num ${lucroPac(p) >= 0 ? "pos" : "neg"}"><b>${brl(lucroPac(p))}</b></td><td>${rowActions("pac", p.id)}</td></tr>`; }).join("")}</tbody>
+    <tfoot><tr><td>Total</td><td class="num">${int(qtd)}</td><td class="num">${brl(sum(lista, (p) => +p.pix || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.especie || 0))}</td><td class="num">${brl(rec)}</td><td class="num">${brl(nr)}</td><td class="num">${brl(sum(lista, (p) => +p.insumos || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.gasolina || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.maoObra || 0))}</td><td class="num">${brl(luc)}</td><td></td></tr></tfoot>
+    </table></div>` : ""}
+  </div>`;
+}
+function afterPacoca() {
+  const lista = db.pacoca.filter((p) => !ui.pacMes || monthOf(p.data) === ui.pacMes).sort((a, b) => a.data.localeCompare(b.data));
+  chart("chPac", {
+    type: "bar",
+    data: { labels: lista.map((p) => ddmm(p.data)), datasets: [
+      { label: "Recebido", data: lista.map(recPac), backgroundColor: "#c8963e", borderRadius: 6, maxBarThickness: 34, order: 2 },
+      { label: "Lucro", data: lista.map(lucroPac), type: "line", borderColor: "#2f9e6b", backgroundColor: "#2f9e6b", tension: .35, pointRadius: 3, order: 1 },
+    ] },
+    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+  });
+}
+
+/* ---------- Produtos & Preços ---------- */
+function prodStats(p) {
+  const m = margemProd(p), st = statusMargem(m, p.canal), c = db.canais[p.canal] || { alvoMin: 30, alvoMax: 100 };
+  const sug = precoAlvo(p, c.alvoMin);
+  const w = Math.max(0, Math.min(100, m));
+  return `
+    <div class="prod-stats">
+      <div class="stat"><small>Custo total</small><strong>${brl(custoProd(p))}</strong></div>
+      <div class="stat"><small>Lucro / venda</small><strong class="${lucroProd(p) >= 0 ? "pos" : "neg"}">${brl(lucroProd(p))}</strong></div>
+      <div class="stat"><small>Margem</small><strong class="${st === "green" ? "pos" : st === "red" ? "neg" : ""}">${pct(m)}</strong></div>
+    </div>
+    <div class="meter"><span class="band" style="left:${c.alvoMin}%;width:${Math.min(100, c.alvoMax) - c.alvoMin}%"></span><i style="width:${w}%;background:var(--${st === "green" ? "green" : st === "yellow" ? "yellow" : "red"})"></i></div>
+    <div class="hint">${st === "green" ? `Dentro da meta do canal (${c.alvoMin}%${c.alvoMax < 100 ? "–" + c.alvoMax + "%" : "+"}).` : sug ? `Para chegar a ${c.alvoMin}% de margem, venda a <b>${brl(sug)}</b>.` : "Revise os custos deste produto."}</div>`;
+}
+function compHtml(p) {
+  const linhas = (p.itens || [{ nome: "Custo", qtd: 1, valor: p.custoFixo }]).map((it) => {
+    const v = valorItem(it), f = fonteItem(it);
+    return `<li><span>${esc(it.nome)}${f ? ` <a class="badge b-gold" href="#${f.href}" title="Altere em: ${esc(f.onde)}">${f.tag}</a>` : ""}</span><span>${int(it.qtd)} × ${brlU(v)}</span><span>${brl((+it.qtd || 0) * v)}</span></li>`;
+  });
+  (db.canais[p.canal]?.taxas || []).forEach((t) => {
+    linhas.push(`<li><span>${esc(t.nome)} <a class="badge b-gold" href="#personalizar" title="Altere em: Personalizar custos">taxa</a></span><span>${pct(t.pct)} de ${brl(p.preco)}</span><span>${brl((p.preco * t.pct) / 100)}</span></li>`);
+  });
+  return `<ul class="recipe-ings">${linhas.join("")}</ul>
+    <div class="recipe-total"><span>Custo total</span><span>${brl(custoProd(p))}</span></div>
+    <div class="hint" style="margin-top:6px">As etiquetas mostram onde cada valor é alterado — clique nelas para ir até lá.</div>`;
+}
+const ITENS_PADRAO = [
+  { nome: "Massa", qtd: 1, valor: 0 }, { nome: "Embalagem", qtd: 1, valor: 0 },
+  { nome: "Mão de obra", qtd: 1, valor: 0 }, { nome: "Frete / comissão", qtd: 1, valor: 0 },
+];
+function formProd(p) {
+  const itens = JSON.parse(JSON.stringify(p?.itens || ITENS_PADRAO));
+  const fields = [
+    { key: "canal", label: "Canal", type: "select", options: Object.keys(db.canais) },
+    { key: "nome", label: "Nome do produto", required: true },
+    { key: "preco", label: "Preço de venda (R$)", type: "num", full: true },
+    ...itens.flatMap((it, i) => [
+      { key: "q" + i, label: `${it.nome} · quantidade`, type: "num" },
+      fonteItem(it)
+        ? { key: "r" + i, label: `${it.nome} · altere em ${fonteItem(it).onde}`, readonly: true }
+        : { key: "v" + i, label: `${it.nome} · valor unitário (R$)`, type: "num" },
+    ]),
+  ];
+  const values = { canal: p?.canal || ui.prodCanal, nome: p?.nome || "", preco: p?.preco ?? 0 };
+  itens.forEach((it, i) => { values["q" + i] = it.qtd; if (fonteItem(it)) values["r" + i] = brlU(valorItem(it)); else values["v" + i] = it.valor; });
+  const montar = (v) => ({
+    canal: v.canal, nome: v.nome, preco: v.preco,
+    itens: itens.map((it, i) => ({ ...it, qtd: v["q" + i], ...(fonteItem(it) ? {} : { valor: v["v" + i] }) })),
+  });
+  openForm({
+    title: p ? "Editar produto" : "Novo produto",
+    fields,
+    values,
+    preview: (v) => { const t = montar(v); return `<span>Custo: ${brl(custoProd(t))}</span><span>Lucro: ${brl(lucroProd(t))}</span><span>Margem: ${pct(margemProd(t))}</span>`; },
+    onSave: (v) => { const t = montar(v); if (p) { Object.assign(p, t); delete p.custoFixo; } else db.produtos.push({ id: uid(), ...t }); toast("Produto salvo"); },
+  });
+}
+function viewProdutos() {
+  setActions(`<button class="btn btn-primary" data-act="new-prod">${icon("plus")}Novo produto</button>`);
+  const c = db.canais[ui.prodCanal];
+  const lista = db.produtos.filter((p) => p.canal === ui.prodCanal);
+  const nomes = [...new Set(db.produtos.map((p) => p.nome))];
+  const canais = Object.keys(db.canais);
+  return `
+  <div class="toolbar">${tabs(canais, ui.prodCanal, "set-pcanal")}
+    <div class="chip-row"><span class="badge b-gold">${esc(c.descricao)}</span><span class="badge b-green">Meta de margem: ${c.alvoMin}%${c.alvoMax < 100 ? "–" + c.alvoMax + "%" : "+"}</span>
+      ${taxaCanal(ui.prodCanal) ? `<span class="badge b-red">Taxas: ${pct(taxaCanal(ui.prodCanal))} do preço</span>` : ""}<a class="btn btn-sm" href="#personalizar">Alterar metas e taxas</a></div></div>
+  <div class="grid g-3">${lista.map((p) => { const st = statusMargem(margemProd(p), p.canal); return `
+    <div class="prod" data-prod="${p.id}">
+      <div class="prod-top"><div><h4>${esc(p.nome)}</h4><div class="hint">${taxaCanal(p.canal) ? `Custo ${brl(custoBase(p))} + ${pct(taxaCanal(p.canal))} de taxas sobre o preço` : `Custo ${brl(custoBase(p))}`}</div></div>
+        <span class="badge b-${st}" data-badge>${statusLabel[st]}</span></div>
+      <div class="price-row"><label>Preço de venda</label><input inputmode="decimal" data-act="set-preco" data-id="${p.id}" value="${String(p.preco).replace(".", ",")}" />
+        ${rowActions("prod", p.id)}</div>
+      <div data-stats>${prodStats(p)}</div>
+      <details class="comp"><summary>Ver composição do custo</summary><div data-comp>${compHtml(p)}</div></details>
+    </div>`; }).join("")}</div>
+  <div class="card mt"><div class="card-head"><div><h3>Comparativo de margem entre canais</h3><div class="sub">Mesmo produto, margens diferentes em cada canal</div></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Produto</th>${canais.map((k) => `<th class="num">${k}</th>`).join("")}</tr></thead><tbody>
+    ${nomes.map((n) => `<tr><td>${esc(n)}</td>${canais.map((k) => { const p = db.produtos.find((x) => x.nome === n && x.canal === k); if (!p) return '<td class="num"><span class="badge b-gray">—</span></td>'; const m = margemProd(p); return `<td class="num"><span class="badge b-${statusMargem(m, k)}">${pct(m)}</span> <span class="hint">${brl(p.preco)}</span></td>`; }).join("")}</tr>`).join("")}
+    </tbody></table></div></div>`;
+}
+function updateProdCard(id) {
+  const p = db.produtos.find((x) => x.id === id);
+  const card = document.querySelector(`[data-prod="${id}"]`);
+  if (!p || !card) return;
+  const st = statusMargem(margemProd(p), p.canal);
+  card.querySelector("[data-stats]").innerHTML = prodStats(p);
+  card.querySelector("[data-comp]").innerHTML = compHtml(p);
+  const b = card.querySelector("[data-badge]");
+  b.className = `badge b-${st}`; b.textContent = statusLabel[st];
+}
+
+/* ---------- Simulador ---------- */
+function simCalc() {
+  const s = db.sim;
+  const prods = db.produtos.filter((p) => p.canal === s.canal);
+  let rec = 0, cus = 0, un = 0;
+  const rows = prods.map((p) => { const q = +s.qtd[p.id] || 0; const r = q * p.preco, c = q * custoProd(p); rec += r; cus += c; un += q; return { p, q, r, l: r - c }; });
+  const fixSem = sum(Object.values(s.fixos), (v) => +v || 0);
+  const lucroSem = rec - cus - fixSem;
+  const contrib = un ? (rec - cus) / un : 0;
+  return { rows, rec, cus, fixSem, lucroSem, semanas: s.semanas, recMes: rec * s.semanas, lucroMes: lucroSem * s.semanas, margem: rec ? (lucroSem / rec) * 100 : 0, equilibrio: contrib > 0 ? Math.ceil(fixSem / contrib) : null };
+}
+function simResultHtml() {
+  const r = simCalc();
+  return `
+    <div class="big-result"><small>Lucro líquido previsto no mês</small><div>${brl(r.lucroMes)}</div><small>${brl(r.lucroSem)} por semana · ${r.semanas} semana(s)</small></div>
+    <div class="grid g-2 mt" style="gap:12px">
+      <div class="stat"><small>Faturamento no mês</small><strong>${brl(r.recMes)}</strong></div>
+      <div class="stat"><small>Margem líquida</small><strong class="${r.margem >= 0 ? "pos" : "neg"}">${pct(r.margem)}</strong></div>
+      <div class="stat"><small>Custos dos produtos / mês</small><strong>${brl(r.cus * r.semanas)}</strong></div>
+      <div class="stat"><small>Despesas fixas / mês</small><strong>${brl(r.fixSem * r.semanas)}</strong></div>
+    </div>
+    <div class="alert ${r.equilibrio === null ? "yellow" : "green"} mt">${icon(r.equilibrio === null ? "alert" : "check")}<div><b>Ponto de equilíbrio</b>
+      <span>${r.equilibrio === null ? "Informe quantidades para calcular." : `Você precisa vender <b>${int(r.equilibrio)} itens por semana</b> (no mix atual) para pagar as despesas fixas.`}</span></div></div>`;
+}
+function viewSimulador() {
+  const s = db.sim;
+  const r = simCalc();
+  setActions(`<button class="btn" data-act="sim-zerar">Zerar quantidades</button>`);
+  return `
+  <div class="toolbar">${tabs(Object.keys(db.canais), s.canal, "set-simcanal")}<span class="hint">Digite quantas unidades pretende vender por semana — o resultado atualiza na hora.</span></div>
+  <div class="grid g-21">
+    <div class="card">
+      <div class="card-head"><div><h3>Vendas previstas por semana · ${s.canal}</h3><div class="sub">Preços e custos vêm da tela Produtos & Preços</div></div></div>
+      <div class="sim-row head"><span>Produto</span><span style="text-align:center">Qtd/semana</span><span class="num">Faturamento</span><span class="num">Lucro</span></div>
+      ${r.rows.map(({ p, q, r: rec, l }) => `<div class="sim-row"><span>${esc(p.nome)} <span class="hint">· ${brl(p.preco)}</span></span>
+        <input inputmode="numeric" data-act="sim-qtd" data-id="${p.id}" value="${q || ""}" placeholder="0" />
+        <span class="num" data-simrec="${p.id}">${brl(rec)}</span><span class="num" data-simluc="${p.id}">${brl(l)}</span></div>`).join("")}
+      <h3 style="font-size:14px;margin:22px 0 8px">Despesas fixas por semana</h3>
+      ${Object.entries(s.fixos).map(([k, v]) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(k)}</span><input inputmode="decimal" data-act="sim-fixo" data-key="${esc(k)}" value="${String(v || "").replace(".", ",")}" placeholder="0" /></div>`).join("")}
+      <div class="sim-row" style="grid-template-columns:1fr 140px;border:0"><span><b>Semanas de venda no mês</b></span><input inputmode="numeric" data-act="sim-semanas" value="${s.semanas}" /></div>
+    </div>
+    <div class="card" id="simResult">${simResultHtml()}</div>
+  </div>`;
+}
+function refreshSim() {
+  simCalc().rows.forEach(({ p, r, l }) => {
+    const a = document.querySelector(`[data-simrec="${p.id}"]`), b = document.querySelector(`[data-simluc="${p.id}"]`);
+    if (a) a.textContent = brl(r);
+    if (b) b.textContent = brl(l);
+  });
+  $("#simResult").innerHTML = simResultHtml();
+}
+
+/* ---------- Fichas técnicas ---------- */
+const numIn = (act, val, attrs = "") => `<input class="tbl-input" inputmode="decimal" data-act="${act}" ${attrs} value="${String(+val || 0).replace(".", ",")}" />`;
+// Formato sem rendimento cadastrado não tem custo por unidade
+const custoSaborTxt = (s, j) => (+s.rend[j] > 0 ? brl(custoSabor(s, j)) : "—");
+function matrizSabores() {
+  return db.sabores.map((s, k) => `<tr class="${k === ui.sabor ? "row-sel" : ""}"><td><a class="link" data-act="set-sabor" data-val="${k}">${esc(s.nome)}</a></td>${db.formatos.map((f, j) => `<td class="num">${custoSaborTxt(s, j)}<div class="hint">${+s.rend[j] > 0 ? `rende ${int(s.rend[j])}` : "sem rendimento"}</div></td>`).join("")}</tr>`).join("");
+}
+function formNovaReceita(tipo) {
+  openForm({
+    title: tipo === "barra" ? "Nova barra de chocolate" : "Nova receita de doce",
+    fields: [{ key: "nome", label: "Nome", required: true, full: true }],
+    onSave: (v) => {
+      const lista = tipo === "barra" ? db.barras : db.sabores;
+      if (lista.some((x) => x.nome.toLowerCase() === v.nome.toLowerCase())) { toast("Já existe uma receita com esse nome"); return; }
+      const cob = db.insumos.find((i) => i.nome === "Cobertura Meio Amargo Gotas 2,05kg"), gas = db.insumos.find((i) => i.nome === "Gás");
+      if (tipo === "barra") { db.barras.push({ nome: v.nome, linha: "gourmet", itens: [] }); ui.barra = db.barras.length - 1; }
+      else {
+        db.sabores.push({ nome: v.nome, rend: [0, 0, 0, 0, 0, 0], lote: [],
+          porUn: [...(cob ? [{ insumoId: cob.id, qtd: [20, 30, 0, 0, 7, 0] }] : []), ...(gas ? [{ insumoId: gas.id, qtd: [0.01, 0.01, 0.01, 0.01, 0.01, 0.01] }] : [])] });
+        ui.sabor = db.sabores.length - 1;
+      }
+      toast("Receita criada — adicione os ingredientes e o rendimento");
+    },
+  });
+}
+function matrizBarras() {
+  return db.barras.map((b, k) => `<tr class="${k === ui.barra ? "row-sel" : ""}"><td><a class="link" data-act="set-barra" data-val="${k}">Barra ${esc(b.nome)}</a></td><td class="num"><b>${brl(custoBarra(b))}</b></td></tr>`).join("");
+}
+function viewReceitas() {
+  setActions(`<button class="btn btn-primary" data-act="rec-nova" data-val="${ui.recTab === "barras" ? "barra" : "doce"}">${icon("plus")}${ui.recTab === "barras" ? "Nova barra" : "Nova receita"}</button>`);
+  const head = `<div class="toolbar">${tabs([["doces", "Doces (brigadeiros e mousses)"], ["barras", "Barras de chocolate"]], ui.recTab, "set-rectab")}
+    <span class="hint">Altere as quantidades nos campos — os custos são recalculados na hora com os preços da tela Insumos.</span></div>`;
+  if (ui.recTab === "barras") {
+    const b = db.barras[ui.barra] || db.barras[0];
+    return head + `<div class="grid g-21">
+      <div class="card"><div class="card-head"><div><h3>Barra ${esc(b.nome)}</h3><div class="sub">Ingredientes para 1 barra de 300g ·
+          linha <select class="inline" data-act="bar-linha" style="padding:3px 8px"><option value="gourmet" ${b.linha !== "trufada" ? "selected" : ""}>gourmet</option><option value="trufada" ${b.linha === "trufada" ? "selected" : ""}>trufada</option></select></div></div>
+        <div style="display:flex;gap:6px"><button class="btn btn-sm" data-act="add-ing" data-val="barra">${icon("plus")}Ingrediente</button>
+        <button class="btn btn-ghost btn-sm btn-danger" title="Excluir barra" data-act="rec-excluir" data-val="barra">${icon("trash")}</button></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th class="num">Quantidade</th><th class="num">Custo unitário</th><th class="num">Total</th><th></th></tr></thead>
+        <tbody>${b.itens.map((it, i) => `<tr><td>${esc(nomeItem(it))}</td>
+          <td class="num">${numIn("bar-qtd", it.qtd, `data-i="${i}"`)} <span class="hint">${esc(unidItem(it))}</span></td>
+          <td class="num">${brlU(custoUnitItem(it))}<span class="hint">/${esc(unidItem(it))}</span></td>
+          <td class="num" data-rc="b${i}">${brl(it.qtd * custoUnitItem(it))}</td>
+          <td><button class="btn btn-ghost btn-sm btn-danger" data-act="del-ing" data-val="barra" data-i="${i}">${icon("trash")}</button></td></tr>`).join("")}</tbody>
+        <tfoot><tr><td colspan="3">Custo da massa da barra</td><td class="num" data-rc="bt">${brl(custoBarra(b))}</td><td></td></tr></tfoot></table></div>
+      </div>
+      <div class="card"><div class="card-head"><div><h3>Todas as barras</h3><div class="sub">Clique para editar</div></div></div>
+        <div class="table-wrap"><table><thead><tr><th>Barra</th><th class="num">Custo</th></tr></thead><tbody id="barMatrix">${matrizBarras()}</tbody></table></div>
+      </div></div>`;
+  }
+  const s = db.sabores[ui.sabor] || db.sabores[0];
+  return head + `
+  <div class="card"><div class="card-head"><div><h3>Custo por unidade em cada formato</h3><div class="sub">Clique em um sabor para editar a receita</div></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Sabor</th>${db.formatos.map((f) => `<th class="num">${f.nome}<br/><span style="text-transform:none;font-weight:500">${f.peso}</span></th>`).join("")}</tr></thead>
+    <tbody id="recMatrix">${matrizSabores()}</tbody></table></div></div>
+  <div class="toolbar mt" style="margin-bottom:0">${tabs(db.sabores.map((x, k) => [k, x.nome]), ui.sabor, "set-sabor")}</div>
+  <div class="grid mt">
+    <div class="card"><div class="card-head"><div><h3>${esc(s.nome)} · receita (1 lote)</h3><div class="sub">Quantidades na unidade de compra do insumo (g, ml, un)</div></div>
+      <div style="display:flex;gap:6px"><button class="btn btn-sm" data-act="add-ing" data-val="lote">${icon("plus")}Ingrediente</button>
+      <button class="btn btn-ghost btn-sm btn-danger" title="Excluir receita" data-act="rec-excluir" data-val="doce">${icon("trash")}</button></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Ingrediente</th><th class="num">Quantidade</th><th class="num">Total</th><th></th></tr></thead>
+      <tbody>${s.lote.map((it, i) => `<tr><td>${esc(nomeItem(it))}<div class="hint">${brlU(custoUnitItem(it))}/${esc(unidItem(it))}</div></td>
+        <td class="num">${numIn("rec-lote", it.qtd, `data-i="${i}"`)} <span class="hint">${esc(unidItem(it))}</span></td>
+        <td class="num" data-rc="l${i}">${brl(it.qtd * custoUnitItem(it))}</td>
+        <td><button class="btn btn-ghost btn-sm btn-danger" data-act="del-ing" data-val="lote" data-i="${i}">${icon("trash")}</button></td></tr>`).join("")}</tbody>
+      <tfoot><tr><td colspan="2">Custo do lote</td><td class="num" data-rc="lt">${brl(custoLote(s))}</td><td></td></tr></tfoot></table></div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Rendimento e gasto por unidade</h3><div class="sub">Por formato: unidades por lote e gramas de cobertura/recheio em cada doce</div></div></div>
+      <div class="table-wrap"><table class="compact"><thead><tr><th></th>${db.formatos.map((f) => `<th class="num">${f.nome}</th>`).join("")}</tr></thead>
+      <tbody>
+        <tr><td><b>Rende (un)</b></td>${db.formatos.map((f, j) => `<td class="num">${numIn("rec-rend", s.rend[j], `data-j="${j}"`)}</td>`).join("")}</tr>
+        ${s.porUn.map((it, i) => `<tr><td>${esc(nomeItem(it))} <span class="hint">(${esc(unidItem(it))}/un)</span></td>${db.formatos.map((f, j) => `<td class="num">${numIn("rec-porun", it.qtd[j], `data-i="${i}" data-j="${j}"`)}</td>`).join("")}</tr>`).join("")}
+      </tbody>
+      <tfoot><tr><td>Custo por unidade</td>${db.formatos.map((f, j) => `<td class="num" data-rc="f${j}">${custoSaborTxt(s, j)}</td>`).join("")}</tr></tfoot></table></div>
+      <div class="hint" style="margin-top:8px">Formato com rendimento 0 fica sem custo ("—") e não entra no cálculo das massas dos produtos.</div>
+    </div>
+  </div>`;
+}
+function refreshReceita() {
+  const set = (k, v) => { const el = document.querySelector(`[data-rc="${k}"]`); if (el) el.textContent = v; };
+  if (ui.recTab === "barras") {
+    const b = db.barras[ui.barra];
+    b.itens.forEach((it, i) => set("b" + i, brl(it.qtd * custoUnitItem(it))));
+    set("bt", brl(custoBarra(b)));
+    $("#barMatrix").innerHTML = matrizBarras();
+    return;
+  }
+  const s = db.sabores[ui.sabor];
+  s.lote.forEach((it, i) => set("l" + i, brl(it.qtd * custoUnitItem(it))));
+  set("lt", brl(custoLote(s)));
+  db.formatos.forEach((f, j) => set("f" + j, custoSaborTxt(s, j)));
+  $("#recMatrix").innerHTML = matrizSabores();
+}
+function formIngrediente(destino) {
+  openForm({
+    title: "Adicionar ingrediente",
+    fields: [
+      { key: "insumo", label: "Insumo (da tela Insumos)", type: "select", options: db.insumos.map((i) => i.nome), full: true },
+      { key: "qtd", label: "Quantidade", type: "num", full: true },
+    ],
+    onSave: (v) => {
+      const ins = db.insumos.find((i) => i.nome === v.insumo);
+      const alvo = destino === "barra" ? db.barras[ui.barra].itens : db.sabores[ui.sabor].lote;
+      alvo.push({ insumoId: ins.id, qtd: v.qtd });
+      toast("Ingrediente adicionado");
+    },
+  });
+}
+
+/* ---------- Insumos ---------- */
+const INS_TABS = { insumos: "Ingredientes", materiais: "Embalagens & materiais", variaveis: "Custos variáveis" };
+const insFields = [
+  { key: "nome", label: "Item", required: true, full: true },
+  { key: "custo", label: "Custo de compra (R$)", type: "num" },
+  { key: "rend", label: "Rendimento (quantidade)", type: "num" },
+  { key: "unid", label: "Unidade (g, ml, un...)", full: true },
+];
+// Onde cada insumo entra no custo (fichas, kits, produtos e custos padrão)
+function usoInsumo(tab, it) {
+  const out = [];
+  if (tab === "insumos") {
+    db.sabores.forEach((s) => { if ([...s.lote, ...s.porUn].some((x) => x.insumoId === it.id)) out.push(`Ficha ${s.nome}`); });
+    db.barras.forEach((b) => { if (b.itens.some((x) => x.insumoId === it.id)) out.push(`Barra ${b.nome}`); });
+  }
+  if (tab === "materiais") {
+    db.embalagens.forEach((e) => { if (e.itens.some((x) => x.material === it.nome)) out.push(`Kit ${e.nome}`); });
+    db.produtos.forEach((p) => { if (p.itens?.some((x) => x.material === it.nome)) out.push(`${p.nome} (${p.canal})`); });
+  }
+  if (tab === "variaveis") db.params.forEach((p) => { if (p.fonte?.tipo === "variavel" && p.fonte.nome === it.nome) out.push(p.nome); });
+  return out;
+}
+function renomearReferencias(tab, antigo, novo) {
+  if (tab === "materiais") {
+    db.embalagens.forEach((e) => e.itens.forEach((x) => { if (x.material === antigo) x.material = novo; }));
+    db.produtos.forEach((p) => (p.itens || []).forEach((x) => { if (x.material === antigo) { x.material = novo; if (x.nome === antigo) x.nome = novo; } }));
+  }
+  if (tab === "variaveis") db.params.forEach((p) => { if (p.fonte?.tipo === "variavel" && p.fonte.nome === antigo) p.fonte.nome = novo; });
+}
+function formIns(it) {
+  const tab = ui.insTab;
+  openForm({
+    title: it ? "Editar item" : `Novo item · ${INS_TABS[tab]}`,
+    fields: insFields,
+    values: it || { rend: 1, unid: "un" },
+    preview: (v) => `<span>Custo unitário</span><span>${brlU(v.rend ? v.custo / v.rend : 0)} por ${esc(v.unid || "un")}</span>`,
+    onSave: (vals) => {
+      if (it) {
+        if (vals.nome !== it.nome) renomearReferencias(tab, it.nome, vals.nome);
+        Object.assign(it, vals);
+        const u = usoInsumo(tab, it);
+        toast(u.length ? `Salvo · recalculado em ${u.length} lugar(es) e nos produtos ligados` : "Item salvo");
+      } else { db[tab].push({ id: uid(), ...vals }); toast("Item salvo"); }
+    },
+  });
+}
+function viewInsumos() {
+  setActions(`<div class="search">${icon("search")}<input placeholder="Buscar item..." data-act="busca" value="${esc(ui.busca)}" /></div><button class="btn btn-primary" data-act="new-ins">${icon("plus")}Novo item</button>`);
+  const q = ui.busca.toLowerCase();
+  const lista = db[ui.insTab].filter((i) => i.nome.toLowerCase().includes(q));
+  return `
+  <div class="toolbar">${tabs(Object.entries(INS_TABS).map(([k, v]) => [k, `${v} <span class="badge b-gray">${db[k].length}</span>`]), ui.insTab, "set-instab")}</div>
+  <div class="card">
+    <div class="card-head"><div><h3>${INS_TABS[ui.insTab]}</h3><div class="sub">Custo unitário = custo de compra ÷ rendimento. Alterou aqui, recalcula fichas, kits, produtos, margens e DRE.</div></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Custo de compra</th><th class="num">Rendimento</th><th class="num">Custo unitário</th><th>Usado em</th><th></th></tr></thead>
+    <tbody>${lista.map((i) => { const u = usoInsumo(ui.insTab, i); return `<tr><td>${esc(i.nome)}</td><td class="num">${brl(i.custo)}</td><td class="num">${int(i.rend)} ${esc(i.unid)}</td><td class="num"><b>${brlU(i.rend ? i.custo / i.rend : 0)}</b> <span class="hint">/${esc(i.unid)}</span></td>
+      <td>${u.length ? `<span class="badge b-gold" title="${esc(u.join(" · "))}">${u.length} ${u.length === 1 ? "lugar" : "lugares"}</span> <span class="hint uso-lista">${esc(u.slice(0, 2).join(", "))}${u.length > 2 ? "…" : ""}</span>` : '<span class="hint">Não usado</span>'}</td>
+      <td>${rowActions("ins", i.id)}</td></tr>`; }).join("") || '<tr><td colspan="6" class="empty">Nenhum item encontrado</td></tr>'}</tbody></table></div>
+  </div>`;
+}
+
+/* ---------- Embalagens ---------- */
+const matUnid = (nome) => db.materiais.find((x) => x.nome === nome)?.unid || "un";
+function usoKit(nome) { return db.produtos.filter((p) => p.itens?.some((i) => i.kit === nome)); }
+function formEmbItem(e) {
+  openForm({
+    title: `Adicionar item · ${e.nome}`,
+    fields: [
+      { key: "material", label: "Material (da tela Insumos › Embalagens & materiais)", type: "select", options: db.materiais.map((m) => m.nome), full: true },
+      { key: "qtd", label: "Quantidade por kit", type: "num", full: true },
+    ],
+    values: { qtd: 1 },
+    preview: (v) => `<span>Custo do item</span><span>${brl((v.qtd || 0) * materialUnit(v.material))}</span>`,
+    onSave: (v) => { e.itens.push({ material: v.material, qtd: v.qtd }); toast("Item adicionado ao kit"); },
+  });
+}
+function viewEmbalagens() {
+  return `<div class="toolbar"><span class="hint">Os preços vêm da tela <a class="link" href="#insumos">Insumos › Embalagens & materiais</a>. Altere as quantidades aqui — kits, produtos e margens se atualizam na hora.</span></div>
+  <div class="grid g-3">${db.embalagens.map((e) => { const usados = usoKit(e.nome); return `
+    <div class="card" data-kit="${e.id}"><div class="card-head"><div><h3>${esc(e.nome)}</h3><div class="sub">Usado em: ${esc(e.uso)}${usados.length ? ` · ${usados.length} produto(s)` : ""}</div></div>
+      <button class="btn btn-ghost btn-sm" title="Adicionar item" data-act="emb-add" data-id="${e.id}">${icon("plus")}</button></div>
+    <div class="table-wrap"><table class="compact"><tbody>
+    ${e.itens.map((i, k) => `<tr><td>${esc(i.material)}<div class="hint">${brlU(materialUnit(i.material))}/${esc(matUnid(i.material))}</div></td>
+      <td class="num">${numIn("emb-qtd", i.qtd, `data-id="${e.id}" data-i="${k}"`)} <span class="hint">${esc(matUnid(i.material))}</span></td>
+      <td class="num" data-ek="${e.id}-${k}">${brl(kitItemValor(i))}</td>
+      <td><button class="btn btn-ghost btn-sm btn-danger" data-act="emb-del" data-id="${e.id}" data-i="${k}">${icon("trash")}</button></td></tr>`).join("")}
+    </tbody></table></div>
+    <div class="recipe-total"><span>Custo por embalagem</span><span data-et="${e.id}">${brl(kitTotal(e.nome))}</span></div></div>`; }).join("")}</div>`;
+}
+function refreshKit(e) {
+  e.itens.forEach((i, k) => { const el = document.querySelector(`[data-ek="${e.id}-${k}"]`); if (el) el.textContent = brl(kitItemValor(i)); });
+  const t = document.querySelector(`[data-et="${e.id}"]`); if (t) t.textContent = brl(kitTotal(e.nome));
+}
+
+/* ---------- DRE ---------- */
+const CATS_VAR = ["Insumos extras", "Embalagens", "Entrega / frete", "Comissões", "Taxas de cartão / apps", "Perdas", "Marketing por venda", "Outros"];
+const mesAtual = () => new Date().getMonth() + 1;
+function formCustoVar(c) {
+  openForm({
+    title: c ? "Editar custo variável" : "Novo custo variável",
+    fields: [
+      { key: "descricao", label: "Descrição", required: true, full: true },
+      { key: "categoria", label: "Categoria", type: "select", options: CATS_VAR },
+      { key: "mes", label: "Mês de referência", type: "select", options: MESES_FULL },
+      { key: "valor", label: "Valor (R$)", type: "num", full: true },
+    ],
+    values: c ? { ...c, mes: MESES_FULL[c.mes - 1] } : { categoria: CATS_VAR[0], mes: MESES_FULL[(ui.dreMes || mesAtual()) - 1] },
+    onSave: (v) => {
+      const novo = { ...v, mes: MESES_FULL.indexOf(v.mes) + 1, ano: db.config.ano };
+      if (c) Object.assign(c, novo); else db.custosVar.push({ id: uid(), ...novo });
+      toast("Custo variável salvo");
+    },
+  });
+}
+function viewDre() {
+  const todos = mesesComDados("doces");
+  setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Mês de referência
+    <select class="inline" data-act="set-dremes"><option value="0">Todos os meses</option>
+    ${MESES_FULL.map((n, i) => `<option value="${i + 1}" ${ui.dreMes === i + 1 ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+    <button class="btn btn-primary" data-act="new-cvar">${icon("plus")}Custo variável</button>`);
+  const meses = ui.dreMes ? [ui.dreMes] : todos;
+  const cols = meses.map((m) => ({ label: MESES_FULL[m - 1], r: resumo(m, "doces") }));
+  const totalFixos = sum(db.fixos, (f) => +f.valor || 0);
+  if (!ui.dreMes) cols.push({ label: "Total", r: resumo(0, "doces"), total: true });
+  const nFix = (c) => (c.total ? meses.length : 1);
+  const catsUsadas = CATS_VAR.filter((cat) => db.custosVar.some((c) => c.categoria === cat && (!ui.dreMes || +c.mes === ui.dreMes)));
+  const linhas = [
+    { t: "RECEITA BRUTA", f: (r) => r.receita, cls: "total" },
+    ...CANAIS_VENDA.map((c) => ({ t: "   " + c, f: (r) => r.porCanal[c] || 0 })),
+    { t: "(−) DESPESAS VARIÁVEIS", f: (r) => -(r.custos), cls: "total" },
+    { t: "   Insumos e materiais", f: (r) => -r.insumos },
+    { t: "   Gasolina / logística", f: (r) => -r.gasolina },
+    { t: "   Comissões e mão de obra", f: (r) => -r.comissoes },
+    { t: "   Perdas e outras", f: (r) => -r.perdas },
+    ...catsUsadas.map((cat) => ({ t: "   " + cat + " (lançado)", f: (r) => -sum(r.cvs.filter((c) => c.categoria === cat), (c) => +c.valor || 0) })),
+    { t: "(=) LUCRO BRUTO (margem de contribuição)", f: (r) => r.lucro, cls: "total" },
+    { t: "   Margem de contribuição %", f: (r) => (r.receita ? (r.lucro / r.receita) * 100 : 0), pct: true },
+    { t: "(−) DESPESAS FIXAS", f: (r, c) => -(totalFixos * nFix(c)), cls: "total" },
+    { t: "(=) RESULTADO OPERACIONAL", f: (r, c) => r.lucro - totalFixos * nFix(c), cls: "result" },
+    { t: "   Margem líquida %", f: (r, c) => (r.receita ? ((r.lucro - totalFixos * nFix(c)) / r.receita) * 100 : 0), pct: true },
+  ];
+  const cvLista = db.custosVar.filter((c) => !ui.dreMes || +c.mes === ui.dreMes).sort((a, b) => a.mes - b.mes);
+  return `
+  <div class="card"><div class="card-head"><div><h3>DRE ${db.config.ano}${ui.dreMes ? " · " + MESES_FULL[ui.dreMes - 1] : ""}</h3><div class="sub">Doces finos · vendas + custos variáveis lançados + despesas fixas</div></div></div>
+    <div class="table-wrap"><table class="dre"><thead><tr><th>Descrição</th>${cols.map((c) => `<th class="num">${c.label}</th>`).join("")}</tr></thead>
+    <tbody>${linhas.map((l) => `<tr class="${l.cls || ""}"><td>${l.t.replace(/^ +/, (s) => "&nbsp;".repeat(s.length * 2))}</td>${cols.map((c) => { const v = l.f(c.r, c); return `<td class="num ${!l.cls && !l.pct && v < 0 ? "neg" : ""}">${l.pct ? pct(v) : brl(v)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+  </div>
+  <div class="card mt"><div class="card-head"><div><h3>Custos variáveis lançados${ui.dreMes ? " · " + MESES_FULL[ui.dreMes - 1] : ""}</h3><div class="sub">Gastos que variam com as vendas e não estão nos lançamentos semanais — entram no DRE pelo mês de referência</div></div>
+    <button class="btn btn-sm btn-primary" data-act="new-cvar">${icon("plus")}Adicionar</button></div>
+    ${cvLista.length ? `<div class="table-wrap"><table><thead><tr><th>Mês de referência</th><th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+    ${cvLista.map((c) => `<tr><td>${MESES_FULL[c.mes - 1]}</td><td>${esc(c.descricao)}</td><td><span class="badge b-gray">${esc(c.categoria)}</span></td><td class="num">${brl(c.valor)}</td><td>${rowActions("cvar", c.id)}</td></tr>`).join("")}
+    </tbody><tfoot><tr><td colspan="3">Total</td><td class="num">${brl(sum(cvLista, (c) => +c.valor || 0))}</td><td></td></tr></tfoot></table></div>`
+    : `<div class="empty">Nenhum custo variável lançado${ui.dreMes ? " em " + MESES_FULL[ui.dreMes - 1] : ""}.<br/><br/><button class="btn btn-primary" data-act="new-cvar">${icon("plus")}Lançar custo variável</button></div>`}
+  </div>
+  <div class="grid g-2 mt">
+    <div class="card"><div class="card-head"><div><h3>Despesas fixas mensais</h3><div class="sub">Entram no DRE em todos os meses com movimento</div></div><button class="btn btn-sm" data-act="new-fixo">${icon("plus")}Adicionar</button></div>
+      ${db.fixos.map((f) => `<div class="sim-row" style="grid-template-columns:1fr 140px 34px"><span>${esc(f.nome)}</span><input inputmode="decimal" data-act="set-fixo" data-id="${f.id}" value="${String(f.valor || "").replace(".", ",")}" placeholder="0,00" />
+        <button class="btn btn-ghost btn-sm btn-danger" data-act="del-fixo" data-id="${f.id}">${icon("trash")}</button></div>`).join("")}
+      <div class="recipe-total" style="padding-top:14px"><span>Total por mês</span><span>${brl(totalFixos)}</span></div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Resultado operacional por mês</h3><div class="sub">Lucro bruto − despesas fixas</div></div></div>
+      <div class="chart-box sm"><canvas id="chDre"></canvas></div>
+    </div>
+  </div>`;
+}
+function afterDre() {
+  const meses = mesesComDados("doces");
+  const tf = sum(db.fixos, (f) => +f.valor || 0);
+  chart("chDre", {
+    type: "line",
+    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [{ label: "Resultado", data: meses.map((m) => resumo(m, "doces").lucro - tf), borderColor: "#5a3826", backgroundColor: "rgba(200,150,62,.18)", fill: true, tension: .35 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+  });
+}
+
+/* ---------- Paçoca · Painel ---------- */
+function viewPacPainel() {
+  setActions(mesSelect(ui.mes, "set-mes", "pacoca"));
+  const lista = db.pacoca.filter((p) => !ui.mes || monthOf(p.data) === ui.mes);
+  const qtd = sum(lista, (p) => +p.qtd || 0), rec = sum(lista, recPac), luc = sum(lista, lucroPac), nr = sum(lista, naoRecPac), esp = sum(lista, esperadoPac);
+  const taxa = esp ? (nr / esp) * 100 : 0;
+  const meses = mesesComDados("pacoca");
+  const melhor = [...lista].sort((a, b) => lucroPac(b) - lucroPac(a))[0];
+  const cu = custoUnitPacoca();
+  const al = [];
+  if (taxa > 10) al.push({ tipo: taxa > 20 ? "red" : "yellow", t: `${brl(nr)} não recebidos (${pct(taxa)} do esperado)`, d: "Diferença entre paçocas vendidas × preço e o que entrou no caixa (no-show / fiado)." });
+  else al.push({ tipo: "green", t: "Recebimentos em dia", d: `Apenas ${pct(taxa)} do valor esperado ficou sem receber.` });
+  if (db.config.precoPacoca && cu / db.config.precoPacoca > 0.3) al.push({ tipo: "yellow", t: `Custo por paçoca em ${brl(cu)}`, d: `Representa ${pct((cu / db.config.precoPacoca) * 100)} do preço de venda.` });
+  const estP = alertasEstoque("pacoca");
+  if (estP.length) al.push({ tipo: "yellow", t: `Estoque baixo: ${estP.map((i) => i.nome).join(", ")}`, d: "Abaixo do mínimo definido na tela Estoque." });
+  if (melhor) al.push({ tipo: "green", t: `Melhor dia: ${ddmm(melhor.data)}`, d: `${int(melhor.qtd)} paçocas vendidas e ${brl(lucroPac(melhor))} de lucro.` });
+  return `
+  <div class="grid g-4">
+    ${kpi("Paçocas vendidas", int(qtd), `${lista.length} dia(s) de venda · média ${int(lista.length ? qtd / lista.length : 0)}/dia`, "cart")}
+    ${kpi("Recebido", brl(rec), `Esperado: ${brl(esp)}`, "money")}
+    ${kpi("Lucro", brl(luc), rec ? `Margem de ${pct((luc / rec) * 100)}` : "", "wallet", luc >= 0 ? "pos" : "neg")}
+    ${kpi("Não recebido", brl(nr), `<span class="badge ${taxa > 20 ? "b-red" : taxa > 10 ? "b-yellow" : "b-green"}">${pct(taxa)} do esperado</span>`, "alert", nr > 0 ? "neg" : "")}
+  </div>
+  <div class="grid g-21 mt">
+    <div class="card"><div class="card-head"><div><h3>Evolução mensal</h3><div class="sub">Recebido, lucro e não recebido por mês</div></div></div><div class="chart-box"><canvas id="chPacMes"></canvas></div></div>
+    <div class="card"><div class="card-head"><div><h3>Pontos de atenção</h3><div class="sub">${ui.mes ? MESES_FULL[ui.mes - 1] : "Todo o período"}</div></div></div>
+      <div class="alert-list">${al.map((a) => `<div class="alert ${a.tipo}">${icon(a.tipo === "green" ? "check" : "alert")}<div><b>${esc(a.t)}</b><span>${esc(a.d)}</span></div></div>`).join("")}</div></div>
+  </div>
+  <div class="card mt"><div class="card-head"><div><h3>Resumo por mês</h3><div class="sub">Totais consolidados do registro diário</div></div><a class="btn btn-sm" href="#pacoca">Ver vendas diárias</a></div>
+    <div class="table-wrap"><table><thead><tr><th>Mês</th><th class="num">Dias</th><th class="num">Vendidas</th><th class="num">Recebido</th><th class="num">Não recebido</th><th class="num">Custos</th><th class="num">Lucro</th><th class="num">Margem</th></tr></thead>
+    <tbody>${meses.map((m) => { const l = db.pacoca.filter((p) => monthOf(p.data) === m); const r = sum(l, recPac), lu = sum(l, lucroPac); return `<tr>
+      <td><b>${MESES_FULL[m - 1]}</b></td><td class="num">${l.length}</td><td class="num">${int(sum(l, (p) => +p.qtd || 0))}</td><td class="num">${brl(r)}</td>
+      <td class="num neg">${brl(sum(l, naoRecPac))}</td><td class="num">${brl(sum(l, custoPac))}</td><td class="num ${lu >= 0 ? "pos" : "neg"}"><b>${brl(lu)}</b></td><td class="num">${pct(r ? (lu / r) * 100 : 0)}</td></tr>`; }).join("")}</tbody></table></div>
+  </div>`;
+}
+function afterPacPainel() {
+  const meses = mesesComDados("pacoca");
+  const por = meses.map((m) => db.pacoca.filter((p) => monthOf(p.data) === m));
+  chart("chPacMes", {
+    type: "bar",
+    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [
+      { label: "Recebido", data: por.map((l) => sum(l, recPac)), backgroundColor: "#c8963e", borderRadius: 8, maxBarThickness: 46 },
+      { label: "Lucro", data: por.map((l) => sum(l, lucroPac)), backgroundColor: "#2f9e6b", borderRadius: 8, maxBarThickness: 46 },
+      { label: "Não recebido", data: por.map((l) => sum(l, naoRecPac)), backgroundColor: "#d24b4b", borderRadius: 8, maxBarThickness: 46 },
+    ] },
+    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+  });
+}
+
+/* ---------- Paçoca · Custos & Compras ---------- */
+function pacSimHtml() {
+  const s = db.pacocaSim, preco = db.config.precoPacoca, cu = custoUnitPacoca();
+  const qtd = (+s.porDia || 0) * (+s.dias || 0);
+  const esperado = qtd * preco;
+  const recebido = esperado * (1 - (+s.naoRecPct || 0) / 100);
+  const custos = qtd * cu + (+s.gasolinaDia || 0) * (+s.dias || 0);
+  const lucro = recebido - custos;
+  return `<div class="big-result"><small>Lucro previsto no mês</small><div>${brl(lucro)}</div><small>${int(qtd)} paçocas · ${int(s.dias)} dias de venda</small></div>
+    <div class="grid g-2 mt" style="gap:12px">
+      <div class="stat"><small>Faturamento esperado</small><strong>${brl(esperado)}</strong></div>
+      <div class="stat"><small>Recebido (após não recebidos)</small><strong>${brl(recebido)}</strong></div>
+      <div class="stat"><small>Custo das paçocas</small><strong>${brl(qtd * cu)}</strong></div>
+      <div class="stat"><small>Gasolina no mês</small><strong>${brl((+s.gasolinaDia || 0) * (+s.dias || 0))}</strong></div>
+    </div>`;
+}
+function viewPacCustos() {
+  setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Preço de venda
+    <input class="inline" style="width:90px" inputmode="decimal" data-act="set-preco-pac" value="${String(db.config.precoPacoca).replace(".", ",")}" /></label>`);
+  const totCompra = sum(db.pacocaCompra, (c) => (+c.qtd || 0) * (+c.valor || 0));
+  const s = db.pacocaSim;
+  const histNr = sum(db.pacoca, esperadoPac) ? (sum(db.pacoca, naoRecPac) / sum(db.pacoca, esperadoPac)) * 100 : 0;
+  return `
+  <div class="grid g-2">
+    <div class="card"><div class="card-head"><div><h3>Custo por paçoca</h3><div class="sub">Edite os valores — o lucro por unidade atualiza na hora</div></div></div>
+      ${db.pacocaCusto.map((c) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(c.nome)}</span><input inputmode="decimal" data-act="pac-custo" data-id="${c.id}" value="${String(c.valor).replace(".", ",")}" /></div>`).join("")}
+      <div id="pacUnit">${pacUnitHtml()}</div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Simulador do mês</h3><div class="sub">Quanto a paçoca pode render no mês</div></div></div>
+      <div class="sim-row" style="grid-template-columns:1fr 120px"><span>Paçocas vendidas por dia</span><input inputmode="numeric" data-act="pac-sim" data-key="porDia" value="${s.porDia}" /></div>
+      <div class="sim-row" style="grid-template-columns:1fr 120px"><span>Dias de venda no mês</span><input inputmode="numeric" data-act="pac-sim" data-key="dias" value="${s.dias}" /></div>
+      <div class="sim-row" style="grid-template-columns:1fr 120px"><span>% não recebido <span class="hint">(histórico: ${pct(histNr)})</span></span><input inputmode="decimal" data-act="pac-sim" data-key="naoRecPct" value="${String(s.naoRecPct).replace(".", ",")}" /></div>
+      <div class="sim-row" style="grid-template-columns:1fr 120px;border:0"><span>Gasolina por dia (R$)</span><input inputmode="decimal" data-act="pac-sim" data-key="gasolinaDia" value="${String(s.gasolinaDia).replace(".", ",")}" /></div>
+      <div id="pacSim" class="mt">${pacSimHtml()}</div>
+    </div>
+  </div>
+  <div class="card mt"><div class="card-head"><div><h3>Compra mensal</h3><div class="sub">Lista de reposição de estoque da paçoca</div></div><button class="btn btn-primary btn-sm" data-act="new-compra">${icon("plus")}Adicionar item</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Quantidade</th><th class="num">Valor unitário</th><th class="num">Total</th><th></th></tr></thead>
+    <tbody>${db.pacocaCompra.map((c) => `<tr><td>${esc(c.nome)}</td><td class="num">${int(c.qtd)}</td><td class="num">${brlU(c.valor)}</td><td class="num"><b>${brl((+c.qtd || 0) * (+c.valor || 0))}</b></td><td>${rowActions("compra", c.id)}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td colspan="3">Total da compra</td><td class="num">${brl(totCompra)}</td><td></td></tr></tfoot></table></div>
+  </div>`;
+}
+function pacUnitHtml() {
+  const cu = custoUnitPacoca(), preco = db.config.precoPacoca;
+  const m = preco ? ((preco - cu) / preco) * 100 : 0;
+  return `<div class="prod-stats mt">
+    <div class="stat"><small>Custo total</small><strong>${brl(cu)}</strong></div>
+    <div class="stat"><small>Lucro / paçoca</small><strong class="${preco - cu >= 0 ? "pos" : "neg"}">${brl(preco - cu)}</strong></div>
+    <div class="stat"><small>Margem</small><strong class="pos">${pct(m)}</strong></div></div>
+    <div class="hint" style="margin-top:8px">Preço de venda atual: ${brl(preco)} (altere no canto superior direito).</div>`;
+}
+const compraFields = [
+  { key: "nome", label: "Item", required: true, full: true },
+  { key: "qtd", label: "Quantidade", type: "num" },
+  { key: "valor", label: "Valor unitário (R$)", type: "num" },
+];
+function formCompra(c) {
+  openForm({
+    title: c ? "Editar item da compra" : "Novo item da compra",
+    fields: compraFields,
+    values: c || {},
+    preview: (v) => `<span>Total</span><span>${brl(v.qtd * v.valor)}</span>`,
+    onSave: (vals) => { if (c) Object.assign(c, vals); else db.pacocaCompra.push({ id: uid(), ...vals }); toast("Item salvo"); },
+  });
+}
+
+/* ---------- Área do vendedor ---------- */
+const PAGS = { pix: "Pix", especie: "Dinheiro", cartao: "Cartão" };
+const pagsArea = (area) => (area === "pacoca" ? ["pix", "especie"] : ["pix", "especie", "cartao"]);
+const hojeISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const tiposArea = (area) => db.vendedor.tipos[area];
+function custoTipo(area, key) {
+  if (area === "pacoca") return custoUnitPacoca();
+  const t = tiposArea("doces").find((x) => x.key === key);
+  const p = t && db.produtos.find((x) => x.canal === "Outbound" && x.nome === t.produto);
+  return p ? custoBase(p) : 0;
+}
+function precoNormal(area, key) {
+  if (area === "pacoca") return +db.config.precoPacoca || 0;
+  const t = tiposArea("doces").find((x) => x.key === key);
+  return +(db.produtos.find((x) => x.canal === "Outbound" && x.nome === t?.produto)?.preco) || 0;
+}
+const custoRegistro = (r) => sum(Object.entries(r.itens), ([k, q]) => q * custoTipo(r.area, k));
+const descItens = (area, itens) => Object.entries(itens).filter(([, q]) => q).map(([k, q]) => {
+  const t = tiposArea(area).find((x) => x.key === k);
+  return `${q} × ${t ? t.nome : k}`;
+}).join(" + ");
+const valorNormalItens = (area, itens) => sum(Object.entries(itens), ([k, q]) => q * precoNormal(area, k));
+const registrosDia = (area) => db.vendedor.registros.filter((r) => r.area === area && r.data === ui.vendData);
+// Forma de pagamento e nome ficam só neste aparelho (cada vendedor escolhe a sua)
+const getPag = (area) => localStorage.getItem("hag_pag_" + area) || "pix";
+const setPag = (area, v) => localStorage.setItem("hag_pag_" + area, v);
+const nomeVendedor = () => localStorage.getItem("hag_vendedor_nome") || "";
+const APP_VENDEDOR = (() => {
+  const q = new URLSearchParams(location.search).get("app");
+  if (q === "vendedor") localStorage.setItem("hag_modo", "vendedor");
+  if (q === "gestao") localStorage.removeItem("hag_modo");
+  return localStorage.getItem("hag_modo") === "vendedor";
+})();
+function novoRegistro(area, dados) {
+  const r = { id: uid(), area, data: ui.vendData, hora: new Date().toTimeString().slice(0, 5), ts: Date.now(), device: Sync.client, vendedor: nomeVendedor() || "Gestão", lancado: false, ...dados };
+  db.vendedor.registros.push(r);
+  salvarLocal(); Sync.putRegistro(r);
+  return r;
+}
+
+function viewVendedor(area) {
+  if (!ui.vendData || APP_VENDEDOR) ui.vendData = hojeISO();
+  const regs = registrosDia(area);
+  const pend = regs.filter((r) => !r.lancado);
+  const meus = regs.filter((r) => r.device === Sync.client);
+  const pag = getPag(area);
+  const fat = sum(regs, (r) => r.valor), cus = sum(regs, custoRegistro);
+  const itensTot = {};
+  regs.forEach((r) => Object.entries(r.itens).forEach(([k, q]) => { itensTot[k] = (itensTot[k] || 0) + q; }));
+  const destino = area === "pacoca" ? "Vendas diárias da paçoca" : "Vendas (Outbound, semana do dia)";
+  const porVendedor = {};
+  regs.forEach((r) => { const v = r.vendedor || "Gestão"; porVendedor[v] = porVendedor[v] || { n: 0, total: 0 }; porVendedor[v].n++; porVendedor[v].total += r.valor; });
+  if (APP_VENDEDOR) {
+    setActions(`<div class="tabs">${Object.entries(AREAS).map(([k, a]) => `<button class="${k === area ? "active" : ""}" data-act="vend-area" data-val="${k}">${a.nome}</button>`).join("")}</div>
+      <button class="btn btn-sm" data-act="vend-nome">${icon("edit")}${esc(nomeVendedor() || "Seu nome")}</button>`);
+  } else {
+    setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Dia <input type="date" class="inline" data-act="vend-data" value="${ui.vendData}" /></label>
+      ${pend.length ? `<span class="badge b-yellow">${pend.length} venda(s) não lançada(s)</span>` : ""}`);
+  }
+  if (APP_VENDEDOR && !nomeVendedor()) {
+    return `<div class="card" style="max-width:460px;margin:20px auto;text-align:center">
+      <h3 style="margin-top:0">Bem-vindo(a)!</h3><p class="hint">Digite seu nome para identificar suas vendas.</p>
+      <input id="nomeVendedorInput" placeholder="Seu nome" style="text-align:center;font-size:16px" />
+      <button class="btn btn-primary mt" style="width:100%;justify-content:center" data-act="vend-nome-salvar">Começar a vender</button></div>`;
+  }
+  return `
+  <div class="card">
+    <div class="card-head"><div><h3>1. Forma de pagamento</h3><div class="sub">Escolha antes de tocar no item</div></div></div>
+    <div class="pag-row">${pagsArea(area).map((k) => `<button class="pag-btn ${pag === k ? "active" : ""}" data-act="vend-pag" data-val="${k}">${PAGS[k]}</button>`).join("")}</div>
+    <div class="card-head" style="margin-top:20px"><div><h3>2. Toque no que foi vendido</h3><div class="sub">Cada toque registra uma venda em ${PAGS[pag]}</div></div></div>
+    <div class="vend-sec">Preço normal</div>
+    <div class="combo-grid">${tiposArea(area).map((t) => `
+      <button class="combo-btn normal" data-act="vend-normal" data-val="${t.key}">
+        <span class="combo-nome">${esc(t.nome)}</span>
+        <span class="combo-preco">${brl(precoNormal(area, t.key))}</span>
+        <span class="combo-desc">${esc(t.desc)}</span>
+      </button>`).join("")}</div>
+    <div class="vend-sec">Promoção</div>
+    <div class="combo-grid">${db.vendedor.combos[area].map((c) => { const eco = valorNormalItens(area, c.itens) - c.preco; return `
+      <button class="combo-btn" data-act="vend-combo" data-id="${c.id}">
+        <span class="promo-tag">PROMO</span>
+        <span class="combo-nome">${esc(c.nome)}</span>
+        <span class="combo-preco">${brl(c.preco)}</span>
+        <span class="combo-desc">${esc(descItens(area, c.itens))}${eco > 0 ? ` · cliente economiza ${brl(eco)}` : ""}</span>
+      </button>`; }).join("") || `<div class="hint">Nenhuma promoção cadastrada${APP_VENDEDOR ? "." : '. Crie em "Configurar preços e promoções" abaixo.'}</div>`}</div>
+  </div>
+
+  <div class="grid g-2 mt">
+    <div class="card"><div class="card-head"><div><h3>${APP_VENDEDOR ? "Vendas de hoje" : "Resumo do dia"}</h3><div class="sub">${ddmm(ui.vendData)} · todos os vendedores</div></div></div>
+      <div class="grid g-3" style="gap:10px">
+        <div class="stat"><small>Vendas</small><strong>${int(regs.length)}</strong></div>
+        <div class="stat"><small>Faturamento</small><strong>${brl(fat)}</strong></div>
+        ${APP_VENDEDOR
+          ? `<div class="stat"><small>Minhas vendas</small><strong>${int(meus.length)} · ${brl(sum(meus, (r) => r.valor))}</strong></div>`
+          : `<div class="stat"><small>Lucro estimado</small><strong class="${fat - cus >= 0 ? "pos" : "neg"}">${brl(fat - cus)}</strong></div>`}
+      </div>
+      <ul class="recipe-ings mt">
+        ${pagsArea(area).map((k) => `<li><span>${PAGS[k]}</span><span>${int(regs.filter((r) => r.pag === k).length)} venda(s)</span><span>${brl(sum(regs.filter((r) => r.pag === k), (r) => r.valor))}</span></li>`).join("")}
+      </ul>
+      <ul class="recipe-ings mt">
+        ${tiposArea(area).map((t) => `<li><span>${esc(t.nome)} <span class="hint">(${esc(t.desc)})</span></span><span></span><span><b>${int(itensTot[t.key] || 0)}</b> vendida(s)</span></li>`).join("")}
+      </ul>
+      ${Object.keys(porVendedor).length ? `<div class="vend-sec">Por vendedor</div><ul class="recipe-ings">${Object.entries(porVendedor).map(([v, x]) => `<li><span>${esc(v)}</span><span>${int(x.n)} venda(s)</span><span>${brl(x.total)}</span></li>`).join("")}</ul>` : ""}
+      <div class="mt" style="display:flex;gap:10px;flex-wrap:wrap">
+        ${APP_VENDEDOR ? "" : `<button class="btn btn-primary" data-act="vend-lancar" ${pend.length ? "" : "disabled"}>Fechar o dia: lançar ${pend.length} venda(s)</button>`}
+        <button class="btn" data-act="vend-undo" ${meus.some((r) => !r.lancado) ? "" : "disabled"}>Desfazer minha última venda</button>
+      </div>
+      ${APP_VENDEDOR ? "" : `<div class="hint" style="margin-top:8px">Ao fechar o dia, as vendas entram em <b>${destino}</b>, com custo de insumos calculado automaticamente.</div>`}
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Vendas do dia</h3><div class="sub">Mais recentes primeiro · atualiza em tempo real</div></div></div>
+      ${regs.length ? `<div class="table-wrap"><table><thead><tr><th>Hora</th><th>Item</th><th>Vendedor</th><th>Pagamento</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+      ${[...regs].reverse().map((r) => {
+        const podeExcluir = !APP_VENDEDOR || (r.device === Sync.client && !r.lancado);
+        return `<tr><td>${r.hora}</td><td>${esc(r.nome)}${r.lancado ? ' <span class="badge b-green">lançada</span>' : ""}</td><td>${esc(r.vendedor || "Gestão")}</td><td>${PAGS[r.pag]}</td><td class="num">${brl(r.valor)}</td>
+        <td>${podeExcluir ? `<button class="btn btn-ghost btn-sm btn-danger" data-act="vend-del" data-id="${r.id}">${icon("trash")}</button>` : ""}</td></tr>`;
+      }).join("")}
+      </tbody></table></div>` : '<div class="empty">Nenhuma venda registrada neste dia.</div>'}
+    </div>
+  </div>
+  ${APP_VENDEDOR ? `<div class="hint" style="text-align:center;margin-top:24px"><a class="link" data-act="vend-sair">Entrar no modo gestão</a></div>` : `
+
+  <details class="card mt comp-config">
+    <summary><b>Configurar preços e promoções</b> <span class="hint">· preço normal, promoções e custo de cada item</span></summary>
+    <div class="table-wrap mt"><table><thead><tr><th>Preço normal</th><th></th><th class="num">Preço</th><th class="num">Custo</th><th class="num">Lucro</th><th></th></tr></thead><tbody>
+    ${tiposArea(area).map((t) => { const pr = precoNormal(area, t.key), cu = custoTipo(area, t.key); return `<tr><td><b>${esc(t.nome)}</b></td><td class="hint">${esc(t.desc)}</td>
+      <td class="num">${brl(pr)}</td><td class="num">${brl(cu)}</td><td class="num ${pr - cu >= 0 ? "pos" : "neg"}">${brl(pr - cu)}</td>
+      <td class="num"><a class="btn btn-sm" href="#${area === "pacoca" ? "pacoca-custos" : "produtos"}">Alterar preço</a></td></tr>`; }).join("")}
+    </tbody></table></div>
+    <div class="table-wrap mt"><table><thead><tr><th>Promoção</th><th>Leva</th><th class="num">Preço</th><th class="num">Custo</th><th class="num">Lucro</th><th></th></tr></thead><tbody>
+    ${db.vendedor.combos[area].map((c) => { const cu = sum(Object.entries(c.itens), ([k, q]) => q * custoTipo(area, k)); return `<tr><td><b>${esc(c.nome)}</b></td><td>${esc(descItens(area, c.itens))}</td>
+      <td class="num">${brl(c.preco)}</td><td class="num">${brl(cu)}</td><td class="num ${c.preco - cu >= 0 ? "pos" : "neg"}">${brl(c.preco - cu)}</td><td>${rowActions("combo", c.id)}</td></tr>`; }).join("") || '<tr><td colspan="6" class="hint">Nenhuma promoção cadastrada.</td></tr>'}
+    </tbody></table></div>
+    <div class="mt" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-sm btn-primary" data-act="new-combo">${icon("plus")}Nova promoção</button>
+      ${area === "doces" ? tiposArea("doces").map((t) => `<label class="hint" style="display:flex;align-items:center;gap:6px">Custo da ${esc(t.nome)} =
+        <select class="inline" data-act="vend-tipo-prod" data-key="${t.key}">${db.produtos.filter((p) => p.canal === "Outbound").map((p) => `<option ${p.nome === t.produto ? "selected" : ""}>${esc(p.nome)}</option>`).join("")}</select></label>`).join("") : `<span class="hint">Custo por paçoca: ${brl(custoUnitPacoca())} (altere em Personalizar custos)</span>`}
+    </div>
+  </details>`}`;
+}
+function formCombo(area, c) {
+  const tipos = tiposArea(area);
+  openForm({
+    title: c ? "Editar promoção" : "Nova promoção",
+    fields: [
+      { key: "nome", label: "Nome da promoção (ex.: 2 Cx P)", required: true, full: true },
+      { key: "preco", label: "Preço promocional (R$)", type: "num", full: true },
+      ...tipos.map((t) => ({ key: "t_" + t.key, label: `Quantidade de ${t.nome} (${t.desc})`, type: "num" })),
+    ],
+    values: { nome: c?.nome || "", preco: c?.preco ?? 0, ...Object.fromEntries(tipos.map((t) => ["t_" + t.key, c?.itens?.[t.key] || 0])) },
+    preview: (v) => { const cu = sum(tipos, (t) => (v["t_" + t.key] || 0) * custoTipo(area, t.key)); return `<span>Custo: ${brl(cu)}</span><span class="${v.preco - cu >= 0 ? "pos" : "neg"}">Lucro: ${brl(v.preco - cu)}</span>`; },
+    onSave: (v) => {
+      const novo = { nome: v.nome, preco: v.preco, itens: Object.fromEntries(tipos.map((t) => [t.key, v["t_" + t.key] || 0]).filter(([, q]) => q)) };
+      if (c) Object.assign(c, novo); else db.vendedor.combos[area].push({ id: uid(), ...novo });
+      toast("Promoção salva");
+    },
+  });
+}
+function semanaDe(iso) {
+  const d = new Date(iso + "T12:00:00");
+  const ini = new Date(d); ini.setDate(d.getDate() - ((d.getDay() - 3 + 7) % 7));
+  const fim = new Date(ini); fim.setDate(ini.getDate() + 6);
+  const f = (x) => x.toISOString().slice(0, 10);
+  return { inicio: f(ini), fim: f(fim) };
+}
+function lancarDia(area) {
+  const pend = registrosDia(area).filter((r) => !r.lancado);
+  if (!pend.length) return;
+  const porPag = (k) => sum(pend.filter((r) => r.pag === k), (r) => r.valor);
+  if (area === "pacoca") {
+    const qtd = sum(pend, (r) => r.itens.U || 0);
+    const mo = +(db.pacocaCusto.find((c) => /m[ãa]o/i.test(c.nome))?.valor) || 0;
+    let reg = db.pacoca.find((p) => p.data === ui.vendData);
+    if (!reg) { reg = { id: uid(), data: ui.vendData, qtd: 0, pix: 0, especie: 0, insumos: 0, gasolina: +db.pacocaSim.gasolinaDia || 0, maoObra: 0 }; db.pacoca.push(reg); }
+    reg.qtd += qtd; reg.pix += porPag("pix"); reg.especie += porPag("especie");
+    reg.insumos += qtd * (custoUnitPacoca() - mo); reg.maoObra += qtd * mo;
+  } else {
+    let reg = db.vendas.find((v) => v.canal === "Outbound" && v.inicio <= ui.vendData && v.fim >= ui.vendData);
+    if (!reg) { reg = { id: uid(), canal: "Outbound", ...semanaDe(ui.vendData), qtd: 0, cartao: 0, pix: 0, especie: 0, insumos: 0, gasolina: 0, comissoes: 0, perdas: 0, outros: 0 }; db.vendas.push(reg); }
+    reg.qtd = (+reg.qtd || 0) + pend.length;
+    reg.cartao = (+reg.cartao || 0) + porPag("cartao"); reg.pix = (+reg.pix || 0) + porPag("pix"); reg.especie = (+reg.especie || 0) + porPag("especie");
+    reg.insumos = (+reg.insumos || 0) + sum(pend, custoRegistro);
+  }
+  baixaVendas(area, pend);
+  pend.forEach((r) => { r.lancado = true; Sync.putRegistro(r); });
+  toast(`${pend.length} venda(s) lançada(s)`);
+}
+
+/* ---------- Pagamentos ---------- */
+const CATS_PAG = {
+  pagar: ["Mão de obra", "Insumos", "Embalagens", "Gasolina", "Contador", "Impostos", "Pró-labore", "Comissão", "Aluguel / contas", "Marketing", "Outros"],
+  receber: ["Cliente", "Revendedor", "Encomenda", "iFood", "Paçoca (fiado)", "Outros"],
+};
+const AREA_LABEL = { doces: "Doces Finos", pacoca: "Paçoca", geral: "Geral" };
+const situacaoPag = (p) => {
+  if (p.pago) return { t: p.tipo === "receber" ? "Recebido" : "Pago", c: "green" };
+  const hoje = hojeISO();
+  if (p.vencimento && p.vencimento < hoje) return { t: "Vencido", c: "red" };
+  if (p.vencimento === hoje) return { t: "Vence hoje", c: "yellow" };
+  return { t: "Pendente", c: "yellow" };
+};
+function formPagamento(area, p) {
+  const tipoLabel = { pagar: "A pagar", receber: "A receber" };
+  const tipoIni = p?.tipo || ui.pgTipo;
+  openForm({
+    title: p ? "Editar conta" : "Nova conta",
+    fields: [
+      { key: "tipo", label: "Tipo", type: "select", options: ["A pagar", "A receber"] },
+      { key: "area", label: "Área", type: "select", options: Object.values(AREA_LABEL) },
+      { key: "descricao", label: "Descrição", required: true, full: true },
+      { key: "categoria", label: "Categoria", type: "select", options: [...new Set([...CATS_PAG.pagar, ...CATS_PAG.receber])] },
+      { key: "valor", label: "Valor (R$)", type: "num" },
+      { key: "vencimento", label: "Vencimento", type: "date" },
+      { key: "status", label: "Situação", type: "select", options: ["Pendente", "Pago"] },
+    ],
+    values: {
+      tipo: tipoLabel[tipoIni], area: AREA_LABEL[p?.area || area], descricao: p?.descricao || "", categoria: p?.categoria || CATS_PAG[tipoIni][0],
+      valor: p?.valor ?? 0, vencimento: p?.vencimento || hojeISO(), status: p?.pago ? "Pago" : "Pendente",
+    },
+    onSave: (v) => {
+      const novo = {
+        tipo: v.tipo === "A receber" ? "receber" : "pagar", area: Object.keys(AREA_LABEL).find((k) => AREA_LABEL[k] === v.area),
+        descricao: v.descricao, categoria: v.categoria, valor: v.valor, vencimento: v.vencimento, pago: v.status === "Pago",
+      };
+      novo.dataPago = novo.pago ? (p?.dataPago || hojeISO()) : null;
+      if (p) Object.assign(p, novo); else db.pagamentos.push({ id: uid(), ...novo });
+      toast("Conta salva");
+    },
+  });
+}
+function viewPagamentos(area) {
+  setActions(`<button class="btn btn-primary" data-act="new-pag">${icon("plus")}Nova conta</button>`);
+  const daArea = db.pagamentos.filter((p) => p.area === area || p.area === "geral");
+  const doTipo = daArea.filter((p) => p.tipo === ui.pgTipo);
+  const mesesPg = [...new Set(doTipo.filter((p) => p.vencimento).map((p) => monthOf(p.vencimento)))].sort((a, b) => a - b);
+  const noMes = doTipo.filter((p) => !ui.pgMes || (p.vencimento && monthOf(p.vencimento) === ui.pgMes));
+  const lista = noMes.filter((p) => ui.pgStatus === "todos" || (ui.pgStatus === "pago" ? p.pago : !p.pago))
+    .sort((a, b) => (a.pago - b.pago) || String(a.vencimento).localeCompare(String(b.vencimento)));
+  const pend = noMes.filter((p) => !p.pago), venc = pend.filter((p) => situacaoPag(p).t === "Vencido");
+  const em7 = pend.filter((p) => { const d = new Date(hojeISO() + "T12:00:00"); d.setDate(d.getDate() + 7); return p.vencimento && p.vencimento >= hojeISO() && p.vencimento <= d.toISOString().slice(0, 10); });
+  const pagos = noMes.filter((p) => p.pago);
+  const verbo = ui.pgTipo === "pagar" ? "pagar" : "receber";
+  const extras = ui.pgTipo === "pagar"
+    ? `<button class="btn btn-sm btn-primary" data-act="pg-gerar">${icon("plus")}Gerar contas do mês</button>`
+    : area === "pacoca" ? `<button class="btn btn-sm" data-act="pg-fiado">Gerar a receber da paçoca não recebida</button>` : "";
+  const cats = [...new Set(noMes.map((p) => p.categoria))].sort((a, b) => CATS_PAG[ui.pgTipo].indexOf(a) - CATS_PAG[ui.pgTipo].indexOf(b));
+  const porCategoria = cats.length ? `<div class="card mt"><div class="card-head"><div><h3>Por categoria</h3><div class="sub">${ui.pgMes ? MESES_FULL[ui.pgMes - 1] : "Todos os vencimentos"}</div></div></div>
+    <div class="cat-grid">${cats.map((c) => { const l = noMes.filter((p) => p.categoria === c), pe = sum(l.filter((p) => !p.pago), (p) => +p.valor || 0), pg = sum(l.filter((p) => p.pago), (p) => +p.valor || 0); return `
+      <div class="stat"><small>${esc(c)}</small><strong class="${pe ? "neg" : "pos"}">${pe ? brl(pe) + " pendente" : "Em dia"}</strong><div class="hint">${brl(pg)} ${ui.pgTipo === "pagar" ? "pago" : "recebido"} · ${l.length} conta(s)</div></div>`; }).join("")}</div></div>` : "";
+  return `
+  <div class="toolbar">${tabs([["pagar", "A pagar"], ["receber", "A receber"]], ui.pgTipo, "set-pgtipo")}
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">${tabs([["pendente", "Pendentes"], ["pago", ui.pgTipo === "pagar" ? "Pagos" : "Recebidos"], ["todos", "Todos"]], ui.pgStatus, "set-pgstatus")}
+      <select class="inline" data-act="set-pgmes"><option value="0">Todos os vencimentos</option>${mesesPg.map((m) => `<option value="${m}" ${ui.pgMes === m ? "selected" : ""}>${MESES_FULL[m - 1]}</option>`).join("")}</select></div></div>
+  <div class="grid g-4">
+    ${kpi(`Pendente a ${verbo}`, brl(sum(pend, (p) => +p.valor || 0)), `${pend.length} conta(s)`, "wallet")}
+    ${kpi("Vencido", brl(sum(venc, (p) => +p.valor || 0)), `${venc.length} conta(s) atrasada(s)`, "alert", venc.length ? "neg" : "")}
+    ${kpi("Vence em 7 dias", brl(sum(em7, (p) => +p.valor || 0)), `${em7.length} conta(s)`, "cal")}
+    ${kpi(ui.pgTipo === "pagar" ? "Já pago" : "Já recebido", brl(sum(pagos, (p) => +p.valor || 0)), `${pagos.length} conta(s)`, "check", "pos")}
+  </div>
+  ${porCategoria}
+  <div class="card mt"><div class="card-head"><div><h3>Contas a ${verbo}</h3><div class="sub">Marque a caixa quando ${ui.pgTipo === "pagar" ? "pagar" : "receber"} — a data fica registrada</div></div>${extras}</div>
+    ${lista.length ? `<div class="table-wrap"><table><thead><tr><th style="width:40px"></th><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th>Área</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>
+    ${lista.map((p) => { const s = situacaoPag(p); return `<tr class="${p.pago ? "row-pago" : ""}">
+      <td><input type="checkbox" class="pg-check" data-act="pg-toggle" data-id="${p.id}" ${p.pago ? "checked" : ""} title="${p.pago ? "Marcar como pendente" : "Marcar como pago"}" /></td>
+      <td>${p.vencimento ? ddmm(p.vencimento) : "—"}</td><td><b>${esc(p.descricao)}</b></td><td><span class="badge b-gray">${esc(p.categoria)}</span></td><td class="hint">${AREA_LABEL[p.area]}</td>
+      <td class="num"><b>${brl(p.valor)}</b></td>
+      <td><span class="badge b-${s.c}">${s.t}</span>${p.pago && p.dataPago ? ` <span class="hint">em ${ddmm(p.dataPago)}</span>` : ""}</td>
+      <td>${rowActions("pag", p.id)}</td></tr>`; }).join("")}
+    </tbody><tfoot><tr><td colspan="5">Total</td><td class="num">${brl(sum(lista, (p) => +p.valor || 0))}</td><td colspan="2"></td></tr></tfoot></table></div>`
+    : `<div class="empty">Nenhuma conta ${ui.pgStatus === "pendente" ? "pendente" : ""} aqui.<br/><br/><button class="btn btn-primary" data-act="new-pag">${icon("plus")}Adicionar conta</button></div>`}
+  </div>`;
+}
+function categoriaFixo(nome) {
+  if (/contab|contador/i.test(nome)) return "Contador";
+  if (/inss|imposto|simples|das\b|iss\b|mei/i.test(nome)) return "Impostos";
+  if (/pr[óo]-?\s?labore/i.test(nome)) return "Pró-labore";
+  if (/marketing/i.test(nome)) return "Marketing";
+  if (/m[ãa]o de obra|sal[áa]rio|funcion/i.test(nome)) return "Mão de obra";
+  return "Aluguel / contas";
+}
+// Contas a pagar do mês montadas a partir dos lançamentos (vendas, paçoca) e das despesas fixas do DRE
+function contasDoMes(area, m) {
+  const ano = db.config.ano, mm = String(m).padStart(2, "0");
+  const fimMes = `${ano}-${mm}-${String(new Date(ano, m, 0).getDate()).padStart(2, "0")}`;
+  const mes = MESES_FULL[m - 1], out = [];
+  const add = (ref, categoria, descricao, valor, vencimento, areaConta = area) => { if (valor > 0.004) out.push({ ref: `auto:${ref}:${m}`, categoria, descricao, valor: round2(valor), vencimento, area: areaConta }); };
+  if (area === "doces") {
+    const v = db.vendas.filter((x) => monthOf(x.inicio) === m);
+    add("doces:insumos", "Insumos", `Insumos dos doces · ${mes}`, sum(v, (x) => +x.insumos || 0), fimMes);
+    add("doces:gasolina", "Gasolina", `Gasolina (doces) · ${mes}`, sum(v, (x) => +x.gasolina || 0), fimMes);
+    add("doces:comissoes", "Comissão", `Comissões / vendedor · ${mes}`, sum(v, (x) => +x.comissoes || 0), fimMes);
+    db.fixos.filter((f) => +f.valor > 0).forEach((f) => add(`fixo:${f.id}`, categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor, `${ano}-${mm}-10`, "geral"));
+  } else {
+    const p = db.pacoca.filter((x) => monthOf(x.data) === m);
+    add("pacoca:insumos", "Insumos", `Insumos da paçoca · ${mes}`, sum(p, (x) => +x.insumos || 0), fimMes);
+    add("pacoca:gasolina", "Gasolina", `Gasolina (paçoca) · ${mes}`, sum(p, (x) => +x.gasolina || 0), fimMes);
+    add("pacoca:maoobra", "Mão de obra", `Mão de obra da paçoca · ${mes}`, sum(p, (x) => +x.maoObra || 0), fimMes);
+  }
+  return out;
+}
+function formGerarContas(area) {
+  const mesIni = ui.pgMes || mesAtual();
+  const situacao = (c) => { const ex = db.pagamentos.find((p) => p.ref === c.ref); return !ex ? "nova" : ex.pago ? "já paga" : Math.abs(ex.valor - c.valor) > 0.004 ? "atualiza valor" : "já existe"; };
+  openForm({
+    title: `Gerar contas a pagar · ${AREA_LABEL[area]}`,
+    fields: [{ key: "mes", label: "Mês de referência", type: "select", options: MESES_FULL, full: true }],
+    values: { mes: MESES_FULL[mesIni - 1] },
+    preview: (v) => {
+      const l = contasDoMes(area, MESES_FULL.indexOf(v.mes) + 1);
+      return l.length ? `<ul class="recipe-ings" style="width:100%">${l.map((c) => `<li><span>${esc(c.descricao)} <span class="badge b-gray">${esc(c.categoria)}</span></span><span class="hint">${situacao(c)}</span><span>${brl(c.valor)}</span></li>`).join("")}</ul>`
+        : "<span>Nenhum lançamento nesse mês. Despesas fixas (contador, impostos, pró-labore) são preenchidas no DRE.</span>";
+    },
+    saveLabel: "Gerar contas",
+    onSave: (v) => {
+      const m = MESES_FULL.indexOf(v.mes) + 1;
+      let novas = 0, atual = 0;
+      contasDoMes(area, m).forEach((c) => {
+        const ex = db.pagamentos.find((p) => p.ref === c.ref);
+        if (!ex) { db.pagamentos.push({ id: uid(), tipo: "pagar", pago: false, dataPago: null, ...c }); novas++; }
+        else if (!ex.pago && Math.abs(ex.valor - c.valor) > 0.004) { ex.valor = c.valor; atual++; }
+      });
+      ui.pgMes = m;
+      toast(novas || atual ? `${novas} conta(s) nova(s)${atual ? `, ${atual} valor(es) atualizado(s)` : ""} · ${v.mes}` : "Tudo já estava lançado");
+    },
+  });
+}
+function gerarFiadoPacoca() {
+  let n = 0;
+  db.pacoca.filter((p) => (!ui.pgMes || monthOf(p.data) === ui.pgMes) && naoRecPac(p) > 0.009).forEach((p) => {
+    const ref = "pac-" + p.id;
+    if (db.pagamentos.some((x) => x.ref === ref)) return;
+    db.pagamentos.push({ id: uid(), ref, tipo: "receber", area: "pacoca", descricao: `Paçoca não recebida · ${ddmm(p.data)}`, categoria: "Paçoca (fiado)", valor: Math.round(naoRecPac(p) * 100) / 100, vencimento: p.data, pago: false, dataPago: null });
+    n++;
+  });
+  toast(n ? `${n} valor(es) a receber gerado(s)` : "Nenhum dia novo com valor não recebido");
+}
+
+/* ---------- Equipe & App ---------- */
+const REGRAS_FIRESTORE = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /equipes/{equipe}/{documento=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}`;
+function lerConfigFirebase(txt) {
+  const m = String(txt).match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  const json = m[0].replace(/([{,]\s*)['"]?([a-zA-Z0-9_]+)['"]?\s*:/g, '$1"$2":').replace(/'/g, '"').replace(/,\s*}/g, "}");
+  try { const o = JSON.parse(json); return o.apiKey && o.projectId ? o : null; } catch { return null; }
+}
+const codigoConexao = (cfg) => encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(cfg)))));
+function viewEquipe() {
+  const cfg = Sync.getCfg();
+  const base = location.origin + location.pathname;
+  const publicado = location.protocol === "https:";
+  const st = { local: "Só neste aparelho", conectando: "Conectando…", online: "Sincronizado", offline: "Offline (envia quando a internet voltar)", erro: "Erro de sincronização — confira a configuração" }[Sync.status];
+  const status = `<div class="card"><div class="card-head"><div><h3>Situação da sincronização</h3><div class="sub">${cfg ? `Equipe <b>${esc(cfg.equipe)}</b> · projeto ${esc(cfg.firebase.projectId)}` : "Sem nuvem: os dados ficam só neste aparelho"}</div></div>
+    <span class="sync-pill b-${{ online: "green", erro: "red", local: "gray" }[Sync.status] || "yellow"}">● ${st}</span></div>
+    ${Sync.ultimoSync ? `<div class="hint">Última sincronização: ${Sync.ultimoSync.toLocaleTimeString("pt-BR")}</div>` : ""}</div>`;
+  if (!cfg) {
+    return status + `
+    <div class="card mt"><div class="card-head"><div><h3>Conectar à nuvem (Firebase, gratuito)</h3><div class="sub">Faça uma vez, no aparelho da gestão. Leva uns 10 minutos.</div></div></div>
+      <ol class="passos">
+        <li>Acesse <a class="link" href="https://console.firebase.google.com" target="_blank" rel="noopener">console.firebase.google.com</a> com sua conta Google e clique em <b>Criar um projeto</b> (pode desativar o Google Analytics).</li>
+        <li>No menu <b>Criação → Firestore Database</b>, clique em <b>Criar banco de dados</b> (local: <i>southamerica-east1 (São Paulo)</i>, modo de produção).</li>
+        <li>Na aba <b>Regras</b> do Firestore, apague tudo, cole as regras abaixo e clique em <b>Publicar</b>.</li>
+        <li>Em <b>Criação → Authentication → Método de login</b>, ative <b>Anônimo</b>.</li>
+        <li>Na engrenagem <b>Configurações do projeto</b>, em "Seus apps", clique no ícone <b>&lt;/&gt;</b> (Web), dê um nome e copie o bloco <b>firebaseConfig</b>.</li>
+        <li>Cole o bloco abaixo e clique em <b>Conectar</b>.</li>
+      </ol>
+      <label class="hint"><b>Regras do Firestore</b> (passo 3)</label>
+      <textarea class="code" readonly rows="8">${REGRAS_FIRESTORE}</textarea>
+      <button class="btn btn-sm" data-act="eq-copiar" data-val="regras">Copiar regras</button>
+      <div class="grid g-2 mt">
+        <label class="hint"><b>firebaseConfig</b> (passo 5)<textarea id="eqConfig" class="code" rows="8" placeholder="const firebaseConfig = { apiKey: &quot;...&quot;, authDomain: &quot;...&quot;, projectId: &quot;...&quot;, ... };"></textarea></label>
+        <label class="hint"><b>Código da equipe</b> — funciona como senha, não divulgue<input id="eqCodigo" value="hag-${Math.random().toString(36).slice(2, 8)}${Math.random().toString(36).slice(2, 8)}" /></label>
+      </div>
+      <button class="btn btn-primary mt" data-act="eq-conectar">Conectar</button>
+    </div>
+    ${publicarHtml(publicado)}`;
+  }
+  const linkVend = `${base}?app=vendedor#conectar=${codigoConexao(cfg)}`;
+  const linkGest = `${base}?app=gestao#conectar=${codigoConexao(cfg)}`;
+  const qr = (l) => `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(l)}`;
+  return status + `
+  ${publicado ? "" : `<div class="alert yellow mt">${icon("alert")}<div><b>Publique o app antes de chamar a equipe</b><span>Este endereço (${esc(location.host || "arquivo local")}) só abre neste computador. Siga "Publicar o app" abaixo e conecte de novo no endereço publicado.</span></div></div>`}
+  <div class="grid g-2 mt">
+    <div class="card"><div class="card-head"><div><h3>App do vendedor</h3><div class="sub">Abre só a Área do vendedor, sem custos nem lucros</div></div></div>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <img class="qr" src="${qr(linkVend)}" alt="QR code do app do vendedor" />
+        <div style="flex:1;min-width:200px"><p class="hint" style="margin-top:0">O colaborador aponta a câmera do celular para o QR code (ou abre o link) e o aparelho já entra conectado à equipe.</p>
+          <button class="btn btn-sm" data-act="eq-copiar" data-val="vend">Copiar link do vendedor</button></div>
+      </div>
+      <div class="vend-sec">Instalar como app no celular</div>
+      <ul class="recipe-ings"><li><span><b>Android (Chrome):</b> menu ⋮ → <b>Adicionar à tela inicial</b> / Instalar app</span></li>
+        <li><span><b>iPhone (Safari):</b> botão Compartilhar → <b>Adicionar à Tela de Início</b></span></li></ul>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Outros aparelhos da gestão</h3><div class="sub">Gestão completa (custos, DRE, pagamentos)</div></div></div>
+      <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+        <img class="qr" src="${qr(linkGest)}" alt="QR code da gestão" />
+        <div style="flex:1;min-width:200px"><p class="hint" style="margin-top:0">Use só em aparelhos de quem pode ver custos e lucros.</p>
+          <button class="btn btn-sm" data-act="eq-copiar" data-val="gest">Copiar link da gestão</button></div>
+      </div>
+      <div class="vend-sec">PIN da gestão</div>
+      <div class="sim-row" style="grid-template-columns:1fr 140px;border:0"><span class="hint">Pedido quando alguém tenta sair do modo vendedor</span>
+        <input inputmode="numeric" data-act="eq-pin" value="${esc(db.config.pinGestao || "")}" placeholder="Sem PIN" /></div>
+      <button class="btn btn-sm btn-danger mt" data-act="eq-desconectar">Desconectar este aparelho da nuvem</button>
+    </div>
+  </div>
+  ${publicarHtml(publicado)}`;
+}
+function publicarHtml(publicado) {
+  return `<details class="card mt comp-config" ${publicado ? "" : "open"}><summary><b>Publicar o app</b> <span class="hint">· para os celulares acessarem pela internet</span></summary>
+    <ol class="passos mt">
+      <li>Acesse <a class="link" href="https://app.netlify.com/drop" target="_blank" rel="noopener">app.netlify.com/drop</a> e crie uma conta grátis (pode entrar com o Google).</li>
+      <li>Arraste a pasta <b>HA-Gourmet-Gestao</b> (Documentos) para a página.</li>
+      <li>Em alguns segundos o Netlify mostra um endereço <b>https://…netlify.app</b>. Abra esse endereço, vá em <b>Equipe & App</b> e conecte à nuvem.</li>
+      <li>Para atualizar o app depois de mudanças, arraste a pasta de novo em <b>Deploys</b> do mesmo site.</li>
+    </ol></details>`;
+}
+
+/* ---------- Estoque ---------- */
+// Saldos por referência: "ins:<id>" ingrediente, "mat:<id>" material, "pronto:<P|G>" caixa pronta, "pac:<id>" item da paçoca
+const round3 = (v) => Math.round(v * 1000) / 1000;
+const TIPOS_MOV = { entrada: ["Entrada", "green"], saida: ["Saída", "red"], ajuste: ["Contagem", "gray"], producao: ["Produção", "gold"], montagem: ["Montagem", "gold"], venda: ["Venda", "yellow"] };
+// Itens medidos por "uso" (ex.: gás) entram no custo, mas não são contados no estoque
+const estocavel = (i) => i.unid !== "uso";
+const saldoDe = (ref) => db.estoque.saldos[ref] || (db.estoque.saldos[ref] = { qtd: 0, minimo: 0 });
+function movimentar(area, ref, nome, delta, tipo, obs = "") {
+  if (!delta) return;
+  const s = saldoDe(ref);
+  s.qtd = round3(s.qtd + delta);
+  db.estoque.movs.push({ id: uid(), area, ref, nome, delta: round3(delta), tipo, data: hojeISO(), hora: new Date().toTimeString().slice(0, 5), obs, saldoApos: s.qtd });
+}
+function itensEstoque(area) {
+  if (area === "pacoca") return db.estoque.pacocaItens.map((i) => ({ ref: "pac:" + i.id, nome: i.nome, unid: i.unid, grupo: "itens", custo: +i.custo || 0, item: i }));
+  const unit = (i) => (i.rend ? i.custo / i.rend : 0);
+  return [
+    ...tiposArea("doces").map((t) => ({ ref: "pronto:" + t.key, nome: `${t.nome} (${t.desc})`, unid: "cx", grupo: "prontos", custo: custoTipo("doces", t.key) })),
+    ...db.insumos.filter(estocavel).map((i) => ({ ref: "ins:" + i.id, nome: i.nome, unid: i.unid, grupo: "ingredientes", custo: unit(i) })),
+    ...db.materiais.map((i) => ({ ref: "mat:" + i.id, nome: i.nome, unid: i.unid, grupo: "materiais", custo: unit(i) })),
+  ];
+}
+function situacaoEstoque(ref) {
+  const s = saldoDe(ref);
+  if (s.qtd < 0) return { t: "Negativo", c: "red" };
+  if (s.qtd === 0) return { t: "Zerado", c: "red" };
+  if (s.minimo && s.qtd < s.minimo) return { t: "Baixo", c: "yellow" };
+  return { t: "OK", c: "green" };
+}
+const alertasEstoque = (area) => itensEstoque(area).filter((i) => { const s = saldoDe(i.ref); return s.qtd < 0 || (s.minimo && s.qtd < s.minimo); });
+const fmtQtd = (v) => (+v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+
+// Baixa de ingredientes ao produzir: lote proporcional ao rendimento + gasto por unidade (cobertura, gás...)
+function consumoProducao(s, j, unidades) {
+  const out = [];
+  const ok = (it) => it.insumoId && estocavel(insById(it.insumoId) || {});
+  s.lote.forEach((it) => { if (ok(it) && s.rend[j]) out.push({ ref: "ins:" + it.insumoId, nome: nomeItem(it), unid: unidItem(it), qtd: (+it.qtd || 0) * unidades / s.rend[j] }); });
+  s.porUn.forEach((it) => { if (ok(it) && +it.qtd[j]) out.push({ ref: "ins:" + it.insumoId, nome: nomeItem(it), unid: unidItem(it), qtd: +it.qtd[j] * unidades }); });
+  return out.filter((x) => x.qtd > 0);
+}
+// Materiais gastos ao montar caixas prontas (kit de embalagem + brindes do produto ligado ao tipo)
+function consumoMontagem(key, n) {
+  const t = tiposArea("doces").find((x) => x.key === key);
+  const p = t && db.produtos.find((x) => x.canal === "Outbound" && x.nome === t.produto);
+  const out = {};
+  const add = (nomeMat, q) => { const m = db.materiais.find((x) => x.nome === nomeMat); if (!m) return; const r = "mat:" + m.id; out[r] = out[r] || { ref: r, nome: m.nome, unid: m.unid, qtd: 0 }; out[r].qtd += q; };
+  (p?.itens || []).forEach((it) => {
+    if (it.kit) db.embalagens.find((e) => e.nome === it.kit)?.itens.forEach((ki) => add(ki.material, (+ki.qtd || 0) * (+it.qtd || 1) * n));
+    if (it.material) add(it.material, (+it.qtd || 1) * n);
+  });
+  return Object.values(out);
+}
+const listaConsumo = (lst) => lst.length ? `<ul class="recipe-ings" style="width:100%">${lst.map((x) => { const s = saldoDe(x.ref).qtd; return `<li><span>${esc(x.nome)}</span><span>−${fmtQtd(x.qtd)} ${esc(x.unid)}</span><span class="${s - x.qtd < 0 ? "neg" : ""}">fica ${fmtQtd(s - x.qtd)}</span></li>`; }).join("")}</ul>` : "<span>Nada a baixar</span>";
+
+function formMovimento(area, ref, tipo) {
+  const itens = itensEstoque(area);
+  const item = itens.find((i) => i.ref === ref);
+  const titulos = { entrada: "Entrada no estoque", saida: "Saída / perda", ajuste: "Contagem (ajustar saldo)" };
+  openForm({
+    title: `${titulos[tipo]}${item ? " · " + item.nome : ""}`,
+    fields: [
+      ...(item ? [] : [{ key: "item", label: "Item", type: "select", options: itens.map((i) => i.nome), full: true }]),
+      { key: "qtd", label: tipo === "ajuste" ? `Quantidade contada${item ? ` (${item.unid})` : ""}` : `Quantidade${item ? ` (${item.unid})` : ""}`, type: "num", full: true },
+      { key: "obs", label: "Observação (opcional)", full: true },
+    ],
+    preview: (v) => {
+      const it = item || itens.find((i) => i.nome === v.item);
+      if (!it) return "";
+      const s = saldoDe(it.ref).qtd, novo = tipo === "ajuste" ? v.qtd : tipo === "entrada" ? s + v.qtd : s - v.qtd;
+      return `<span>Saldo atual: ${fmtQtd(s)} ${esc(it.unid)}</span><span>Novo saldo: <b class="${novo < 0 ? "neg" : ""}">${fmtQtd(novo)} ${esc(it.unid)}</b></span>`;
+    },
+    onSave: (v) => {
+      const it = item || itens.find((i) => i.nome === v.item);
+      const s = saldoDe(it.ref).qtd;
+      const delta = tipo === "ajuste" ? v.qtd - s : tipo === "entrada" ? v.qtd : -v.qtd;
+      if (tipo === "ajuste" && !delta) { toast("Saldo já está correto"); return; }
+      movimentar(area, it.ref, it.nome, delta, tipo, v.obs);
+      toast(`${titulos[tipo].split(" ")[0]} registrada · ${it.nome}`);
+    },
+  });
+}
+function formProducao() {
+  openForm({
+    title: "Registrar produção de doces",
+    fields: [
+      { key: "sabor", label: "Sabor", type: "select", options: db.sabores.map((s) => s.nome), full: true },
+      { key: "formato", label: "Formato", type: "select", options: db.formatos.map((f) => f.nome) },
+      { key: "unidades", label: "Unidades produzidas", type: "num" },
+    ],
+    values: { formato: "Bolinha" },
+    preview: (v) => {
+      const s = db.sabores.find((x) => x.nome === v.sabor), j = db.formatos.findIndex((f) => f.nome === v.formato);
+      if (s && !(+s.rend[j] > 0)) return `<span class="neg">${esc(s.nome)} não tem rendimento cadastrado para ${esc(v.formato.toLowerCase())}. Preencha em Fichas Técnicas.</span>`;
+      return s && v.unidades ? listaConsumo(consumoProducao(s, j, v.unidades)) : "<span>Informe as unidades para ver a baixa de ingredientes</span>";
+    },
+    onSave: (v) => {
+      const s = db.sabores.find((x) => x.nome === v.sabor), j = db.formatos.findIndex((f) => f.nome === v.formato);
+      if (!(+s.rend[j] > 0)) { toast("Esse formato não tem rendimento cadastrado nessa receita"); return; }
+      const obs = `${int(v.unidades)} ${v.formato.toLowerCase()} de ${v.sabor}`;
+      consumoProducao(s, j, v.unidades).forEach((x) => movimentar("doces", x.ref, x.nome, -x.qtd, "producao", obs));
+      toast(`Produção registrada: ${obs}`);
+    },
+  });
+}
+function formMontagem() {
+  const tipos = tiposArea("doces");
+  openForm({
+    title: "Montar caixas prontas",
+    fields: [
+      { key: "tipo", label: "Caixa", type: "select", options: tipos.map((t) => `${t.nome} (${t.desc})`), full: true },
+      { key: "n", label: "Quantidade de caixas montadas", type: "num", full: true },
+    ],
+    preview: (v) => { const t = tipos.find((x) => `${x.nome} (${x.desc})` === v.tipo); return t && v.n ? listaConsumo(consumoMontagem(t.key, v.n)) : "<span>Informe a quantidade para ver a baixa de embalagens</span>"; },
+    onSave: (v) => {
+      const t = tipos.find((x) => `${x.nome} (${x.desc})` === v.tipo);
+      const obs = `${int(v.n)} ${t.nome} montada(s)`;
+      consumoMontagem(t.key, v.n).forEach((x) => movimentar("doces", x.ref, x.nome, -x.qtd, "montagem", obs));
+      movimentar("doces", "pronto:" + t.key, `${t.nome} (${t.desc})`, v.n, "montagem", obs);
+      toast(obs);
+    },
+  });
+}
+function formItemPacoca(i) {
+  openForm({
+    title: i ? "Editar item do estoque" : "Novo item do estoque da paçoca",
+    fields: [
+      { key: "nome", label: "Item", required: true, full: true },
+      { key: "unid", label: "Unidade (un, folha, rolo...)" },
+      { key: "custo", label: "Custo por unidade (R$)", type: "num" },
+      { key: "consumo", label: "Baixa automática por paçoca vendida", type: "num", full: true },
+    ],
+    values: i || { unid: "un", consumo: 0 },
+    onSave: (v) => { if (i) Object.assign(i, v); else db.estoque.pacocaItens.push({ id: uid(), ...v }); toast("Item salvo"); },
+  });
+}
+function baixaVendas(area, pend) {
+  if (area === "pacoca") {
+    const qtd = sum(pend, (r) => r.itens.U || 0);
+    db.estoque.pacocaItens.filter((i) => +i.consumo > 0).forEach((i) => movimentar("pacoca", "pac:" + i.id, i.nome, -qtd * i.consumo, "venda", `Vendas de ${ddmm(ui.vendData)}`));
+    return;
+  }
+  tiposArea("doces").forEach((t) => {
+    const q = sum(pend, (r) => r.itens[t.key] || 0);
+    movimentar("doces", "pronto:" + t.key, `${t.nome} (${t.desc})`, -q, "venda", `Vendas de ${ddmm(ui.vendData)}`);
+  });
+}
+
+function viewEstoque(area) {
+  const abas = area === "pacoca" ? [["itens", "Itens"], ["movs", "Movimentações"]] : [["prontos", "Caixas prontas"], ["ingredientes", "Ingredientes"], ["materiais", "Embalagens & materiais"], ["movs", "Movimentações"]];
+  if (!abas.some(([k]) => k === ui.estTab[area])) ui.estTab[area] = abas[0][0];
+  const aba = ui.estTab[area];
+  const todos = itensEstoque(area);
+  const alertas = alertasEstoque(area);
+  const valor = sum(todos, (i) => Math.max(0, saldoDe(i.ref).qtd) * i.custo);
+  const movsArea = db.estoque.movs.filter((m) => m.area === area);
+  setActions(`${area === "doces" ? `<button class="btn" data-act="est-producao">${icon("book")}Registrar produção</button><button class="btn" data-act="est-montagem">${icon("gift")}Montar caixas</button>` : `<button class="btn" data-act="est-novo-pac">${icon("plus")}Novo item</button>`}
+    <button class="btn btn-primary" data-act="est-mov" data-val="entrada">${icon("plus")}Entrada</button>`);
+  const kpis = `<div class="grid g-4">
+    ${kpi("Valor em estoque", brl(valor), "Saldo × custo unitário", "money")}
+    ${kpi("Abaixo do mínimo", int(alertas.length), alertas.length ? esc(alertas.slice(0, 2).map((a) => a.nome).join(", ")) + (alertas.length > 2 ? "…" : "") : "Tudo em dia", "alert", alertas.length ? "neg" : "pos")}
+    ${kpi("Itens com saldo", `${int(todos.filter((i) => saldoDe(i.ref).qtd > 0).length)} / ${int(todos.length)}`, "Itens com quantidade em estoque", "pkg")}
+    ${kpi("Movimentações hoje", int(movsArea.filter((m) => m.data === hojeISO()).length), `${int(movsArea.length)} no total`, "trend")}
+  </div>`;
+  const head = `<div class="toolbar mt">${tabs(abas.map(([k, l]) => [k, k === "movs" ? l : `${l} <span class="badge b-gray">${todos.filter((i) => i.grupo === k).length}</span>`]), aba, "set-esttab")}
+    ${aba === "movs" ? "" : `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-act="est-filtro" ${ui.estSoAlerta ? "checked" : ""} style="width:auto" /> Só com alerta</label>
+      <div class="search">${icon("search")}<input placeholder="Buscar item..." data-act="busca" value="${esc(ui.busca)}" /></div></div>`}</div>`;
+  if (aba === "movs") {
+    const lista = [...movsArea].reverse().slice(0, 300);
+    return kpis + head + `<div class="card"><div class="card-head"><div><h3>Movimentações</h3><div class="sub">Excluir uma movimentação desfaz o efeito dela no saldo</div></div></div>
+      ${lista.length ? `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Item</th><th>Tipo</th><th class="num">Quantidade</th><th class="num">Saldo após</th><th>Observação</th><th></th></tr></thead><tbody>
+      ${lista.map((m) => { const [tl, tc] = TIPOS_MOV[m.tipo] || [m.tipo, "gray"]; return `<tr><td>${ddmm(m.data)} <span class="hint">${m.hora || ""}</span></td><td>${esc(m.nome)}</td><td><span class="badge b-${tc}">${tl}</span></td>
+        <td class="num ${m.delta >= 0 ? "pos" : "neg"}"><b>${m.delta >= 0 ? "+" : ""}${fmtQtd(m.delta)}</b></td><td class="num">${fmtQtd(m.saldoApos)}</td><td class="hint">${esc(m.obs)}</td>
+        <td><button class="btn btn-ghost btn-sm btn-danger" title="Desfazer" data-act="est-del-mov" data-id="${m.id}">${icon("trash")}</button></td></tr>`; }).join("")}
+      </tbody></table></div>` : '<div class="empty">Nenhuma movimentação ainda. Comece registrando uma contagem ou entrada.</div>'}</div>`;
+  }
+  const q = ui.busca.toLowerCase();
+  const lista = todos.filter((i) => i.grupo === aba && i.nome.toLowerCase().includes(q) && (!ui.estSoAlerta || alertas.includes(i)));
+  const dica = { prontos: "Caixas montadas e prontas para vender. A Área do vendedor dá baixa ao fechar o dia.", ingredientes: "Em gramas/ml/unidades, como na tela Insumos. A produção dá baixa conforme as fichas técnicas.", materiais: "Embalagens e brindes. A montagem de caixas dá baixa conforme os kits.", itens: "A Área do vendedor dá baixa ao fechar o dia, conforme a coluna \"Baixa por venda\"." }[aba];
+  return kpis + head + `<div class="card"><div class="card-head"><div><h3>${abas.find(([k]) => k === aba)[1]}</h3><div class="sub">${dica}</div></div></div>
+    ${lista.length ? `<div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Saldo</th><th class="num hide-m">Mínimo</th>${area === "pacoca" ? '<th class="num hide-m">Baixa por venda</th>' : ""}<th class="num hide-m">Valor</th><th class="hide-m">Situação</th><th class="num">Movimentar</th></tr></thead><tbody>
+    ${lista.map((i) => { const s = saldoDe(i.ref), st = situacaoEstoque(i.ref); return `<tr><td><b>${esc(i.nome)}</b><div class="hint">${brlU(i.custo)}/${esc(i.unid)}</div></td>
+      <td class="num"><b class="${s.qtd < 0 ? "neg" : ""}">${fmtQtd(s.qtd)}</b> <span class="hint">${esc(i.unid)}</span><div class="show-m"><span class="badge b-${st.c}">${st.t}</span></div></td>
+      <td class="num hide-m">${numIn("est-min", s.minimo, `data-ref="${i.ref}"`)}</td>
+      ${area === "pacoca" ? `<td class="num hide-m">${fmtQtd(i.item.consumo)} <span class="hint">${esc(i.unid)}</span></td>` : ""}
+      <td class="num hide-m">${brl(Math.max(0, s.qtd) * i.custo)}</td><td class="hide-m"><span class="badge b-${st.c}">${st.t}</span></td>
+      <td class="num" style="white-space:nowrap">
+        <button class="btn btn-sm" title="Entrada" data-act="est-mov" data-val="entrada" data-ref="${i.ref}">+<span class="hide-m"> Entrada</span></button>
+        <button class="btn btn-sm" title="Saída / perda" data-act="est-mov" data-val="saida" data-ref="${i.ref}">−<span class="hide-m"> Saída</span></button>
+        <button class="btn btn-sm" title="Contagem" data-act="est-mov" data-val="ajuste" data-ref="${i.ref}">Contar</button>
+        ${area === "pacoca" ? `<button class="btn btn-ghost btn-sm" title="Editar item" data-act="est-edit-pac" data-id="${i.item.id}">${icon("edit")}</button>` : ""}</td></tr>`; }).join("")}
+    </tbody></table></div>` : `<div class="empty">${ui.estSoAlerta ? "Nenhum item com alerta." : "Nenhum item encontrado."}</div>`}
+  </div>`;
+}
+
+/* =================== Roteamento & eventos =================== */
+const VIEWS = { estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
+const AFTER = { "pacoca-painel": afterPacPainel, painel: afterPainel, pacoca: afterPacoca, dre: afterDre };
+let currentPage = null;
+const areaAtual = () => PAGES.find((p) => p.id === currentPage)?.area;
+
+function renderNav(page) {
+  const area = AREAS[page.area];
+  if (!area) { $("#nav").innerHTML = ""; return; }
+  const outra = page.area === "pacoca" ? "doces" : "pacoca";
+  let html = `<div class="area-switch" style="--area:${area.cor}">
+    <small>Área atual</small><b>${area.nome}</b>
+    <div class="area-switch-links"><a href="#${AREAS[outra].inicial}">Ir para ${AREAS[outra].nome}</a><a href="#inicio">Início</a></div>
+    <a class="area-config ${["personalizar", "pacoca-custos"].includes(page.id) ? "active" : ""}" href="#${page.area === "pacoca" ? "pacoca-custos" : "personalizar"}">${icon("gear")}Personalizar custos</a></div>`;
+  PAGES.filter((p) => p.area === page.area).forEach((p) => {
+    if (p.section) html += `<div class="nav-section">${p.section}</div>`;
+    html += `<a href="#${p.id}" class="${p.id === page.id ? "active" : ""}">${icon(p.icon)}${p.label}</a>`;
+  });
+  $("#nav").innerHTML = html;
+}
+function render() {
+  if (APP_VENDEDOR) {
+    const area = localStorage.getItem("hag_vend_area") || "doces";
+    currentPage = "vendedor-" + area;
+    document.body.classList.add("vend-mode");
+    document.body.classList.remove("home-mode");
+    $("#nav").innerHTML = "";
+    $("#pageTitle").textContent = "HA Gourmet · Vendas";
+    $("#pageSub").textContent = AREAS[area].nome;
+    destroyCharts();
+    setActions("");
+    $("#content").innerHTML = viewVendedor(area);
+    return;
+  }
+  const id = location.hash.slice(1) || "inicio";
+  const page = PAGES.find((p) => p.id === id) || PAGES[0];
+  if (page.id !== currentPage) {
+    ui.busca = "";
+    window.scrollTo(0, 0);
+    const prev = PAGES.find((p) => p.id === currentPage);
+    if (!prev || prev.area !== page.area) ui.mes = 0;
+  }
+  currentPage = page.id;
+  document.body.classList.toggle("home-mode", page.id === "inicio");
+  renderNav(page);
+  $("#pageTitle").textContent = page.area ? `${AREAS[page.area].nome} · ${page.label}` : page.label;
+  $("#pageSub").textContent = page.sub;
+  destroyCharts();
+  setActions("");
+  $("#content").innerHTML = VIEWS[page.id]();
+  AFTER[page.id]?.();
+  $("#sidebar").classList.remove("open");
+  $("#overlay").classList.remove("show");
+}
+
+function onClick(e) {
+  const el = e.target.closest("[data-act]");
+  if (!el || el.tagName === "INPUT" || el.tagName === "SELECT") return;
+  const act = el.dataset.act, id = el.dataset.id, val = el.dataset.val;
+  const find = (arr) => arr.find((x) => x.id === id);
+  switch (act) {
+    case "set-vcanal": ui.vendasCanal = val; break;
+    case "set-pmes": ui.pacMes = +val; break;
+    case "set-pcanal": ui.prodCanal = val; break;
+    case "set-instab": ui.insTab = val; ui.busca = ""; break;
+    case "set-rectab": ui.recTab = val; break;
+    case "set-sabor": ui.sabor = +val; break;
+    case "set-barra": ui.barra = +val; break;
+    case "set-esttab": ui.estTab[areaAtual()] = val; ui.busca = ""; break;
+    case "est-mov": return formMovimento(areaAtual(), el.dataset.ref, val);
+    case "est-producao": return formProducao();
+    case "est-montagem": return formMontagem();
+    case "est-novo-pac": return formItemPacoca();
+    case "est-edit-pac": return formItemPacoca(db.estoque.pacocaItens.find((x) => x.id === id));
+    case "est-del-mov": {
+      const m = db.estoque.movs.find((x) => x.id === id);
+      return confirmDel(`Desfazer "${(TIPOS_MOV[m.tipo] || [m.tipo])[0]}" de ${fmtQtd(m.delta)} em ${m.nome}? O saldo volta ${m.delta >= 0 ? "a diminuir" : "a aumentar"}.`, () => {
+        const s = saldoDe(m.ref); s.qtd = round3(s.qtd - m.delta);
+        db.estoque.movs = db.estoque.movs.filter((x) => x.id !== id);
+      });
+    }
+    case "set-pgtipo": ui.pgTipo = val; ui.pgMes = 0; break;
+    case "set-pgstatus": ui.pgStatus = val; break;
+    case "new-pag": return formPagamento(areaAtual());
+    case "edit-pag": return formPagamento(areaAtual(), find(db.pagamentos));
+    case "del-pag": return confirmDel("Excluir esta conta?", () => { db.pagamentos = db.pagamentos.filter((x) => x.id !== id); });
+    case "pg-gerar": return formGerarContas(areaAtual());
+    case "pg-fiado": gerarFiadoPacoca(); save(); break;
+    case "new-cvar": return formCustoVar();
+    case "edit-cvar": return formCustoVar(find(db.custosVar));
+    case "del-cvar": return confirmDel("Excluir este custo variável?", () => { db.custosVar = db.custosVar.filter((x) => x.id !== id); });
+    case "eq-copiar": {
+      const cfg = Sync.getCfg(), base = location.origin + location.pathname;
+      const txt = val === "regras" ? REGRAS_FIRESTORE : `${base}?app=${val === "vend" ? "vendedor" : "gestao"}#conectar=${codigoConexao(cfg)}`;
+      navigator.clipboard?.writeText(txt).then(() => toast("Copiado"), () => prompt("Copie:", txt));
+      return;
+    }
+    case "eq-conectar": {
+      const fb = lerConfigFirebase($("#eqConfig").value), equipe = $("#eqCodigo").value.trim();
+      if (!fb) { toast("Não reconheci o firebaseConfig. Cole o bloco inteiro."); return; }
+      if (!/^[a-zA-Z0-9_-]{6,}$/.test(equipe)) { toast("Código da equipe: mínimo 6 letras/números, sem espaços"); return; }
+      Sync.setCfg({ firebase: fb, equipe });
+      location.reload();
+      return;
+    }
+    case "eq-desconectar":
+      if (confirm("Desconectar este aparelho? Os dados continuam na nuvem e neste aparelho, mas param de sincronizar.")) { Sync.clearCfg(); location.reload(); }
+      return;
+    case "vend-pag": setPag(areaAtual(), val); break;
+    case "vend-combo": {
+      const area = areaAtual(), c = db.vendedor.combos[area].find((x) => x.id === id), pag = getPag(area);
+      novoRegistro(area, { comboId: c.id, nome: `Promo ${c.nome}`, valor: c.preco, pag, itens: { ...c.itens } });
+      render(); toast(`Promo ${c.nome} · ${brl(c.preco)} · ${PAGS[pag]}`);
+      return;
+    }
+    case "vend-normal": {
+      const area = areaAtual(), t = tiposArea(area).find((x) => x.key === val), pag = getPag(area), preco = precoNormal(area, val);
+      novoRegistro(area, { comboId: null, nome: t.nome, valor: preco, pag, itens: { [val]: 1 } });
+      render(); toast(`${t.nome} · ${brl(preco)} · ${PAGS[pag]}`);
+      return;
+    }
+    case "vend-undo": {
+      const ult = registrosDia(areaAtual()).filter((r) => !r.lancado && r.device === Sync.client).pop();
+      if (ult) { db.vendedor.registros = db.vendedor.registros.filter((r) => r !== ult); salvarLocal(); Sync.delRegistro(ult.id); toast(`Desfeito: ${ult.nome}`); }
+      break;
+    }
+    case "vend-del": {
+      const r = db.vendedor.registros.find((x) => x.id === id);
+      const msg = r.lancado ? "Esta venda já foi lançada. Excluir aqui NÃO altera o lançamento — corrija também na tela de vendas. Excluir mesmo assim?" : `Excluir a venda "${r.nome}" das ${r.hora}?`;
+      return confirmDel(msg, () => { db.vendedor.registros = db.vendedor.registros.filter((x) => x.id !== id); Sync.delRegistro(id); });
+    }
+    case "vend-area": localStorage.setItem("hag_vend_area", val); break;
+    case "vend-nome": {
+      const n = prompt("Seu nome:", nomeVendedor());
+      if (n !== null && n.trim()) localStorage.setItem("hag_vendedor_nome", n.trim());
+      break;
+    }
+    case "vend-nome-salvar": {
+      const n = $("#nomeVendedorInput").value.trim();
+      if (!n) { toast("Digite seu nome"); return; }
+      localStorage.setItem("hag_vendedor_nome", n);
+      break;
+    }
+    case "vend-sair": {
+      const pin = db.config.pinGestao;
+      if (pin && prompt("PIN da gestão:") !== String(pin)) { toast("PIN incorreto"); return; }
+      if (!pin && !confirm("Sair do modo vendedor e abrir a gestão completa neste aparelho?")) return;
+      localStorage.removeItem("hag_modo");
+      location.href = location.pathname + "#inicio";
+      return;
+    }
+    case "vend-lancar": {
+      const area = areaAtual(), n = registrosDia(area).filter((r) => !r.lancado).length;
+      if (!confirm(`Lançar ${n} venda(s) de ${ddmm(ui.vendData)} nos registros de ${area === "pacoca" ? "Vendas diárias" : "Vendas"}?`)) return;
+      lancarDia(area); save(); break;
+    }
+    case "new-combo": return formCombo(areaAtual());
+    case "edit-combo": return formCombo(areaAtual(), db.vendedor.combos[areaAtual()].find((x) => x.id === id));
+    case "del-combo": return confirmDel("Excluir esta promoção?", () => { const a = areaAtual(); db.vendedor.combos[a] = db.vendedor.combos[a].filter((x) => x.id !== id); });
+    case "rec-nova": return formNovaReceita(val);
+    case "rec-excluir": {
+      const barra = val === "barra", lista = barra ? db.barras : db.sabores, k = barra ? ui.barra : ui.sabor, r = lista[k];
+      const ligados = db.params.filter((p) => p.fonte && (barra ? p.fonte.barra === r.nome : p.fonte.sabor === r.nome)).map((p) => p.nome);
+      const msg = `Excluir a receita "${r.nome}"?${ligados.length ? `\n\nAtenção: ela é a origem de: ${ligados.join(", ")}. Esses custos ficarão em R$ 0 até você escolher outra origem em Personalizar custos.` : ""}`;
+      return confirmDel(msg, () => { lista.splice(k, 1); if (barra) ui.barra = 0; else ui.sabor = 0; });
+    }
+    case "add-ing": return formIngrediente(val);
+    case "add-taxa": return openForm({
+      title: `Nova taxa · ${val}`,
+      fields: [{ key: "nome", label: "Nome da taxa", required: true, full: true }, { key: "pct", label: "Percentual sobre o preço (%)", type: "num", full: true }],
+      onSave: (v) => { db.canais[val].taxas = db.canais[val].taxas || []; db.canais[val].taxas.push(v); toast("Taxa adicionada"); },
+    });
+    case "del-taxa": return confirmDel("Remover esta taxa?", () => db.canais[val].taxas.splice(+el.dataset.i, 1));
+    case "del-ing": {
+      const alvo = val === "barra" ? db.barras[ui.barra].itens : db.sabores[ui.sabor].lote;
+      return confirmDel(`Remover "${nomeItem(alvo[+el.dataset.i])}" da receita?`, () => alvo.splice(+el.dataset.i, 1));
+    }
+    case "set-simcanal": db.sim.canal = val; save(); break;
+    case "sim-zerar": db.sim.qtd = {}; save(); break;
+    case "new-venda": return formVenda();
+    case "edit-venda": return formVenda(find(db.vendas));
+    case "del-venda": return confirmDel("Excluir este lançamento de venda?", () => { db.vendas = db.vendas.filter((x) => x.id !== id); });
+    case "new-pac": return formPac();
+    case "edit-pac": return formPac(find(db.pacoca));
+    case "del-pac": return confirmDel("Excluir este dia?", () => { db.pacoca = db.pacoca.filter((x) => x.id !== id); });
+    case "new-prod": return formProd();
+    case "edit-prod": return formProd(find(db.produtos));
+    case "del-prod": return confirmDel("Excluir este produto?", () => { db.produtos = db.produtos.filter((x) => x.id !== id); });
+    case "new-ins": return formIns();
+    case "edit-ins": return formIns(find(db[ui.insTab]));
+    case "del-ins": {
+      const u = usoInsumo(ui.insTab, find(db[ui.insTab]));
+      const msg = u.length ? `Este item é usado em: ${u.join(", ")}.\nSe excluir, ele passa a custar R$ 0 nesses lugares. Excluir mesmo assim?` : "Excluir este item?";
+      return confirmDel(msg, () => { db[ui.insTab] = db[ui.insTab].filter((x) => x.id !== id); });
+    }
+    case "emb-add": return formEmbItem(find(db.embalagens));
+    case "emb-del": {
+      const e = find(db.embalagens), i = +el.dataset.i;
+      return confirmDel(`Remover "${e.itens[i].material}" do kit ${e.nome}?`, () => e.itens.splice(i, 1));
+    }
+    case "new-compra": return formCompra();
+    case "edit-compra": return formCompra(find(db.pacocaCompra));
+    case "del-compra": return confirmDel("Excluir este item da compra?", () => { db.pacocaCompra = db.pacocaCompra.filter((x) => x.id !== id); });
+    case "new-fixo": return openForm({ title: "Nova despesa fixa", fields: [{ key: "nome", label: "Descrição", required: true, full: true }, { key: "valor", label: "Valor mensal (R$)", type: "num", full: true }], onSave: (v) => db.fixos.push({ id: uid(), ...v }) });
+    case "del-fixo": return confirmDel("Excluir esta despesa fixa?", () => { db.fixos = db.fixos.filter((x) => x.id !== id); });
+    default: return;
+  }
+  render();
+}
+function onChange(e) {
+  const el = e.target, act = el.dataset.act;
+  if (act === "par-fonte") { aplicarFonte(db.params.find((x) => x.key === el.dataset.key), el.value); save(); render(); toast("Origem do custo atualizada"); }
+  if (act === "bar-linha") { db.barras[ui.barra].linha = el.value; save(); render(); toast(`Barra marcada como ${el.value}`); }
+  if (act === "est-min") { saldoDe(el.dataset.ref).minimo = parseNum(el.value); save(); render(); }
+  if (act === "est-filtro") { ui.estSoAlerta = el.checked; render(); }
+  if (act === "set-dremes") { ui.dreMes = +el.value; render(); }
+  if (act === "set-pgmes") { ui.pgMes = +el.value; render(); }
+  if (act === "pg-toggle") {
+    const p = db.pagamentos.find((x) => x.id === el.dataset.id);
+    p.pago = el.checked; p.dataPago = p.pago ? hojeISO() : null;
+    save(); render(); toast(p.pago ? `${p.tipo === "pagar" ? "Pago" : "Recebido"}: ${p.descricao}` : `Voltou para pendente: ${p.descricao}`);
+  }
+  if (act === "eq-pin") { db.config.pinGestao = el.value.trim(); save(); toast(db.config.pinGestao ? "PIN salvo" : "PIN removido"); }
+  if (act === "vend-data") { ui.vendData = el.value || hojeISO(); render(); }
+  if (act === "vend-tipo-prod") { tiposArea("doces").find((t) => t.key === el.dataset.key).produto = el.value; save(); render(); }
+  if (act === "set-mes") { ui.mes = +el.value; render(); }
+  if (act === "set-vmes") { ui.vendasMes = +el.value; render(); }
+  if (act === "set-fixo") { const f = db.fixos.find((x) => x.id === el.dataset.id); f.valor = parseNum(el.value); save(); render(); }
+  if (act === "set-preco-pac") { db.config.precoPacoca = parseNum(el.value) || 0; save(); render(); }
+}
+function onInput(e) {
+  const el = e.target, act = el.dataset.act;
+  if (act === "set-preco") { const p = db.produtos.find((x) => x.id === el.dataset.id); p.preco = parseNum(el.value); save(); updateProdCard(p.id); }
+  const persAtualiza = () => { save(); const r = $("#persResumo"); if (r) r.innerHTML = resumoCanaisHtml(); };
+  if (act === "emb-qtd") { const e = db.embalagens.find((x) => x.id === el.dataset.id); e.itens[+el.dataset.i].qtd = parseNum(el.value); save(); refreshKit(e); }
+  if (act === "par-val") { db.params.find((x) => x.key === el.dataset.key).valor = parseNum(el.value); persAtualiza(); }
+  if (act === "can-min") { db.canais[el.dataset.canal].alvoMin = parseNum(el.value); persAtualiza(); }
+  if (act === "can-max") { db.canais[el.dataset.canal].alvoMax = parseNum(el.value); persAtualiza(); }
+  if (act === "tx-pct") { db.canais[el.dataset.canal].taxas[+el.dataset.i].pct = parseNum(el.value); persAtualiza(); }
+  if (act === "tx-nome") { db.canais[el.dataset.canal].taxas[+el.dataset.i].nome = el.value; save(); }
+  if (act === "rec-lote") { db.sabores[ui.sabor].lote[+el.dataset.i].qtd = parseNum(el.value); save(); refreshReceita(); }
+  if (act === "rec-rend") { db.sabores[ui.sabor].rend[+el.dataset.j] = parseNum(el.value); save(); refreshReceita(); }
+  if (act === "rec-porun") { db.sabores[ui.sabor].porUn[+el.dataset.i].qtd[+el.dataset.j] = parseNum(el.value); save(); refreshReceita(); }
+  if (act === "bar-qtd") { db.barras[ui.barra].itens[+el.dataset.i].qtd = parseNum(el.value); save(); refreshReceita(); }
+  if (act === "pac-custo") {
+    db.pacocaCusto.find((x) => x.id === el.dataset.id).valor = parseNum(el.value);
+    save(); $("#pacUnit").innerHTML = pacUnitHtml(); $("#pacSim").innerHTML = pacSimHtml();
+  }
+  if (act === "pac-sim") { db.pacocaSim[el.dataset.key] = parseNum(el.value); save(); $("#pacSim").innerHTML = pacSimHtml(); }
+  if (act === "sim-qtd") { db.sim.qtd[el.dataset.id] = parseNum(el.value); save(); refreshSim(); }
+  if (act === "sim-fixo") { db.sim.fixos[el.dataset.key] = parseNum(el.value); save(); refreshSim(); }
+  if (act === "sim-semanas") { db.sim.semanas = parseNum(el.value); save(); refreshSim(); }
+  if (act === "busca") {
+    ui.busca = el.value;
+    const pos = el.selectionStart;
+    render();
+    const again = document.querySelector('[data-act="busca"]');
+    if (again) { again.focus(); again.setSelectionRange(pos, pos); }
+  }
+}
+
+document.addEventListener("click", (e) => { if (e.target.closest("#content, #topActions")) onClick(e); });
+document.addEventListener("change", (e) => { if (e.target.closest("#content, #topActions")) onChange(e); });
+document.addEventListener("input", (e) => { if (e.target.closest("#content, #topActions")) onInput(e); });
+window.addEventListener("hashchange", render);
+
+$("#menuBtn").addEventListener("click", () => { $("#sidebar").classList.add("open"); $("#overlay").classList.add("show"); });
+$("#overlay").addEventListener("click", () => { $("#sidebar").classList.remove("open"); $("#overlay").classList.remove("show"); });
+$("#btnExport").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `ha-gourmet-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  toast("Backup baixado");
+});
+$("#btnImport").addEventListener("click", () => $("#fileImport").click());
+$("#fileImport").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try { db = JSON.parse(await f.text()); save(); render(); toast("Backup importado"); } catch { toast("Arquivo inválido"); }
+  e.target.value = "";
+});
+$("#btnReset").addEventListener("click", () => {
+  if (confirm("Restaurar os dados originais da planilha? As alterações feitas aqui serão perdidas.")) { db = buildSeed(); save(); ui.pacMes = null; render(); toast("Dados restaurados"); }
+});
+
+/* =================== Sincronização em tempo real =================== */
+// Atualizações vindas de outro aparelho não redesenham a tela enquanto alguém digita
+let renderPendente = false;
+function renderSeguro() {
+  const ativo = document.activeElement;
+  const digitando = ativo && ativo.matches("input, select, textarea") && ativo.closest("#content, #topActions");
+  if (document.querySelector(".modal-bg") || digitando) { renderPendente = true; return; }
+  renderPendente = false;
+  const y = window.scrollY;
+  render();
+  window.scrollTo(0, y);
+}
+document.addEventListener("focusout", () => { if (renderPendente) setTimeout(() => renderPendente && renderSeguro(), 250); });
+document.addEventListener("click", () => { if (renderPendente) setTimeout(() => renderPendente && renderSeguro(), 400); });
+
+const PILL = { local: ["Só neste aparelho", "gray"], conectando: ["Conectando…", "yellow"], online: ["Sincronizado", "green"], offline: ["Offline · envia ao voltar", "yellow"], erro: ["Erro de sincronização", "red"] };
+Sync.onStatus((s) => {
+  const [t, c] = PILL[s] || PILL.local;
+  const el = $("#syncPill");
+  el.className = `sync-pill b-${c}`;
+  el.textContent = "● " + t;
+  el.title = APP_VENDEDOR ? "" : "Abrir Equipe & App";
+  el.onclick = () => { if (!APP_VENDEDOR) location.hash = areaAtual() === "pacoca" ? "equipe-pacoca" : "equipe"; };
+});
+
+// Link de convite: ...?app=vendedor#conectar=CODIGO conecta o aparelho à equipe
+(() => {
+  const m = location.hash.match(/conectar=([^&]+)/);
+  if (!m) return;
+  try { Sync.setCfg(JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))))); setTimeout(() => toast("Aparelho conectado à equipe"), 300); }
+  catch { setTimeout(() => toast("Link de conexão inválido"), 300); }
+  history.replaceState(null, "", location.pathname + location.search);
+})();
+
+Sync.start({
+  estadoLocal: estadoSemRegistros,
+  registrosLocais: () => db.vendedor.registros,
+  onEstado: (remoto) => {
+    const regs = db.vendedor.registros;
+    db = migrar(remoto);
+    db.vendedor.registros = regs;
+    salvarLocal(); renderSeguro();
+  },
+  onRegistros: (lista) => {
+    db.vendedor.registros = lista.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    salvarLocal(); renderSeguro();
+  },
+});
+// Sem nuvem, abas abertas no mesmo aparelho ainda se atualizam entre si
+window.addEventListener("storage", (e) => {
+  if (e.key === STORE_KEY && e.newValue && !Sync.ativo) { db = migrar(JSON.parse(e.newValue)); renderSeguro(); }
+});
+if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
+
+render();
