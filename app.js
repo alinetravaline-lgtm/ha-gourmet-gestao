@@ -201,6 +201,7 @@ function migrar(data) {
     (data.impostosGerais?.fixos || []).forEach((f) => { if (/darf/i.test(f.nome) && !("mesSeguinte" in f)) f.mesSeguinte = true; });
     data.darfMesSeguinteV1 = true;
   }
+  if (data.estoque?.coberturaPac && !("semanas" in data.estoque.coberturaPac)) { delete data.estoque.coberturaPac.dias; data.estoque.coberturaPac.semanas = 2; }
   if (data.pacocaSim && !data.pacocaSim.fixos) data.pacocaSim.fixos = { "Comissão vendedor": 0, "Alimentação vendedor": 0, Marketing: 0 };
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
@@ -1521,7 +1522,7 @@ function alertasGerais() {
   const pb = pedidoBase(), comprar = itensEstoque("doces").filter((i) => pb.faltam.includes(i.ref));
   if (comprar.length) out.push({ tipo: "red", t: `Doces: comprar ${comprar.length} item(ns) — o estoque faz ${int(pb.capacidade)} de ${int(pb.n)} caixas`, d: comprar.slice(0, 4).map((i) => i.nome).join(", ") });
   const cobP = coberturaPacoca(), comprarP = itensEstoque("pacoca").filter((i) => cobP.faltam.includes(i.ref));
-  if (comprarP.length) out.push({ tipo: "red", t: `Paçoca: comprar ${comprarP.length} item(ns) — o estoque cobre ${fmtQtd(Math.floor(cobP.diasCobre * 10) / 10)} de ${int(cobP.dias)} dias`, d: `${comprarP.map((i) => i.nome).join(", ")} · meta de ${int(cobP.porDia)} pacotes/dia` });
+  if (comprarP.length) out.push({ tipo: "red", t: `Paçoca: comprar ${comprarP.length} item(ns) — o estoque cobre ${fmtQtd(Math.floor(cobP.diasCobre * 10) / 10)} de ${int(cobP.dias)} dias (${fmtQtd(cobP.semanas)} semanas)`, d: `${comprarP.map((i) => i.nome).join(", ")} · meta de ${int(cobP.porDia)} pacotes/dia` });
   const estP = alertasEstoque("pacoca").filter((i) => !cobP.faltam.includes(i.ref));
   if (estP.length) out.push({ tipo: "yellow", t: `Paçoca: ${estP.length} item(ns) do estoque em alerta`, d: estP.slice(0, 4).map((i) => i.nome).join(", ") });
   const lista = db.pacoca.filter((p) => !ui.mes || monthOf(p.data) === ui.mes);
@@ -1688,7 +1689,7 @@ function viewPacPainel() {
   else al.push({ tipo: "green", t: `Não recebido em ${pct(taxa)} — dentro da previsão de ${pct(meta)}`, d: `${brl(nr)} entregues e ainda não pagos (pix confiança).` });
   if (db.config.precoPacoca && cu / db.config.precoPacoca > 0.3) al.push({ tipo: "yellow", t: `Custo por paçoca em ${brl(cu)}`, d: `Representa ${pct((cu / db.config.precoPacoca) * 100)} do preço de venda.` });
   const cobP = coberturaPacoca(), comprarP = itensEstoque("pacoca").filter((i) => cobP.faltam.includes(i.ref));
-  if (comprarP.length) al.push({ tipo: "red", t: `Comprar: ${comprarP.map((i) => i.nome).join(", ")}`, d: `O estoque cobre ${fmtQtd(Math.floor(cobP.diasCobre * 10) / 10)} de ${int(cobP.dias)} dias de venda (${int(cobP.porDia)} pacotes/dia). Veja a tela Estoque.` });
+  if (comprarP.length) al.push({ tipo: "red", t: `Comprar: ${comprarP.map((i) => i.nome).join(", ")}`, d: `O estoque cobre ${fmtQtd(Math.floor(cobP.diasCobre * 10) / 10)} de ${int(cobP.dias)} dias: ${fmtQtd(cobP.semanas)} semanas (uma vendendo + uma em produção) de ${int(cobP.porDia)} pacotes/dia. Veja a tela Estoque.` });
   const estP = alertasEstoque("pacoca").filter((i) => !cobP.faltam.includes(i.ref));
   if (estP.length) al.push({ tipo: "yellow", t: `Estoque baixo: ${estP.map((i) => i.nome).join(", ")}`, d: "Abaixo do mínimo definido na tela Estoque." });
   if (melhor) al.push({ tipo: "green", t: `Melhor dia: ${ddmm(melhor.data)}`, d: `${int(melhor.qtd)} pacotes vendidos e ${brl(lucroPac(melhor))} de lucro.` });
@@ -2720,15 +2721,16 @@ function pedidoBase() {
   const fator = refs.length ? Math.min(...refs.map((r) => Math.max(0, disp(r)) / nec[r])) : 0;
   return { area: "doces", n, pctG, G, P, nec, faltam, disp, capacidade: Math.floor(n * fator + 1e-9) };
 }
-// Estoque da paçoca precisa cobrir uma semana de vendas (padrão: 80 pacotes por dia × 7 dias)
+// Estoque da paçoca precisa cobrir duas semanas: uma sendo vendida e outra em produção para a semana seguinte
+// (padrão: 80 pacotes por dia × 7 dias × 2 semanas)
 function coberturaPacoca() {
-  const cfg = db.estoque.coberturaPac || {}, porDia = Math.max(1, Math.round(+cfg.porDia || 80)), dias = Math.max(1, Math.round(+cfg.dias || 7));
+  const cfg = db.estoque.coberturaPac || {}, porDia = Math.max(1, Math.round(+cfg.porDia || 80)), semanas = Math.max(1, +cfg.semanas || 2), dias = Math.round(semanas * 7);
   const pend = pendenteEstoque("pacoca"), nec = {};
   db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => { nec["pac:" + i.id] = porDia * dias * consumoPacote(i); });
   const disp = (ref) => saldoDe(ref).qtd - (pend[ref] || 0);
   const refs = Object.keys(nec), faltam = refs.filter((r) => disp(r) < nec[r] - 1e-9);
   const diasCobre = refs.length ? Math.min(...refs.map((r) => Math.max(0, disp(r)) / (nec[r] / dias))) : 0;
-  return { area: "pacoca", porDia, dias, nec, faltam, disp, diasCobre, capacidade: Math.floor(diasCobre * porDia + 1e-9) };
+  return { area: "pacoca", porDia, semanas, dias, nec, faltam, disp, diasCobre, capacidade: Math.floor(diasCobre * porDia + 1e-9) };
 }
 // Compra sugerida: falta arredondada para embalagens inteiras de compra (rendimento do insumo)
 function linhaCompra(x, periodos) {
@@ -2825,7 +2827,7 @@ function viewEstoque(area) {
   const kpis = `<div class="grid g-4">
     ${kpi("Valor em estoque", brl(valor), "Saldo × custo unitário", "money")}
     ${kpi(pb ? "Precisa comprar / baixo" : "Abaixo do mínimo", int(alertas.length), alertas.length ? esc(alertas.slice(0, 2).map((a) => a.nome).join(", ")) + (alertas.length > 2 ? "…" : "") : "Tudo em dia", "alert", alertas.length ? "neg" : "pos")}
-    ${pb?.area === "pacoca" ? kpi("Estoque cobre", `${fmtQtd(Math.floor(Math.min(pb.diasCobre, 999) * 10) / 10)} dias`, `meta: ${int(pb.dias)} dias de ${int(pb.porDia)} pacotes/dia`, "cal", pb.diasCobre < pb.dias ? "neg" : "pos")
+    ${pb?.area === "pacoca" ? kpi("Estoque cobre", `${fmtQtd(Math.floor(Math.min(pb.diasCobre, 999) * 10) / 10)} dias`, `meta: ${fmtQtd(pb.semanas)} semanas (${int(pb.dias)} dias) de ${int(pb.porDia)} pacotes/dia`, "cal", pb.diasCobre < pb.dias ? "neg" : "pos")
       : pb ? kpi("Dá para fazer", `${int(Math.min(pb.capacidade, 9999))} caixas`, `com a matéria-prima em estoque · pedido comum: ${int(pb.n)}`, "gift", pb.capacidade < pb.n ? "neg" : "pos")
       : kpi("Itens com saldo", `${int(todos.filter((i) => disp(i.ref) > 0).length)} / ${int(todos.length)}`, "Itens com quantidade em estoque", "pkg")}
     ${kpi("Movimentações hoje", int(movsArea.filter((m) => m.data === hojeISO()).length), `${int(movsArea.length)} no total`, "trend")}
@@ -2851,12 +2853,12 @@ function viewEstoque(area) {
   const temPend = Object.keys(ctx.pend).length > 0;
   const pedidoCard = pb?.area === "pacoca" ? `<div class="card pedido-card ${comprar.length ? "falta" : ""}">
     <div class="alert ${comprar.length ? "red" : "green"}">${icon(comprar.length ? "alert" : "check")}<div>
-      <b>${comprar.length ? `Precisa comprar ${comprar.length} item(ns): o estoque não dá para ${int(pb.dias)} dias de venda` : `Estoque dá para ${int(pb.dias)} dias de venda`}</b>
-      <span>Meta: ${int(pb.porDia)} pacotes por dia × ${int(pb.dias)} dias = ${int(pb.porDia * pb.dias)} pacotes. Com o estoque de hoje dá para <strong>${fmtQtd(Math.floor(Math.min(pb.diasCobre, 999) * 10) / 10)} dias (${int(Math.min(pb.capacidade, 99999))} pacotes)</strong>.
+      <b>${comprar.length ? `Precisa comprar ${comprar.length} item(ns): o estoque não cobre ${fmtQtd(pb.semanas)} semana(s) (${int(pb.dias)} dias)` : `Estoque cobre ${fmtQtd(pb.semanas)} semana(s) (${int(pb.dias)} dias)`}</b>
+      <span>Meta: ${int(pb.porDia)} pacotes por dia × ${int(pb.dias)} dias = ${int(pb.porDia * pb.dias)} pacotes${pb.semanas === 2 ? " (uma semana sendo vendida + uma em produção para a semana seguinte)" : ""}. Com o estoque de hoje dá para <strong>${fmtQtd(Math.floor(Math.min(pb.diasCobre, 999) * 10) / 10)} dias (${int(Math.min(pb.capacidade, 99999))} pacotes)</strong>.
       ${comprar.length ? `Em vermelho: ${esc(comprar.map((i) => i.nome).join(", "))}.` : ""}</span></div></div>
     <div class="pedido-cfg"><span>Prazo do estoque</span>
       <label>${numIn("est-cob", pb.porDia, `data-key="porDia"`)} pacotes por dia</label>
-      <label>${numIn("est-cob", pb.dias, `data-key="dias"`)} dias</label>
+      <label>${numIn("est-cob", pb.semanas, `data-key="semanas"`)} semanas <span class="hint">(${int(pb.dias)} dias)</span></label>
       <span class="hint">Cada pacote vendido (fechamento do dia na Área do vendedor) baixa os itens conforme a coluna "Baixa por venda".${temPend ? " O saldo já desconta as entregas de hoje ainda não fechadas." : ""}</span></div>
   </div>` : pb ? `<div class="card pedido-card ${comprar.length ? "falta" : ""}">
     <div class="alert ${comprar.length ? "red" : "green"}">${icon(comprar.length ? "alert" : "check")}<div>
@@ -3169,7 +3171,7 @@ function onChange(e) {
     if (Math.abs(novo - atual) > 1e-9) { movimentar(el.dataset.area, el.dataset.ref, el.dataset.nome, novo - atual, "ajuste", "Contagem (projeção)"); save(); toast(`Estoque atualizado: ${el.dataset.nome}`); }
     render();
   }
-  if (act === "est-cob") { db.estoque.coberturaPac = db.estoque.coberturaPac || {}; db.estoque.coberturaPac[el.dataset.key] = Math.max(1, Math.round(parseNum(el.value))); save(); render(); }
+  if (act === "est-cob") { db.estoque.coberturaPac = db.estoque.coberturaPac || {}; const v = parseNum(el.value); db.estoque.coberturaPac[el.dataset.key] = el.dataset.key === "semanas" ? Math.max(0.5, Math.round(v * 2) / 2) : Math.max(1, Math.round(v)); save(); render(); }
   if (act === "est-pedido") { const v = parseNum(el.value); db.projecao.doces[el.dataset.key] = el.dataset.key === "pedidoPctG" ? Math.min(100, Math.max(0, v)) : Math.max(1, Math.round(v)); save(); render(); }
   if (act === "est-min") { saldoDe(el.dataset.ref).minimo = parseNum(el.value); save(); render(); }
   if (act === "est-filtro") { ui.estSoAlerta = el.checked; render(); }
