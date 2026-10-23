@@ -921,7 +921,11 @@ function viewSimulador() {
   const s = db.sim;
   const r = simCalc();
   setActions(`<button class="btn" data-act="sim-zerar">Zerar quantidades</button>`);
-  return `
+  const hist = histSemanasHtml();
+  return `${hist ? `${hist}
+  <div class="chip-row" style="margin:10px 0 18px;align-items:center"><span class="hint">Preencher a semana do simulador (Cx P e Cx G) com:</span>
+    <button class="btn btn-sm" data-act="sim-hist" data-val="0">Média geral</button>
+    ${[1, 2, 3, 4].map((n) => `<button class="btn btn-sm" data-act="sim-hist" data-val="${n}">${n}ª semana</button>`).join("")}</div>` : ""}
   <div class="toolbar">${tabs(Object.keys(db.canais), s.canal, "set-simcanal")}<span class="hint">Digite quantas unidades pretende vender por semana — o resultado atualiza na hora.</span></div>
   <div class="grid g-21">
     <div class="card">
@@ -2128,10 +2132,34 @@ function infoCaixa(key) {
   const nome = t?.produto || "";
   return { formato: /copinho/i.test(nome) ? "Copinho" : "Bolinha", un: +(nome.match(/(\d+)\s*un/i)?.[1] || (key === "G" ? 9 : 4)) };
 }
+// Média de caixas P/G por semana do mês (1ª a 4ª), a partir do histórico de vendas Outbound com caixas registradas.
+// Semana do mês = dia de início ÷ 7 (dias 29–31 contam como 4ª semana).
+function mediaHistoricaSemanas() {
+  const h = db.vendas.filter((v) => v.canal === "Outbound" && (+v.cxP || 0) + (+v.cxG || 0) > 0);
+  const semana = (iso) => Math.min(4, Math.ceil(+iso.slice(8, 10) / 7));
+  const media = (l) => ({ n: l.length, P: l.length ? sum(l, (v) => +v.cxP || 0) / l.length : 0, G: l.length ? sum(l, (v) => +v.cxG || 0) / l.length : 0 });
+  const geral = media(h);
+  const semanas = [1, 2, 3, 4].map((s) => { const m = media(h.filter((v) => semana(v.inicio) === s)); return { sem: s, ...(m.n ? m : { ...geral, n: 0, semDados: true }) }; });
+  return { semanas, geral };
+}
+function histSemanasHtml(destaque = []) {
+  const { semanas, geral } = mediaHistoricaSemanas();
+  if (!geral.n) return "";
+  return `<div class="card hist-card"><div class="card-head"><div><h3>${icon("trend")} Média histórica por semana do mês</h3><div class="sub">Caixas vendidas no Outbound · ${geral.n} fins de semana com caixas registradas</div></div><a class="btn btn-sm" href="#vendas">Ver histórico</a></div>
+    <div class="hist-grid">${semanas.map((s) => `<div class="stat ${destaque.includes(s.sem) ? "hist-on" : ""}"><small>${s.sem}ª semana${s.semDados ? " · sem dados (média geral)" : ` · ${s.n} fds`}</small>
+      <strong>${fmtQtd(Math.round((s.P + s.G) * 10) / 10)} caixas</strong><div class="hint">${fmtQtd(Math.round(s.G * 10) / 10)} Cx G · ${fmtQtd(Math.round(s.P * 10) / 10)} Cx P</div></div>`).join("")}
+      <div class="stat"><small>Média geral</small><strong>${fmtQtd(Math.round((geral.P + geral.G) * 10) / 10)} caixas</strong><div class="hint">${pct((geral.G / (geral.P + geral.G)) * 100)} Cx G</div></div></div></div>`;
+}
+const semanasPeriodo = (p) => (p.periodo && p.periodo !== "mes" ? [+p.periodo] : [1, 2, 3, 4]);
 function projDoces() {
   const p = db.projecao.doces;
-  const porFdsG = Math.round((p.caixasFds * p.pctG) / 100), porFdsP = Math.max(0, Math.round(p.caixasFds) - porFdsG);
-  const G = porFdsG * p.fds, P = porFdsP * p.fds;
+  let porFdsG = Math.round((p.caixasFds * p.pctG) / 100), porFdsP = Math.max(0, Math.round(p.caixasFds) - porFdsG);
+  let G = porFdsG * p.fds, P = porFdsP * p.fds, fds = p.fds;
+  if ((p.modo || "hist") === "hist") {
+    const { semanas } = mediaHistoricaSemanas(), sel = semanasPeriodo(p);
+    G = sum(sel, (s) => Math.round(semanas[s - 1].G)); P = sum(sel, (s) => Math.round(semanas[s - 1].P)); fds = sel.length;
+    porFdsG = Math.round(G / fds); porFdsP = Math.round(P / fds);
+  }
   const prontoG = Math.max(0, saldoDe("pronto:G").qtd), prontoP = Math.max(0, saldoDe("pronto:P").qtd);
   const prodG = Math.max(0, G - prontoG), prodP = Math.max(0, P - prontoP);
   // Doces a produzir por sabor = caixas a montar × docinhos de cada sabor na composição da caixa
@@ -2157,7 +2185,7 @@ function projDoces() {
   const insumos = Object.values(acc);
   const accM = {};
   [...consumoMontagem("G", prodG), ...consumoMontagem("P", prodP)].forEach((x) => { accM[x.ref] = accM[x.ref] || { ...x, qtd: 0 }; accM[x.ref].qtd += x.qtd; });
-  return { porFdsG, porFdsP, G, P, prontoG, prontoP, prodG, prodP, unidades, porSabor, insumos, materiais: Object.values(accM), fds: p.fds };
+  return { porFdsG, porFdsP, G, P, prontoG, prontoP, prodG, prodP, unidades, porSabor, insumos, materiais: Object.values(accM), fds };
 }
 // Compra sugerida: falta arredondada para embalagens inteiras de compra (rendimento do insumo)
 function linhaCompra(x, periodos) {
@@ -2206,17 +2234,21 @@ function viewProjecao(area) {
   const p = db.projecao.doces, r = projDoces();
   const ins = r.insumos.map((x) => linhaCompra(x, r.fds)), mats = r.materiais.map((x) => linhaCompra(x, r.fds));
   const total = sum([...ins, ...mats], (l) => l.custo);
-  return `<div class="grid g-21">
-    <div class="card"><div class="card-head"><div><h3>Previsão de vendas</h3><div class="sub">Média de caixas por fim de semana e divisão entre Cx G e Cx P</div></div></div>
-      ${(() => { const h = db.vendas.filter((v) => v.canal === "Outbound" && (+v.cxP || 0) + (+v.cxG || 0) > 0); if (!h.length) return "";
-        const P = sum(h, (v) => +v.cxP || 0), G = sum(h, (v) => +v.cxG || 0);
-        return `<div class="alert green" style="margin-bottom:10px">${icon("trend")}<div><b>Histórico: ${fmtQtd(Math.round(((P + G) / h.length) * 10) / 10)} caixas por fim de semana · ${pct((G / (P + G)) * 100)} Cx G</b><span>Média de ${h.length} fins de semana com caixas registradas (${int(G)} Cx G e ${int(P)} Cx P no total).</span></div></div>`; })()}
+  const modo = p.modo || "hist", sel = semanasPeriodo(p);
+  return `${histSemanasHtml(modo === "hist" ? sel : [])}
+  <div class="grid g-21 mt">
+    <div class="card"><div class="card-head"><div><h3>Previsão de vendas</h3><div class="sub">Base para o pedido de compra</div></div></div>
+      <div class="sim-row" style="grid-template-columns:1fr 230px"><span>Basear a previsão em</span>
+        <select class="inline" data-act="proj-modo"><option value="hist" ${modo === "hist" ? "selected" : ""}>Média histórica por semana</option><option value="fixo" ${modo === "fixo" ? "selected" : ""}>Valor fixo (caixas e % Cx G)</option></select></div>
+      ${modo === "hist" ? `
+      <div class="sim-row" style="grid-template-columns:1fr 230px;border:0"><span>Período do pedido</span>
+        <select class="inline" data-act="proj-periodo"><option value="mes" ${sel.length === 4 ? "selected" : ""}>Mês inteiro (1ª a 4ª semana)</option>${[1, 2, 3, 4].map((s) => `<option value="${s}" ${sel.length === 1 && sel[0] === s ? "selected" : ""}>Só a ${s}ª semana</option>`).join("")}</select></div>` : `
       <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Caixas por fim de semana</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="caixasFds" value="${p.caixasFds}" /></div>
       <div class="sim-row" style="grid-template-columns:1fr 110px"><span>% Cx G <span class="hint">(o restante é Cx P: ${fmtQtd(100 - p.pctG)}%)</span></span><input class="tbl-input" style="width:100%" inputmode="decimal" data-act="proj-par" data-key="pctG" value="${p.pctG}" /></div>
-      <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>Fins de semana no período</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="fds" value="${p.fds}" /></div>
+      <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>Fins de semana no período</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="fds" value="${p.fds}" /></div>`}
       <ul class="recipe-ings mt">
-        <li><span>Por fim de semana</span><span>${int(r.porFdsG)} Cx G + ${int(r.porFdsP)} Cx P</span><span>${int(r.porFdsG * infoCaixa("G").un + r.porFdsP * infoCaixa("P").un)} doces</span></li>
-        <li><span>No período (${int(p.fds)} fds)</span><span>${int(r.G)} Cx G + ${int(r.P)} Cx P</span><span>${int(r.G * infoCaixa("G").un + r.P * infoCaixa("P").un)} doces</span></li>
+        <li><span>Média por fim de semana</span><span>${int(r.porFdsG)} Cx G + ${int(r.porFdsP)} Cx P</span><span>${int(r.porFdsG * infoCaixa("G").un + r.porFdsP * infoCaixa("P").un)} doces</span></li>
+        <li><span>No período (${int(r.fds)} fds)</span><span>${int(r.G)} Cx G + ${int(r.P)} Cx P</span><span>${int(r.G * infoCaixa("G").un + r.P * infoCaixa("P").un)} doces</span></li>
         ${r.prontoG || r.prontoP ? `<li><span>Já prontas no estoque</span><span>${int(r.prontoG)} Cx G + ${int(r.prontoP)} Cx P</span><span>descontadas</span></li>` : ""}
         <li><span><b>A produzir</b></span><span><b>${int(r.prodG)} Cx G + ${int(r.prodP)} Cx P</b></span><span><b>${Object.entries(r.unidades).map(([f, u]) => `${int(u)} ${f.toLowerCase()}`).join(" + ") || "0"}</b></span></li>
       </ul>
@@ -2496,6 +2528,19 @@ function onClick(e) {
     }
     case "set-simcanal": db.sim.canal = val; save(); break;
     case "sim-zerar": db.sim.qtd = {}; save(); break;
+    case "sim-hist": {
+      const { semanas, geral } = mediaHistoricaSemanas(), m = +val ? semanas[+val - 1] : geral;
+      const filled = [];
+      // A média histórica é o total de caixas P e G; zera as outras caixas do canal para não somar duas vezes
+      db.produtos.filter((x) => x.canal === db.sim.canal && /^Caixa .* [49]un$/i.test(x.nome)).forEach((x) => { delete db.sim.qtd[x.id]; });
+      tiposArea("doces").forEach((t) => {
+        const prod = db.produtos.find((x) => x.canal === db.sim.canal && x.nome === t.produto);
+        if (prod) { db.sim.qtd[prod.id] = Math.round(m[t.key]); filled.push(`${Math.round(m[t.key])} ${prod.nome}`); }
+      });
+      save();
+      toast(filled.length ? `${+val ? `${val}ª semana` : "Média geral"}: ${filled.join(" + ")}` : "Este canal não tem as caixas P/G ligadas");
+      break;
+    }
     case "new-venda": return formVenda();
     case "edit-venda": return formVenda(find(db.vendas));
     case "del-venda": return confirmDel("Excluir este lançamento de venda?", () => { db.vendas = db.vendas.filter((x) => x.id !== id); });
@@ -2532,6 +2577,8 @@ function onChange(e) {
   if (act === "bar-linha") { db.barras[ui.barra].linha = el.value; save(); render(); toast(`Barra marcada como ${el.value}`); }
   if (act === "cx-qtd") { const c = caixaDe(el.dataset.key), q = parseNum(el.value); if (q) c.itens[el.dataset.sabor] = q; else delete c.itens[el.dataset.sabor]; save(); render(); }
   if (act === "cx-formato") { caixaDe(el.dataset.key).formato = el.value; save(); render(); }
+  if (act === "proj-modo") { db.projecao.doces.modo = el.value; save(); render(); }
+  if (act === "proj-periodo") { db.projecao.doces.periodo = el.value; save(); render(); }
   if (act === "proj-par") { db.projecao.doces[el.dataset.key] = parseNum(el.value); save(); render(); }
   if (act === "projp-par") { db.pacocaSim[el.dataset.key] = parseNum(el.value); save(); render(); }
   if (act === "proj-est") {
