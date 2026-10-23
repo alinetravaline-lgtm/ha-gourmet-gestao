@@ -100,6 +100,7 @@ function buildSeed() {
     pacocaSim: s.pacocaSim,
     receitasVistas: true,
     caixasVistas: true,
+    cxHistVistas: true,
     caixas: s.caixas,
     fixosPacoca: [
       { id: uid(), nome: "Pró-labore (paçoca)", valor: 0 },
@@ -153,6 +154,14 @@ function migrar(data) {
       if (p.key === "massaBol9" && p.fonte?.tipo === "receita") p.fonte = { tipo: "caixa", key: "G" };
     });
     data.caixasVistas = true;
+  }
+  // Caixas P/G por semana vindas dos comentários da planilha (HISTÓRICO FATURAMENTO)
+  if (!data.cxHistVistas && Array.isArray(data.vendas)) {
+    seed.vendas.filter((s) => "cxP" in s).forEach((s) => {
+      const v = data.vendas.find((x) => x.canal === s.canal && x.inicio === s.inicio);
+      if (v && !("cxP" in v)) Object.assign(v, { cxP: s.cxP, cxG: s.cxG, detalheCx: s.detalheCx });
+    });
+    data.cxHistVistas = true;
   }
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
@@ -333,7 +342,8 @@ function resumo(m, area) {
   const custosVar = sum(cvs, (c) => +c.valor || 0);
   const custos = insumos + gasolina + comissoes + perdas + custosVar;
   const qtd = sum(vendas, (v) => +v.qtd || 0) + sum(pac, (p) => +p.qtd || 0);
-  return { receita, custos, lucro: receita - custos, qtd, porCanal, insumos, gasolina, comissoes, perdas, custosVar, cvs, vendas, pac };
+  const cxP = sum(vendas, (v) => +v.cxP || 0), cxG = sum(vendas, (v) => +v.cxG || 0);
+  return { receita, custos, lucro: receita - custos, qtd, cxP, cxG, porCanal, insumos, gasolina, comissoes, perdas, custosVar, cvs, vendas, pac };
 }
 
 /* ---------- Gráficos ---------- */
@@ -642,11 +652,11 @@ function resumoMensalDoces() {
   const outros = (r) => r.comissoes + r.perdas + r.custosVar;
   const tot = resumo(0, "doces");
   return `<div class="card mt"><div class="card-head"><div><h3>Resumo por mês</h3><div class="sub">Totais consolidados dos lançamentos semanais de vendas</div></div><a class="btn btn-sm" href="#vendas">Ver lançamentos</a></div>
-    <div class="table-wrap"><table><thead><tr><th>Mês</th><th class="num hide-m">Semanas</th><th class="num">Vendas</th><th class="num">Faturamento</th><th class="num hide-m">Insumos</th><th class="num hide-m">Gasolina</th><th class="num hide-m">Outros custos</th><th class="num">Lucro</th><th class="num">Margem</th></tr></thead>
-    <tbody>${rs.map(({ m, r }) => `<tr class="${ui.mes === m ? "row-sel" : ""}"><td><b>${MESES_FULL[m - 1]}</b></td><td class="num hide-m">${r.vendas.length}</td><td class="num">${int(r.qtd)}</td><td class="num">${brl(r.receita)}</td>
+    <div class="table-wrap"><table><thead><tr><th>Mês</th><th class="num hide-m">Semanas</th><th class="num">Vendas</th><th class="num" title="Caixas pequenas (4 un)">Cx P</th><th class="num" title="Caixas grandes (9 un)">Cx G</th><th class="num">Faturamento</th><th class="num hide-m">Insumos</th><th class="num hide-m">Gasolina</th><th class="num hide-m">Outros custos</th><th class="num">Lucro</th><th class="num">Margem</th></tr></thead>
+    <tbody>${rs.map(({ m, r }) => `<tr class="${ui.mes === m ? "row-sel" : ""}"><td><b>${MESES_FULL[m - 1]}</b></td><td class="num hide-m">${r.vendas.length}</td><td class="num">${int(r.qtd)}</td><td class="num">${int(r.cxP)}</td><td class="num">${int(r.cxG)}</td><td class="num">${brl(r.receita)}</td>
       <td class="num hide-m">${brl(r.insumos)}</td><td class="num hide-m">${brl(r.gasolina)}</td><td class="num hide-m">${brl(outros(r))}</td>
       <td class="num ${r.lucro >= 0 ? "pos" : "neg"}"><b>${brl(r.lucro)}</b></td><td class="num">${pct(r.receita ? (r.lucro / r.receita) * 100 : 0)}</td></tr>`).join("")}</tbody>
-    <tfoot><tr><td>Total</td><td class="num hide-m">${tot.vendas.length}</td><td class="num">${int(tot.qtd)}</td><td class="num">${brl(tot.receita)}</td><td class="num hide-m">${brl(tot.insumos)}</td><td class="num hide-m">${brl(tot.gasolina)}</td><td class="num hide-m">${brl(outros(tot))}</td><td class="num">${brl(tot.lucro)}</td><td class="num">${pct(tot.receita ? (tot.lucro / tot.receita) * 100 : 0)}</td></tr></tfoot></table></div>
+    <tfoot><tr><td>Total</td><td class="num hide-m">${tot.vendas.length}</td><td class="num">${int(tot.qtd)}</td><td class="num">${int(tot.cxP)}</td><td class="num">${int(tot.cxG)}</td><td class="num">${brl(tot.receita)}</td><td class="num hide-m">${brl(tot.insumos)}</td><td class="num hide-m">${brl(tot.gasolina)}</td><td class="num hide-m">${brl(outros(tot))}</td><td class="num">${brl(tot.lucro)}</td><td class="num">${pct(tot.receita ? (tot.lucro / tot.receita) * 100 : 0)}</td></tr></tfoot></table></div>
   </div>`;
 }
 function afterPainel() {
@@ -675,6 +685,8 @@ const vendaFields = [
   { key: "inicio", label: "Início da semana", type: "date", required: true },
   { key: "fim", label: "Fim da semana", type: "date", required: true },
   { key: "qtd", label: "Nº de vendas", type: "num" },
+  { key: "cxP", label: "Caixas pequenas vendidas (4 un)", type: "num" },
+  { key: "cxG", label: "Caixas grandes vendidas (9 un)", type: "num" },
   { key: "cartao", label: "Recebido no cartão (R$)", type: "num" },
   { key: "pix", label: "Recebido no Pix (R$)", type: "num" },
   { key: "especie", label: "Recebido em espécie (R$)", type: "num" },
@@ -712,15 +724,17 @@ function viewVendas() {
   <div class="card mt">
     <div class="card-head"><div><h3>Lançamentos semanais</h3><div class="sub">Clique no lápis para editar qualquer linha</div></div></div>
     ${lista.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Semana</th><th>Canal</th><th class="num">Vendas</th><th class="num">Cartão</th><th class="num">Pix</th><th class="num">Espécie</th><th class="num">Faturamento</th><th class="num">Insumos</th><th class="num">Gasolina</th><th class="num">Comissões</th><th class="num">Perdas</th><th class="num">Lucro</th><th></th></tr></thead>
+      <thead><tr><th>Semana</th><th>Canal</th><th class="num">Vendas</th><th class="num" title="Caixas pequenas (4 un)">Cx P</th><th class="num" title="Caixas grandes (9 un)">Cx G</th><th class="num">Cartão</th><th class="num">Pix</th><th class="num">Espécie</th><th class="num">Faturamento</th><th class="num">Insumos</th><th class="num">Gasolina</th><th class="num">Comissões</th><th class="num">Perdas</th><th class="num">Lucro</th><th></th></tr></thead>
       <tbody>${lista.map((v) => `<tr>
         <td>${ddmm(v.inicio)} a ${ddmm(v.fim)}</td>
         <td><span class="badge" style="background:${CORES[v.canal]}1a;color:${CORES[v.canal]}">${v.canal}</span></td>
-        <td class="num">${int(v.qtd)}</td><td class="num">${brl(v.cartao)}</td><td class="num">${brl(v.pix)}</td><td class="num">${brl(v.especie)}</td>
+        <td class="num">${int(v.qtd)}</td>
+        <td class="num" title="${esc(v.detalheCx || "")}">${+v.cxP ? int(v.cxP) : "—"}</td><td class="num" title="${esc(v.detalheCx || "")}">${+v.cxG ? int(v.cxG) : "—"}</td>
+        <td class="num">${brl(v.cartao)}</td><td class="num">${brl(v.pix)}</td><td class="num">${brl(v.especie)}</td>
         <td class="num"><b>${brl(recVenda(v))}</b></td><td class="num">${brl(v.insumos)}</td><td class="num">${brl(v.gasolina)}</td><td class="num">${brl(v.comissoes)}</td><td class="num">${brl((+v.perdas || 0) + (+v.outros || 0))}</td>
         <td class="num ${lucroVenda(v) >= 0 ? "pos" : "neg"}"><b>${brl(lucroVenda(v))}</b></td>
         <td>${rowActions("venda", v.id)}</td></tr>`).join("")}</tbody>
-      <tfoot><tr><td colspan="2">Total</td><td class="num">${int(qtd)}</td><td class="num">${brl(sum(lista, (v) => +v.cartao || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.pix || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.especie || 0))}</td><td class="num">${brl(rec)}</td><td class="num">${brl(sum(lista, (v) => +v.insumos || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.gasolina || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.comissoes || 0))}</td><td class="num">${brl(sum(lista, (v) => (+v.perdas || 0) + (+v.outros || 0)))}</td><td class="num">${brl(rec - cus)}</td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="2">Total</td><td class="num">${int(qtd)}</td><td class="num">${int(sum(lista, (v) => +v.cxP || 0))}</td><td class="num">${int(sum(lista, (v) => +v.cxG || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.cartao || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.pix || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.especie || 0))}</td><td class="num">${brl(rec)}</td><td class="num">${brl(sum(lista, (v) => +v.insumos || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.gasolina || 0))}</td><td class="num">${brl(sum(lista, (v) => +v.comissoes || 0))}</td><td class="num">${brl(sum(lista, (v) => (+v.perdas || 0) + (+v.outros || 0)))}</td><td class="num">${brl(rec - cus)}</td><td></td></tr></tfoot>
     </table></div>` : `<div class="empty">Nenhuma venda lançada aqui ainda.<br/><br/><button class="btn btn-primary" data-act="new-venda">${icon("plus")}Lançar primeira venda</button></div>`}
   </div>`;
 }
@@ -1725,6 +1739,8 @@ function lancarDia(area) {
     let reg = db.vendas.find((v) => v.canal === "Outbound" && v.inicio <= ui.vendData && v.fim >= ui.vendData);
     if (!reg) { reg = { id: uid(), canal: "Outbound", ...semanaDe(ui.vendData), qtd: 0, cartao: 0, pix: 0, especie: 0, insumos: 0, gasolina: 0, comissoes: 0, perdas: 0, outros: 0 }; db.vendas.push(reg); }
     reg.qtd = (+reg.qtd || 0) + pend.length;
+    reg.cxP = (+reg.cxP || 0) + sum(pend, (r) => +r.itens.P || 0);
+    reg.cxG = (+reg.cxG || 0) + sum(pend, (r) => +r.itens.G || 0);
     reg.cartao = (+reg.cartao || 0) + porPag("cartao"); reg.pix = (+reg.pix || 0) + porPag("pix"); reg.especie = (+reg.especie || 0) + porPag("especie");
     reg.insumos = (+reg.insumos || 0) + sum(pend, custoRegistro);
   }
@@ -2192,6 +2208,9 @@ function viewProjecao(area) {
   const total = sum([...ins, ...mats], (l) => l.custo);
   return `<div class="grid g-21">
     <div class="card"><div class="card-head"><div><h3>Previsão de vendas</h3><div class="sub">Média de caixas por fim de semana e divisão entre Cx G e Cx P</div></div></div>
+      ${(() => { const h = db.vendas.filter((v) => v.canal === "Outbound" && (+v.cxP || 0) + (+v.cxG || 0) > 0); if (!h.length) return "";
+        const P = sum(h, (v) => +v.cxP || 0), G = sum(h, (v) => +v.cxG || 0);
+        return `<div class="alert green" style="margin-bottom:10px">${icon("trend")}<div><b>Histórico: ${fmtQtd(Math.round(((P + G) / h.length) * 10) / 10)} caixas por fim de semana · ${pct((G / (P + G)) * 100)} Cx G</b><span>Média de ${h.length} fins de semana com caixas registradas (${int(G)} Cx G e ${int(P)} Cx P no total).</span></div></div>`; })()}
       <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Caixas por fim de semana</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="caixasFds" value="${p.caixasFds}" /></div>
       <div class="sim-row" style="grid-template-columns:1fr 110px"><span>% Cx G <span class="hint">(o restante é Cx P: ${fmtQtd(100 - p.pctG)}%)</span></span><input class="tbl-input" style="width:100%" inputmode="decimal" data-act="proj-par" data-key="pctG" value="${p.pctG}" /></div>
       <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>Fins de semana no período</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="fds" value="${p.fds}" /></div>
