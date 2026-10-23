@@ -254,7 +254,8 @@ const SEED = {
     ["Papel", 2080, 0.0322],
   ],
 
-  pacocaSim: { porDia: 80, dias: 26, naoRecPct: 16.7, gasolinaDia: 11.02 },
+  // porDia = pacotes vendidos por dia; porPacote = paçoquitas em cada pacote
+  pacocaSim: { porDia: 80, porPacote: 6, dias: 26, naoRecPct: 16.7, gasolinaDia: 11.02 },
 
   // Área do vendedor: tipos de item vendidos e combos com preço próprio.
   // "produto" liga o tipo a um produto do Outbound para calcular o custo.
@@ -264,7 +265,7 @@ const SEED = {
         { key: "P", nome: "Cx P", desc: "caixa 4 un", produto: "Caixa Bolinha 4un" },
         { key: "G", nome: "Cx G", desc: "caixa 9 un", produto: "Caixa Bolinha 9un" },
       ],
-      pacoca: [{ key: "U", nome: "Paçoca", desc: "unidade" }],
+      pacoca: [{ key: "U", nome: "Pacote de paçoca", desc: "pacote c/ 6" }],
     },
     // Promoções; o preço normal de cada tipo vem de Produtos & Preços (doces) ou do preço da paçoca
     combos: {

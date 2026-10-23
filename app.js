@@ -106,7 +106,7 @@ function buildSeed() {
       saldos: {},
       movs: [],
       pacocaItens: [
-        { id: uid(), nome: "Paçoquita", unid: "un", consumo: 1, custo: 1.07, pacote: 1 },
+        { id: uid(), nome: "Paçoquita", unid: "un", consumo: 6, custo: 0.1783, pacote: 1, usaPacote: true },
         { id: uid(), nome: "Saquinho", unid: "un", consumo: 1, custo: 0.05, pacote: 1 },
         { id: uid(), nome: "Papel", unid: "folha", consumo: 1, custo: 0.03, pacote: 1 },
         { id: uid(), nome: "Fita durex", unid: "rolo", consumo: 0, custo: 3.64, pacote: 1 },
@@ -142,6 +142,12 @@ function migrar(data) {
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
   (data.pagamentos || []).forEach((p) => { if (p.categoria === "Fornecedor / insumos") p.categoria = "Insumos"; });
+  // Paçoca vendida em pacotes: a paçoquita passa a ser contada em unidades (6 por pacote)
+  if (data.pacocaSim && !("porPacote" in data.pacocaSim)) data.pacocaSim.porPacote = 6;
+  (data.estoque?.pacocaItens || []).forEach((i) => {
+    if (i.nome === "Paçoquita" && !("usaPacote" in i)) { i.usaPacote = true; if (+i.custo === 1.07) i.custo = 0.1783; }
+  });
+  (data.vendedor?.tipos?.pacoca || []).forEach((t) => { if (t.key === "U" && t.nome === "Paçoca") { t.nome = "Pacote de paçoca"; t.desc = "pacote c/ 6"; } });
   if (!data.sabores?.[0]?.lote || !data.barras?.[0]?.itens) Object.assign(data, linkReceitas(data.insumos));
   Object.entries(seed.canais).forEach(([k, c]) => { if (data.canais[k] && !data.canais[k].taxas) data.canais[k].taxas = c.taxas; });
   const nomesAntigos = { Pequena: "Cx P", Grande: "Cx G", "1 Pequena": "1 Cx P", "2 Pequenas": "2 Cx P", "1 Grande": "1 Cx G" };
@@ -681,7 +687,7 @@ function viewVendas() {
 /* ---------- Paçoca ---------- */
 const pacFields = [
   { key: "data", label: "Data", type: "date", required: true, full: true },
-  { key: "qtd", label: "Paçocas vendidas", type: "num" },
+  { key: "qtd", label: "Pacotes vendidos", type: "num" },
   { key: "pix", label: "Recebido no Pix (R$)", type: "num" },
   { key: "especie", label: "Recebido em espécie (R$)", type: "num" },
   { key: "insumos", label: "Custo de insumos (R$)", type: "num" },
@@ -709,7 +715,7 @@ function viewPacoca() {
   return `
   <div class="toolbar">${tabs([[0, "Todos"], ...meses.map((m) => [m, MESES_FULL[m - 1]])], ui.pacMes, "set-pmes")}</div>
   <div class="grid g-4">
-    ${kpi("Paçocas vendidas", int(qtd), `${lista.length} dia(s) de venda · média ${int(lista.length ? qtd / lista.length : 0)}/dia`, "cart")}
+    ${kpi("Pacotes vendidos", int(qtd), `${lista.length} dia(s) de venda · média ${int(lista.length ? qtd / lista.length : 0)}/dia`, "cart")}
     ${kpi("Recebido", brl(rec), `Esperado: ${brl(esp)}`, "money")}
     ${kpi("Lucro", brl(luc), rec ? `Margem de ${pct((luc / rec) * 100)}` : "", "wallet", luc >= 0 ? "pos" : "neg")}
     ${kpi("Não recebido", brl(nr), `<span class="badge ${taxa > 20 ? "b-red" : taxa > 10 ? "b-yellow" : "b-green"}">${pct(taxa)} do esperado</span>`, "alert", nr > 0 ? "neg" : "")}
@@ -1180,15 +1186,15 @@ function viewPacPainel() {
   const melhor = [...lista].sort((a, b) => lucroPac(b) - lucroPac(a))[0];
   const cu = custoUnitPacoca();
   const al = [];
-  if (taxa > 10) al.push({ tipo: taxa > 20 ? "red" : "yellow", t: `${brl(nr)} não recebidos (${pct(taxa)} do esperado)`, d: "Diferença entre paçocas vendidas × preço e o que entrou no caixa (no-show / fiado)." });
+  if (taxa > 10) al.push({ tipo: taxa > 20 ? "red" : "yellow", t: `${brl(nr)} não recebidos (${pct(taxa)} do esperado)`, d: "Diferença entre pacotes vendidos × preço e o que entrou no caixa (no-show / fiado)." });
   else al.push({ tipo: "green", t: "Recebimentos em dia", d: `Apenas ${pct(taxa)} do valor esperado ficou sem receber.` });
   if (db.config.precoPacoca && cu / db.config.precoPacoca > 0.3) al.push({ tipo: "yellow", t: `Custo por paçoca em ${brl(cu)}`, d: `Representa ${pct((cu / db.config.precoPacoca) * 100)} do preço de venda.` });
   const estP = alertasEstoque("pacoca");
   if (estP.length) al.push({ tipo: "yellow", t: `Estoque baixo: ${estP.map((i) => i.nome).join(", ")}`, d: "Abaixo do mínimo definido na tela Estoque." });
-  if (melhor) al.push({ tipo: "green", t: `Melhor dia: ${ddmm(melhor.data)}`, d: `${int(melhor.qtd)} paçocas vendidas e ${brl(lucroPac(melhor))} de lucro.` });
+  if (melhor) al.push({ tipo: "green", t: `Melhor dia: ${ddmm(melhor.data)}`, d: `${int(melhor.qtd)} pacotes vendidos e ${brl(lucroPac(melhor))} de lucro.` });
   return `
   <div class="grid g-4">
-    ${kpi("Paçocas vendidas", int(qtd), `${lista.length} dia(s) de venda · média ${int(lista.length ? qtd / lista.length : 0)}/dia`, "cart")}
+    ${kpi("Pacotes vendidos", int(qtd), `${lista.length} dia(s) de venda · média ${int(lista.length ? qtd / lista.length : 0)}/dia`, "cart")}
     ${kpi("Recebido", brl(rec), `Esperado: ${brl(esp)}`, "money")}
     ${kpi("Lucro", brl(luc), rec ? `Margem de ${pct((luc / rec) * 100)}` : "", "wallet", luc >= 0 ? "pos" : "neg")}
     ${kpi("Não recebido", brl(nr), `<span class="badge ${taxa > 20 ? "b-red" : taxa > 10 ? "b-yellow" : "b-green"}">${pct(taxa)} do esperado</span>`, "alert", nr > 0 ? "neg" : "")}
@@ -1248,7 +1254,7 @@ function viewPacCustos() {
       <div id="pacUnit">${pacUnitHtml()}</div>
     </div>
     <div class="card"><div class="card-head"><div><h3>Simulador do mês</h3><div class="sub">Quanto a paçoca pode render no mês</div></div></div>
-      <div class="sim-row" style="grid-template-columns:1fr 120px"><span>Paçocas vendidas por dia</span><input inputmode="numeric" data-act="pac-sim" data-key="porDia" value="${s.porDia}" /></div>
+      <div class="sim-row" style="grid-template-columns:1fr 120px"><span>Pacotes vendidos por dia</span><input inputmode="numeric" data-act="pac-sim" data-key="porDia" value="${s.porDia}" /></div>
       <div class="sim-row" style="grid-template-columns:1fr 120px"><span>Dias de venda no mês</span><input inputmode="numeric" data-act="pac-sim" data-key="dias" value="${s.dias}" /></div>
       <div class="sim-row" style="grid-template-columns:1fr 120px"><span>% não recebido <span class="hint">(histórico: ${pct(histNr)})</span></span><input inputmode="decimal" data-act="pac-sim" data-key="naoRecPct" value="${String(s.naoRecPct).replace(".", ",")}" /></div>
       <div class="sim-row" style="grid-template-columns:1fr 120px;border:0"><span>Gasolina por dia (R$)</span><input inputmode="decimal" data-act="pac-sim" data-key="gasolinaDia" value="${String(s.gasolinaDia).replace(".", ",")}" /></div>
@@ -1711,6 +1717,8 @@ function publicarHtml(publicado) {
 // Saldos por referência: "ins:<id>" ingrediente, "mat:<id>" material, "pronto:<P|G>" caixa pronta, "pac:<id>" item da paçoca
 const round3 = (v) => Math.round(v * 1000) / 1000;
 const TIPOS_MOV = { entrada: ["Entrada", "green"], saida: ["Saída", "red"], ajuste: ["Contagem", "gray"], producao: ["Produção", "gold"], montagem: ["Montagem", "gold"], venda: ["Venda", "yellow"] };
+// Baixa de um item da paçoca por pacote vendido (a paçoquita acompanha "paçoquitas por pacote")
+const consumoPacote = (i) => (i.usaPacote ? +db.pacocaSim.porPacote || 1 : +i.consumo || 0);
 // Itens medidos por "uso" (ex.: gás) entram no custo, mas não são contados no estoque
 const estocavel = (i) => i.unid !== "uso";
 const saldoDe = (ref) => db.estoque.saldos[ref] || (db.estoque.saldos[ref] = { qtd: 0, minimo: 0 });
@@ -1836,17 +1844,18 @@ function formItemPacoca(i) {
       { key: "nome", label: "Item", required: true, full: true },
       { key: "unid", label: "Unidade (un, folha, rolo...)" },
       { key: "custo", label: "Custo por unidade (R$)", type: "num" },
-      { key: "consumo", label: "Baixa automática por paçoca vendida", type: "num" },
+      ...(i?.usaPacote ? [] : [{ key: "consumo", label: "Baixa automática por pacote vendido", type: "num" }]),
       { key: "pacote", label: "Unidades por embalagem de compra", type: "num" },
     ],
     values: i ? { pacote: 1, ...i } : { unid: "un", consumo: 0, pacote: 1 },
+    preview: i?.usaPacote ? () => `<span>Baixa por pacote vendido: ${fmtQtd(consumoPacote(i))} un (paçoquitas por pacote, ajuste na Projeção de compra)</span>` : undefined,
     onSave: (v) => { if (i) Object.assign(i, v); else db.estoque.pacocaItens.push({ id: uid(), ...v }); toast("Item salvo"); },
   });
 }
 function baixaVendas(area, pend) {
   if (area === "pacoca") {
     const qtd = sum(pend, (r) => r.itens.U || 0);
-    db.estoque.pacocaItens.filter((i) => +i.consumo > 0).forEach((i) => movimentar("pacoca", "pac:" + i.id, i.nome, -qtd * i.consumo, "venda", `Vendas de ${ddmm(ui.vendData)}`));
+    db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => movimentar("pacoca", "pac:" + i.id, i.nome, -qtd * consumoPacote(i), "venda", `Vendas de ${ddmm(ui.vendData)}`));
     return;
   }
   tiposArea("doces").forEach((t) => {
@@ -1922,15 +1931,20 @@ function tabelaCompra(area, linhas, periodoNome) {
 }
 function viewProjecao(area) {
   if (area === "pacoca") {
-    const s = db.pacocaSim, vendas = (+s.porDia || 0) * (+s.dias || 0);
-    const linhas = db.estoque.pacocaItens.filter((i) => +i.consumo > 0).map((i) => linhaCompra({ ref: "pac:" + i.id, nome: i.nome, unid: i.unid, qtd: i.consumo * vendas }, +s.dias || 1));
+    const s = db.pacocaSim, vendas = (+s.porDia || 0) * (+s.dias || 0), porPacote = +s.porPacote || 1;
+    const linhas = db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).map((i) => linhaCompra({ ref: "pac:" + i.id, nome: i.nome, unid: i.unid, qtd: consumoPacote(i) * vendas }, +s.dias || 1));
     const total = sum(linhas, (l) => l.custo), faltando = linhas.filter((l) => l.falta > 0).length;
     return `<div class="grid g-21">
       <div class="card"><div class="card-head"><div><h3>Previsão de vendas</h3><div class="sub">Os mesmos números do Simulador do mês da paçoca</div></div></div>
-        <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Paçocas vendidas por dia</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="porDia" value="${s.porDia}" /></div>
-        <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>Dias de venda no período</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="dias" value="${s.dias}" /></div>
+        <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Pacotes vendidos por dia</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="porDia" value="${s.porDia}" /></div>
+        <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Paçoquitas por pacote</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="porPacote" value="${porPacote}" /></div>
+        <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>Dias de venda no mês</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="dias" value="${s.dias}" /></div>
+        <ul class="recipe-ings mt">
+          <li><span>Por dia</span><span>${int(s.porDia)} pacotes</span><span>${int(s.porDia * porPacote)} paçoquitas</span></li>
+          <li><span><b>No mês (${int(s.dias)} dias)</b></span><span><b>${int(vendas)} pacotes</b></span><span><b>${int(vendas * porPacote)} paçoquitas</b></span></li>
+        </ul>
       </div>
-      <div class="card"><div class="big-result"><small>Compra necessária no período</small><div>${brl(total)}</div><small>${int(vendas)} paçocas · ${faltando} item(ns) em falta</small></div></div>
+      <div class="card"><div class="big-result"><small>Compra necessária no mês</small><div>${brl(total)}</div><small>${int(vendas)} pacotes · ${int(vendas * porPacote)} paçoquitas · ${faltando} item(ns) em falta</small></div></div>
     </div>
     <div class="card mt"><div class="card-head"><div><h3>Projeção de compra</h3><div class="sub">"Em estoque" é o saldo da tela Estoque — alterar aqui registra uma contagem. "Estoque cobre" = dias de venda que o estoque atual aguenta.</div></div></div>
       ${tabelaCompra("pacoca", linhas, "dias")}
@@ -2004,7 +2018,7 @@ function viewEstoque(area) {
     ${lista.map((i) => { const s = saldoDe(i.ref), st = situacaoEstoque(i.ref); return `<tr><td><b>${esc(i.nome)}</b><div class="hint">${brlU(i.custo)}/${esc(i.unid)}</div></td>
       <td class="num"><b class="${s.qtd < 0 ? "neg" : ""}">${fmtQtd(s.qtd)}</b> <span class="hint">${esc(i.unid)}</span><div class="show-m"><span class="badge b-${st.c}">${st.t}</span></div></td>
       <td class="num hide-m">${numIn("est-min", s.minimo, `data-ref="${i.ref}"`)}</td>
-      ${area === "pacoca" ? `<td class="num hide-m">${fmtQtd(i.item.consumo)} <span class="hint">${esc(i.unid)}</span></td>` : ""}
+      ${area === "pacoca" ? `<td class="num hide-m">${fmtQtd(consumoPacote(i.item))} <span class="hint">${esc(i.unid)}</span></td>` : ""}
       <td class="num hide-m">${brl(Math.max(0, s.qtd) * i.custo)}</td><td class="hide-m"><span class="badge b-${st.c}">${st.t}</span></td>
       <td class="num" style="white-space:nowrap">
         <button class="btn btn-sm" title="Entrada" data-act="est-mov" data-val="entrada" data-ref="${i.ref}">+<span class="hide-m"> Entrada</span></button>
