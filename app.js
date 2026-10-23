@@ -113,7 +113,8 @@ function buildSeed() {
     contasAutoV1: true,
     impostoPacV1: true,
     impGeraisV1: true,
-    impostosGerais: { dasPct: 4.5, dasDia: 20, fixos: [{ id: uid(), nome: "DARF", valor: 178.3, dia: 20 }, { id: uid(), nome: "Contabilidade", valor: 350, dia: 10 }] },
+    impostosGerais: { dasPct: 4.5, dasDia: 20, fixos: [{ id: uid(), nome: "DARF", valor: 178.3, dia: 20, mesSeguinte: true }, { id: uid(), nome: "Contabilidade", valor: 350, dia: 10 }] },
+    darfMesSeguinteV1: true,
     custosVar: [],
     estoque: {
       saldos: {},
@@ -195,6 +196,10 @@ function migrar(data) {
     data.fixos = (data.fixos || []).filter((f) => f !== contab);
     data.impostosGerais = data.impostosGerais || { dasPct: 4.5, dasDia: 20, fixos: [{ id: uid(), nome: "DARF", valor: 178.3, dia: 20 }, { id: uid(), nome: "Contabilidade", valor: +contab?.valor || 350, dia: 10 }] };
     data.impGeraisV1 = true;
+  }
+  if (!data.darfMesSeguinteV1) {
+    (data.impostosGerais?.fixos || []).forEach((f) => { if (/darf/i.test(f.nome) && !("mesSeguinte" in f)) f.mesSeguinte = true; });
+    data.darfMesSeguinteV1 = true;
   }
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
@@ -1599,13 +1604,14 @@ function viewDreGeral() {
       ${fixos.map((f) => `<div class="sim-row" style="grid-template-columns:1fr 110px 90px 34px">
         <input data-act="ig-nome" data-id="${f.id}" value="${esc(f.nome)}" style="text-align:left" />${numIn("ig-val", f.valor, `data-id="${f.id}"`)}
         <label class="hint" style="display:flex;gap:4px;align-items:center">dia ${numIn("ig-dia", +f.dia || 10, `data-id="${f.id}"`)}</label>
-        <button class="btn btn-ghost btn-sm btn-danger" data-act="ig-del" data-id="${f.id}">${icon("trash")}</button></div>`).join("")}
+        <button class="btn btn-ghost btn-sm btn-danger" data-act="ig-del" data-id="${f.id}">${icon("trash")}</button></div>
+        <label class="hint" style="display:flex;gap:6px;align-items:center;margin:-4px 0 8px"><input type="checkbox" data-act="ig-seguinte" data-id="${f.id}" ${f.mesSeguinte ? "checked" : ""} style="width:auto" /> Referente ao mês anterior (vence no mês seguinte)</label>`).join("")}
       <div class="recipe-total" style="padding-top:14px"><span>Fixos por mês</span><span>${brl(fixosGeraisTot())}</span></div>
       <div class="sim-row" style="grid-template-columns:1fr 190px${rateioPorFaturamento() ? "" : " 90px"};border:0"><span>Divisão dos fixos entre as áreas</span>
         <select class="inline" data-act="ig-modo"><option value="fixo" ${rateioPorFaturamento() ? "" : "selected"}>Percentual fixo</option><option value="faturamento" ${rateioPorFaturamento() ? "selected" : ""}>Pelo faturamento do mês</option></select>
         ${rateioPorFaturamento() ? "" : `<label class="hint" style="display:flex;gap:4px;align-items:center">doces ${numIn("ig-pctdoces", pctFixosDoces())}%</label>`}</div>
       ${rateioPorFaturamento() ? "" : `<div class="hint">Paçoca fica com ${fmtQtd(100 - pctFixosDoces())}%.</div>`}
-      <div class="hint" style="margin-top:8px">O DAS do mês vence no dia escolhido do mês seguinte; os fixos vencem no dia escolhido do próprio mês.</div>
+      <div class="hint" style="margin-top:8px">O DAS de cada mês vence no dia escolhido do mês seguinte (ex.: outubro vence em 20/11). Os fixos marcados como "referente ao mês anterior" também; os demais vencem no próprio mês.</div>
     </div>
     <div class="card"><div class="card-head"><div><h3>Impostos dentro do preço</h3><div class="sub">"Derretidos" no custo de cada produto e de cada pacote de paçoca</div></div></div>
       ${["doces", "pacoca"].map((a) => `<div class="vend-sec">${a === "doces" ? "Doces finos" : "Paçoca"}</div>
@@ -2187,7 +2193,7 @@ function viewPagamentos(area) {
     ? `<label class="hint" style="display:flex;align-items:center;gap:6px">Contas automáticas desde <input type="date" class="inline" data-act="pg-auto-desde" value="${contasAutoDesde()}" /></label>`
     : area === "pacoca" ? `<button class="btn btn-sm" data-act="pg-fiado">Gerar a receber da paçoca não recebida</button>` : "";
   const avisoAuto = ui.pgTipo === "pagar" ? `<div class="alert green" style="margin-bottom:14px">${icon("check")}<div><b>Contas geradas automaticamente a partir dos custos</b>
-    <span>${area === "pacoca" ? "Cada dia de venda da paçoca gera mão de obra, gasolina e insumos" : "Cada lançamento de vendas dos doces gera mão de obra (pelas caixas vendidas), gasolina, insumos e comissões"}, com vencimento no dia seguinte.
+    <span>Mão de obra, gasolina, insumos, NF-e e comissões de doces e paçoca ficam acumulados num pagamento único por mês, com vencimento no último dia do mês (o valor cresce a cada venda lançada). DAS e DARF são do mês anterior: os de outubro vencem em 20/11.
     As despesas fixas (contabilidade, INSS, NF-e, pró-labore...) vencem todo dia 10 — valores no DRE. Editar uma conta automática trava o valor; excluir faz ela não voltar.</span></div></div>` : "";
   const cats = [...new Set(noMes.map((p) => p.categoria))].sort((a, b) => CATS_PAG[ui.pgTipo].indexOf(a) - CATS_PAG[ui.pgTipo].indexOf(b));
   const porCategoria = cats.length ? `<div class="card mt"><div class="card-head"><div><h3>Por categoria</h3><div class="sub">${ui.pgMes ? MESES_FULL[ui.pgMes - 1] : "Todos os vencimentos"}</div></div></div>
@@ -2231,31 +2237,46 @@ const addDias = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d
 const contasAutoDesde = () => db.config.contasAutoDesde || `${hojeISO().slice(0, 7)}-01`;
 function contasAutomaticas() {
   const desde = contasAutoDesde(), ano = db.config.ano, out = [];
-  const push = (base, area, categoria, descricao, valor, vencimento) => { if (valor > 0.004) out.push({ base, area, categoria, descricao, valor: round2(valor), vencimento }); };
+  const push = (base, area, categoria, descricao, valor, vencimento, legado) => { if (valor > 0.004) out.push({ base, area, categoria, descricao, valor: round2(valor), vencimento, legado }); };
+  const diaVenc = (a, mes1a12, dia) => `${a}-${String(mes1a12).padStart(2, "0")}-${String(Math.min(new Date(a, mes1a12, 0).getDate(), Math.max(1, Math.round(+dia) || 10))).padStart(2, "0")}`;
+  const mesSeguinte = (m, dia) => (m === 12 ? diaVenc(ano + 1, 1, dia) : diaVenc(ano, m + 1, dia));
+  // Custos dos lançamentos acumulados por tipo e mês (doces + paçoca), num pagamento único no último dia do mês.
+  // "legado" = contas diárias/semanais antigas daquele mês: o que já foi pago nelas é descontado do total.
+  const mensal = {};
+  const acumula = (cat, area, m, valor, legado) => {
+    const k = `${cat}|${m}`;
+    mensal[k] = mensal[k] || { cat, m, partes: { doces: 0, pacoca: 0 }, legado: [] };
+    mensal[k].partes[area] += +valor || 0; mensal[k].legado.push(legado);
+  };
   db.pacoca.filter((p) => p.data >= desde).forEach((p) => {
-    const venc = addDias(p.data, 1), dia = ddmm(p.data), q = int(p.qtd);
-    push(`pac:${p.id}:mo`, "pacoca", "Mão de obra", `Mão de obra paçoca · ${dia} (${q} pacotes)`, +p.maoObra || 0, venc);
-    push(`pac:${p.id}:gas`, "pacoca", "Gasolina", `Gasolina paçoca · ${dia}`, +p.gasolina || 0, venc);
-    push(`pac:${p.id}:ins`, "pacoca", "Insumos", `Insumos paçoca · ${dia} (${q} pacotes)`, insumosReg(p), venc);
-    push(`pac:${p.id}:nfe`, "pacoca", "Notas fiscais (NF-e)", `Imposto NF-e paçoquita · ${dia} (${q} pacotes)`, impostoReg(p), venc);
+    const m = monthOf(p.data);
+    acumula("Mão de obra", "pacoca", m, p.maoObra, `pac:${p.id}:mo`);
+    acumula("Gasolina", "pacoca", m, p.gasolina, `pac:${p.id}:gas`);
+    acumula("Insumos", "pacoca", m, insumosReg(p), `pac:${p.id}:ins`);
+    acumula("Notas fiscais (NF-e)", "pacoca", m, impostoReg(p), `pac:${p.id}:nfe`);
   });
-  db.vendas.filter((w) => w.fim >= desde).forEach((w) => {
-    const venc = addDias(w.fim, 1), per = `${ddmm(w.inicio)} a ${ddmm(w.fim)}`, canal = w.canal === "Outbound" ? "" : ` · ${w.canal}`;
-    const doces = (+w.cxP || 0) * unidadesCaixa("P") + (+w.cxG || 0) * unidadesCaixa("G");
-    push(`doc:${w.id}:mo`, "doces", "Mão de obra", `Mão de obra doces · ${per}${canal} (${int(doces)} doces)`, doces * paramVal("maoObraDoce"), venc);
-    push(`doc:${w.id}:gas`, "doces", "Gasolina", `Gasolina doces · ${per}${canal}`, +w.gasolina || 0, venc);
-    push(`doc:${w.id}:ins`, "doces", "Insumos", `Insumos doces · ${per}${canal}`, +w.insumos || 0, venc);
-    push(`doc:${w.id}:com`, "doces", "Comissão", `Comissões / vendedor · ${per}${canal}`, +w.comissoes || 0, venc);
+  db.vendas.filter((w) => w.inicio >= desde).forEach((w) => {
+    const m = monthOf(w.inicio), doces = (+w.cxP || 0) * unidadesCaixa("P") + (+w.cxG || 0) * unidadesCaixa("G");
+    acumula("Mão de obra", "doces", m, doces * paramVal("maoObraDoce"), `doc:${w.id}:mo`);
+    acumula("Gasolina", "doces", m, w.gasolina, `doc:${w.id}:gas`);
+    acumula("Insumos", "doces", m, w.insumos, `doc:${w.id}:ins`);
+    acumula("Comissão", "doces", m, w.comissoes, `doc:${w.id}:com`);
+  });
+  const nomeCat = { "Notas fiscais (NF-e)": "Imposto NF-e da paçoquita", Comissão: "Comissões / vendedor" };
+  Object.values(mensal).forEach(({ cat, m, partes, legado }) => {
+    const ambos = partes.doces > 0.004 && partes.pacoca > 0.004;
+    const detalhe = ambos ? ` (doces ${brl(partes.doces)} + paçoca ${brl(partes.pacoca)})` : partes.doces > 0.004 ? " · doces" : " · paçoca";
+    push(`mes:${cat}:${m}`, ambos ? "geral" : partes.doces > 0.004 ? "doces" : "pacoca", cat, `${nomeCat[cat] || cat} · ${MESES_FULL[m - 1]}${detalhe}`, partes.doces + partes.pacoca, diaVenc(ano, m, 31), legado);
   });
   const m0 = monthOf(desde), m1 = Math.max(mesAtual(), m0);
   for (let m = m0; m <= m1; m++) {
-    const mm = String(m).padStart(2, "0"), mes = MESES_FULL[m - 1], venc = `${ano}-${mm}-10`;
+    const mes = MESES_FULL[m - 1], venc = diaVenc(ano, m, 10);
     db.fixos.forEach((f) => push(`fixo:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, venc));
     db.fixosPacoca.forEach((f) => push(`fixopac:${f.id}:${m}`, "pacoca", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, venc));
-    const diaVenc = (a, mes1a12, dia) => `${a}-${String(mes1a12).padStart(2, "0")}-${String(Math.min(new Date(a, mes1a12, 0).getDate(), Math.max(1, Math.round(+dia) || 10))).padStart(2, "0")}`;
-    (impGerais().fixos || []).forEach((f) => push(`imp:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, diaVenc(ano, m, f.dia)));
+    // Impostos do mês anterior (DARF, DAS) vencem no mês seguinte ao de competência
+    (impGerais().fixos || []).forEach((f) => push(`imp:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · referente a ${mes}`, +f.valor || 0, f.mesSeguinte ? mesSeguinte(m, f.dia) : diaVenc(ano, m, f.dia)));
     const fat = resumo(m).receita;
-    push(`das:${m}`, "geral", "Impostos", `DAS ${pct(dasPct())} · faturamento de ${mes} (${brl(fat)})`, (fat * dasPct()) / 100, m === 12 ? diaVenc(ano + 1, 1, impGerais().dasDia || 20) : diaVenc(ano, m + 1, impGerais().dasDia || 20));
+    push(`das:${m}`, "geral", "Impostos", `DAS ${pct(dasPct())} · referente a ${mes} (faturamento ${brl(fat)})`, (fat * dasPct()) / 100, mesSeguinte(m, impGerais().dasDia || 20));
   }
   return out;
 }
@@ -2268,7 +2289,9 @@ function sincronizarContasAuto() {
     if (ignoradas.has(a.base)) return;
     const itens = db.pagamentos.filter((p) => p.auto === a.base);
     if (itens.some((p) => p.travado)) return;
-    const pago = sum(itens.filter((p) => p.pago), (p) => +p.valor || 0), aberto = itens.find((p) => !p.pago);
+    const legado = new Set(a.legado || []);
+    const pagoLegado = legado.size ? sum(db.pagamentos.filter((p) => p.pago && legado.has(p.auto)), (p) => +p.valor || 0) : 0;
+    const pago = sum(itens.filter((p) => p.pago), (p) => +p.valor || 0) + pagoLegado, aberto = itens.find((p) => !p.pago);
     const falta = round2(a.valor - pago), desc = a.descricao + (pago > 0 ? " (complemento)" : "");
     if (falta > 0.004) {
       if (aberto) Object.assign(aberto, { valor: falta, descricao: desc, vencimento: a.vencimento, categoria: a.categoria, area: a.area });
@@ -3040,6 +3063,7 @@ function onChange(e) {
   if (act === "set-dremespac") { ui.dreMesPac = +el.value; render(); }
   if (act === "set-pgmes") { ui.pgMes = +el.value; render(); }
   if (act === "set-dremesger") { ui.dreMesGer = +el.value; render(); }
+  if (act === "ig-seguinte") { const it = (impGerais().fixos || []).find((x) => x.id === el.dataset.id); if (it) { it.mesSeguinte = el.checked; save(); render(); } }
   if (act === "ig-modo") { impGerais().rateioModo = el.value; save(); render(); }
   if (act === "ig-pctdoces") { impGerais().rateioDoces = Math.min(100, Math.max(0, parseNum(el.value))); save(); render(); }
   if (act === "ig-das" || act === "ig-dasdia") { impGerais()[act === "ig-das" ? "dasPct" : "dasDia"] = parseNum(el.value); save(); render(); }
