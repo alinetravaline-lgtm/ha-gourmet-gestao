@@ -159,6 +159,7 @@ function migrar(data) {
   (data.pagamentos || []).forEach((p) => { if (p.categoria === "Fornecedor / insumos") p.categoria = "Insumos"; });
   // Paçoca vendida em pacotes: a paçoquita passa a ser contada em unidades (6 por pacote)
   if (data.pacocaSim && !("porPacote" in data.pacocaSim)) data.pacocaSim.porPacote = 6;
+  if (data.pacocaSim && +data.pacocaSim.naoRecPct === 16.7) data.pacocaSim.naoRecPct = 20;
   (data.estoque?.pacocaItens || []).forEach((i) => {
     if (i.nome === "Paçoquita" && !("usaPacote" in i)) { i.usaPacote = true; if (+i.custo === 1.07) i.custo = 0.1783; }
   });
@@ -207,6 +208,9 @@ const lucroVenda = (v) => recVenda(v) - custoVenda(v);
 const custoInsumosPacote = () => sum(db.estoque?.pacocaItens || [], (i) => consumoPacote(i) * (+i.custo || 0));
 const custoUnitPacoca = () => custoInsumosPacote() + sum(db.pacocaCusto, (c) => +c.valor || 0);
 const areaCV = (c) => c.area || "doces";
+// Pix confiança: parte do valor entregue não é paga; a margem da paçoca já desconta esse percentual
+const naoRecPctPacoca = () => +db.pacocaSim?.naoRecPct || 0;
+const lucroPacoca = (preco, pacotes = 1) => preco * (1 - naoRecPctPacoca() / 100) - custoUnitPacoca() * pacotes;
 const recPac = (p) => (+p.pix || 0) + (+p.especie || 0);
 const custoPac = (p) => (+p.insumos || 0) + (+p.gasolina || 0) + (+p.maoObra || 0);
 const lucroPac = (p) => recPac(p) - custoPac(p);
@@ -755,7 +759,7 @@ function viewPacoca() {
     ${kpi("Pacotes vendidos", int(qtd), `${lista.length} dia(s) de venda · média ${int(lista.length ? qtd / lista.length : 0)}/dia`, "cart")}
     ${kpi("Recebido", brl(rec), `Esperado: ${brl(esp)}`, "money")}
     ${kpi("Lucro", brl(luc), rec ? `Margem de ${pct((luc / rec) * 100)}` : "", "wallet", luc >= 0 ? "pos" : "neg")}
-    ${kpi("Não recebido", brl(nr), `<span class="badge ${taxa > 20 ? "b-red" : taxa > 10 ? "b-yellow" : "b-green"}">${pct(taxa)} do esperado</span>`, "alert", nr > 0 ? "neg" : "")}
+    ${kpi("Não recebido", brl(nr), `<span class="badge ${taxa > naoRecPctPacoca() ? "b-red" : "b-green"}">${pct(taxa)} do esperado · previsão ${pct(naoRecPctPacoca())}</span>`, "alert", nr > 0 ? "neg" : "")}
   </div>
   <div class="card mt"><div class="card-head"><div><h3>Vendas por dia</h3><div class="sub">Recebido x lucro de cada dia</div></div></div>
     ${lista.length ? '<div class="chart-box sm"><canvas id="chPac"></canvas></div>' : '<div class="empty">Sem registros</div>'}</div>
@@ -1239,8 +1243,9 @@ function viewPacPainel() {
   const melhor = [...lista].sort((a, b) => lucroPac(b) - lucroPac(a))[0];
   const cu = custoUnitPacoca();
   const al = [];
-  if (taxa > 10) al.push({ tipo: taxa > 20 ? "red" : "yellow", t: `${brl(nr)} não recebidos (${pct(taxa)} do esperado)`, d: "Diferença entre pacotes vendidos × preço e o que entrou no caixa (no-show / fiado)." });
-  else al.push({ tipo: "green", t: "Recebimentos em dia", d: `Apenas ${pct(taxa)} do valor esperado ficou sem receber.` });
+  const meta = naoRecPctPacoca();
+  if (taxa > meta) al.push({ tipo: "red", t: `${brl(nr)} não recebidos (${pct(taxa)} do esperado)`, d: `Acima da previsão de ${pct(meta)} de não recebimento (pix confiança). Diferença entre pacotes entregues × preço e o que entrou no caixa.` });
+  else al.push({ tipo: "green", t: `Não recebido em ${pct(taxa)} — dentro da previsão de ${pct(meta)}`, d: `${brl(nr)} entregues e ainda não pagos (pix confiança).` });
   if (db.config.precoPacoca && cu / db.config.precoPacoca > 0.3) al.push({ tipo: "yellow", t: `Custo por paçoca em ${brl(cu)}`, d: `Representa ${pct((cu / db.config.precoPacoca) * 100)} do preço de venda.` });
   const estP = alertasEstoque("pacoca");
   if (estP.length) al.push({ tipo: "yellow", t: `Estoque baixo: ${estP.map((i) => i.nome).join(", ")}`, d: "Abaixo do mínimo definido na tela Estoque." });
@@ -1250,7 +1255,7 @@ function viewPacPainel() {
     ${kpi("Pacotes vendidos", int(qtd), `${lista.length} dia(s) de venda · média ${int(lista.length ? qtd / lista.length : 0)}/dia`, "cart")}
     ${kpi("Recebido", brl(rec), `Esperado: ${brl(esp)}`, "money")}
     ${kpi("Lucro", brl(luc), rec ? `Margem de ${pct((luc / rec) * 100)}` : "", "wallet", luc >= 0 ? "pos" : "neg")}
-    ${kpi("Não recebido", brl(nr), `<span class="badge ${taxa > 20 ? "b-red" : taxa > 10 ? "b-yellow" : "b-green"}">${pct(taxa)} do esperado</span>`, "alert", nr > 0 ? "neg" : "")}
+    ${kpi("Não recebido", brl(nr), `<span class="badge ${taxa > naoRecPctPacoca() ? "b-red" : "b-green"}">${pct(taxa)} do esperado · previsão ${pct(naoRecPctPacoca())}</span>`, "alert", nr > 0 ? "neg" : "")}
   </div>
   <div class="grid g-21 mt">
     <div class="card"><div class="card-head"><div><h3>Evolução mensal</h3><div class="sub">Recebido, lucro e não recebido por mês</div></div></div><div class="chart-box"><canvas id="chPacMes"></canvas></div></div>
@@ -1417,7 +1422,7 @@ function viewPacCustos() {
     <div class="card"><div class="card-head"><div><h3>Simulador do mês</h3><div class="sub">Quanto a paçoca pode render no mês</div></div></div>
       <div class="sim-row" style="grid-template-columns:1fr 120px"><span>Pacotes vendidos por dia</span><input inputmode="numeric" data-act="pac-sim" data-key="porDia" value="${s.porDia}" /></div>
       <div class="sim-row" style="grid-template-columns:1fr 120px"><span>Dias de venda no mês</span><input inputmode="numeric" data-act="pac-sim" data-key="dias" value="${s.dias}" /></div>
-      <div class="sim-row" style="grid-template-columns:1fr 120px"><span>% não recebido <span class="hint">(histórico: ${pct(histNr)})</span></span><input inputmode="decimal" data-act="pac-sim" data-key="naoRecPct" value="${String(s.naoRecPct).replace(".", ",")}" /></div>
+      <div class="sim-row" style="grid-template-columns:1fr 120px"><span>% não recebido · pix confiança <span class="hint">(histórico: ${pct(histNr)})</span></span><input inputmode="decimal" data-act="pac-sim" data-key="naoRecPct" value="${String(s.naoRecPct).replace(".", ",")}" /></div>
       <div class="sim-row" style="grid-template-columns:1fr 120px;border:0"><span>Gasolina por dia (R$)</span><input inputmode="decimal" data-act="pac-sim" data-key="gasolinaDia" value="${String(s.gasolinaDia).replace(".", ",")}" /></div>
       <div id="pacSim" class="mt">${pacSimHtml()}</div>
     </div>
@@ -1429,13 +1434,14 @@ function viewPacCustos() {
   </div>`;
 }
 function pacUnitHtml() {
-  const cu = custoUnitPacoca(), preco = db.config.precoPacoca;
-  const m = preco ? ((preco - cu) / preco) * 100 : 0;
-  return `<div class="prod-stats mt">
-    <div class="stat"><small>Custo total</small><strong>${brl(cu)}</strong></div>
-    <div class="stat"><small>Lucro / pacote</small><strong class="${preco - cu >= 0 ? "pos" : "neg"}">${brl(preco - cu)}</strong></div>
-    <div class="stat"><small>Margem</small><strong class="pos">${pct(m)}</strong></div></div>
-    <div class="hint" style="margin-top:8px">Preço de venda atual: ${brl(preco)} (altere no canto superior direito).</div>`;
+  const cu = custoUnitPacoca(), preco = +db.config.precoPacoca || 0, nr = naoRecPctPacoca();
+  const lucro = lucroPacoca(preco), m = preco ? (lucro / preco) * 100 : 0;
+  return `<div class="prod-stats mt" style="grid-template-columns:repeat(4,1fr)">
+    <div class="stat"><small>Custo</small><strong>${brl(cu)}</strong></div>
+    <div class="stat"><small>Não recebido (${pct(nr)})</small><strong class="neg">${brl((preco * nr) / 100)}</strong></div>
+    <div class="stat"><small>Lucro / pacote</small><strong class="${lucro >= 0 ? "pos" : "neg"}">${brl(lucro)}</strong></div>
+    <div class="stat"><small>Margem</small><strong class="${m >= 0 ? "pos" : "neg"}">${pct(m)}</strong></div></div>
+    <div class="hint" style="margin-top:8px">Preço ${brl(preco)} − ${pct(nr)} de não recebimento (pix confiança) − custo ${brl(cu)}. O % é ajustado no Simulador do mês (Personalizar custos).</div>`;
 }
 const compraFields = [
   { key: "nome", label: "Item", required: true, full: true },
@@ -1494,6 +1500,7 @@ function novoRegistro(area, dados) {
 
 function viewVendedor(area) {
   if (!ui.vendData || APP_VENDEDOR) ui.vendData = hojeISO();
+  if (area === "pacoca") return viewVendedorPacoca();
   const regs = registrosDia(area);
   const pend = regs.filter((r) => !r.lancado);
   const meus = regs.filter((r) => r.device === Sync.client);
@@ -1592,6 +1599,92 @@ function viewVendedor(area) {
     </div>
   </details>`}`;
 }
+// Paçoca é pix confiança: o vendedor entrega o pacote e o pagamento vem depois.
+// Entregas geram o valor esperado; pagamentos (Pix/Dinheiro) são registrados à parte. Não recebido = esperado − recebido.
+const ehEntrega = (r) => r.tipo !== "receb" && +(r.itens?.U || 0) > 0;
+const ehRecebimento = (r) => !!r.pag && (r.tipo === "receb" || ehEntrega(r));
+function resumoPacocaDia(regs) {
+  const entregas = regs.filter(ehEntrega), recs = regs.filter(ehRecebimento);
+  const pacotes = sum(entregas, (r) => +r.itens.U || 0), esperado = sum(entregas, (r) => +r.valor || 0);
+  const pix = sum(recs.filter((r) => r.pag === "pix"), (r) => +r.valor || 0), dinheiro = sum(recs.filter((r) => r.pag === "especie"), (r) => +r.valor || 0);
+  const recebido = pix + dinheiro, falta = esperado - recebido;
+  return { pacotes, esperado, pix, dinheiro, recebido, falta, pctFalta: esperado ? (falta / esperado) * 100 : 0 };
+}
+function viewVendedorPacoca() {
+  const area = "pacoca", regs = registrosDia(area), pend = regs.filter((r) => !r.lancado);
+  const meus = regs.filter((r) => r.device === Sync.client), pag = getPag(area) === "cartao" ? "pix" : getPag(area);
+  const preco = precoNormal(area, "U"), meta = naoRecPctPacoca(), t = tiposArea(area)[0];
+  const d = resumoPacocaDia(regs), m = resumoPacocaDia(meus);
+  const porVendedor = {};
+  regs.forEach((r) => { const v = r.vendedor || "Gestão"; porVendedor[v] = porVendedor[v] || []; porVendedor[v].push(r); });
+  if (APP_VENDEDOR) {
+    setActions(`<div class="tabs">${Object.entries(AREAS).map(([k, a]) => `<button class="${k === area ? "active" : ""}" data-act="vend-area" data-val="${k}">${a.nome}</button>`).join("")}</div>
+      <button class="btn btn-sm" data-act="vend-nome">${icon("edit")}${esc(nomeVendedor() || "Seu nome")}</button>`);
+    if (!nomeVendedor()) return `<div class="card" style="max-width:460px;margin:20px auto;text-align:center">
+      <h3 style="margin-top:0">Bem-vindo(a)!</h3><p class="hint">Digite seu nome para identificar suas vendas.</p>
+      <input id="nomeVendedorInput" placeholder="Seu nome" style="text-align:center;font-size:16px" />
+      <button class="btn btn-primary mt" style="width:100%;justify-content:center" data-act="vend-nome-salvar">Começar a vender</button></div>`;
+  } else {
+    setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Dia <input type="date" class="inline" data-act="vend-data" value="${ui.vendData}" /></label>
+      ${pend.length ? `<span class="badge b-yellow">${pend.length} registro(s) não lançado(s)</span>` : ""}`);
+  }
+  const statusFalta = d.pctFalta > meta ? "red" : "green";
+  return `
+  <div class="card">
+    <div class="card-head"><div><h3>1. Entregar pacotes</h3><div class="sub">Pix confiança: registre cada pacote entregue — o pagamento é registrado depois, no passo 2</div></div></div>
+    <div class="combo-grid">
+      <button class="combo-btn normal" data-act="vend-normal" data-val="U"><span class="combo-nome">Entregar 1 pacote</span><span class="combo-preco">${brl(preco)}</span><span class="combo-desc">${esc(t?.desc || "")}</span></button>
+      ${db.vendedor.combos[area].map((c) => `<button class="combo-btn" data-act="vend-combo" data-id="${c.id}"><span class="promo-tag">PROMO</span><span class="combo-nome">${esc(c.nome)}</span><span class="combo-preco">${brl(c.preco)}</span><span class="combo-desc">${esc(descItens(area, c.itens))}</span></button>`).join("")}
+    </div>
+    <div class="sim-row mt" style="grid-template-columns:1fr 90px 150px;border:0"><span>Entregar vários de uma vez</span>
+      <input id="pacQtdLote" class="tbl-input" style="width:100%" inputmode="numeric" placeholder="qtd" />
+      <button class="btn btn-sm btn-primary" data-act="pac-entregar-lote">Entregar pacotes</button></div>
+
+    <div class="card-head" style="margin-top:22px"><div><h3>2. Registrar pagamento recebido</h3><div class="sub">Quando o cliente pagar (no dia ou depois), registre aqui</div></div></div>
+    <div class="pag-row">${["pix", "especie"].map((k) => `<button class="pag-btn ${pag === k ? "active" : ""}" data-act="vend-pag" data-val="${k}">${PAGS[k]}</button>`).join("")}</div>
+    <div class="chip-row mt">${[1, 2, 3, 5].map((n) => `<button class="btn" data-act="pac-receber" data-val="${preco * n}">+ ${brl(preco * n)}</button>`).join("")}</div>
+    <div class="sim-row mt" style="grid-template-columns:1fr 110px 150px;border:0"><span>Outro valor</span>
+      <input id="pacRecValor" class="tbl-input" style="width:100%" inputmode="decimal" placeholder="R$" />
+      <button class="btn btn-sm btn-primary" data-act="pac-receber">Registrar em ${PAGS[pag]}</button></div>
+  </div>
+
+  <div class="grid g-2 mt">
+    <div class="card"><div class="card-head"><div><h3>${APP_VENDEDOR ? "Hoje" : "Resumo do dia"}</h3><div class="sub">${ddmm(ui.vendData)} · todos os vendedores</div></div></div>
+      <div class="grid g-2" style="gap:10px">
+        <div class="stat"><small>Pacotes entregues</small><strong>${int(d.pacotes)}</strong><div class="hint">esperado ${brl(d.esperado)}</div></div>
+        <div class="stat"><small>Recebido</small><strong class="pos">${brl(d.recebido)}</strong><div class="hint">Pix ${brl(d.pix)} · Dinheiro ${brl(d.dinheiro)}</div></div>
+        <div class="stat"><small>Não recebido</small><strong class="${d.falta > 0 ? "neg" : "pos"}">${brl(d.falta)}</strong><div class="hint"><span class="badge b-${statusFalta}">${pct(d.pctFalta)}</span> previsão ${pct(meta)}</div></div>
+        ${APP_VENDEDOR
+          ? `<div class="stat"><small>Meus números</small><strong>${int(m.pacotes)} pacotes</strong><div class="hint">recebi ${brl(m.recebido)} · faltam ${brl(m.falta)}</div></div>`
+          : `<div class="stat"><small>Lucro estimado</small><strong class="${d.recebido - d.pacotes * custoUnitPacoca() >= 0 ? "pos" : "neg"}">${brl(d.recebido - d.pacotes * custoUnitPacoca())}</strong><div class="hint">recebido − custo dos pacotes</div></div>`}
+      </div>
+      ${Object.keys(porVendedor).length ? `<div class="vend-sec">Por vendedor</div><ul class="recipe-ings">${Object.entries(porVendedor).map(([v, l]) => { const x = resumoPacocaDia(l); return `<li><span>${esc(v)}</span><span>${int(x.pacotes)} pacotes · recebeu ${brl(x.recebido)}</span><span class="${x.falta > 0 ? "neg" : ""}">falta ${brl(x.falta)}</span></li>`; }).join("")}</ul>` : ""}
+      <div class="mt" style="display:flex;gap:10px;flex-wrap:wrap">
+        ${APP_VENDEDOR ? "" : `<button class="btn btn-primary" data-act="vend-lancar" ${pend.length ? "" : "disabled"}>Fechar o dia: lançar em Vendas diárias</button>`}
+        <button class="btn" data-act="vend-undo" ${meus.some((r) => !r.lancado) ? "" : "disabled"}>Desfazer meu último registro</button>
+      </div>
+      ${APP_VENDEDOR ? "" : `<div class="hint" style="margin-top:8px">Ao fechar o dia: pacotes entregues = Nº de vendas, Pix e Dinheiro recebidos, insumos, gasolina e mão de obra — o "não recebido" é calculado como na planilha.</div>`}
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Registros do dia</h3><div class="sub">Entregas e pagamentos · atualiza em tempo real</div></div></div>
+      ${regs.length ? `<div class="table-wrap"><table><thead><tr><th>Hora</th><th>Registro</th><th class="hide-m">Vendedor</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+      ${[...regs].reverse().map((r) => { const podeExcluir = !APP_VENDEDOR || (r.device === Sync.client && !r.lancado); const entrega = ehEntrega(r) && !r.pag;
+        return `<tr><td>${r.hora}</td><td>${entrega ? `<span class="badge b-gold">Entrega</span> ${int(r.itens.U)} pacote(s)` : r.tipo === "receb" ? `<span class="badge b-green">${PAGS[r.pag]}</span> pagamento` : `<span class="badge b-green">${PAGS[r.pag]}</span> ${esc(r.nome)}`}${r.lancado ? ' <span class="badge b-gray">lançado</span>' : ""}</td>
+        <td class="hide-m">${esc(r.vendedor || "Gestão")}</td><td class="num ${entrega ? "" : "pos"}">${entrega ? "" : "+"}${brl(r.valor)}</td>
+        <td>${podeExcluir ? `<button class="btn btn-ghost btn-sm btn-danger" data-act="vend-del" data-id="${r.id}">${icon("trash")}</button>` : ""}</td></tr>`; }).join("")}
+      </tbody></table></div>` : '<div class="empty">Nenhum registro neste dia.</div>'}
+    </div>
+  </div>
+  ${APP_VENDEDOR ? `<div class="hint" style="text-align:center;margin-top:24px"><a class="link" data-act="vend-sair">Entrar no modo gestão</a></div>` : `
+  <details class="card mt comp-config">
+    <summary><b>Configurar preço e promoções</b> <span class="hint">· lucro já descontando ${pct(meta)} de não recebimento</span></summary>
+    <div class="table-wrap mt"><table><thead><tr><th>Item</th><th>Leva</th><th class="num">Preço</th><th class="num">Custo</th><th class="num">Lucro esperado</th><th></th></tr></thead><tbody>
+      <tr><td><b>${esc(t?.nome || "Pacote")}</b> <span class="hint">preço normal</span></td><td>1 pacote</td><td class="num">${brl(preco)}</td><td class="num">${brl(custoUnitPacoca())}</td><td class="num ${lucroPacoca(preco) >= 0 ? "pos" : "neg"}">${brl(lucroPacoca(preco))}</td><td class="num"><a class="btn btn-sm" href="#pacoca-custos">Alterar preço</a></td></tr>
+      ${db.vendedor.combos[area].map((c) => { const q = +c.itens.U || 0; return `<tr><td><b>${esc(c.nome)}</b> <span class="badge b-red">promo</span></td><td>${int(q)} pacote(s)</td><td class="num">${brl(c.preco)}</td><td class="num">${brl(custoUnitPacoca() * q)}</td><td class="num ${lucroPacoca(c.preco, q) >= 0 ? "pos" : "neg"}">${brl(lucroPacoca(c.preco, q))}</td><td>${rowActions("combo", c.id)}</td></tr>`; }).join("")}
+    </tbody></table></div>
+    <button class="btn btn-sm btn-primary mt" data-act="new-combo">${icon("plus")}Nova promoção</button>
+  </details>`}`;
+}
+
 function formCombo(area, c) {
   const tipos = tiposArea(area);
   openForm({
@@ -2285,15 +2378,44 @@ function onClick(e) {
       return;
     case "vend-pag": setPag(areaAtual(), val); break;
     case "vend-combo": {
-      const area = areaAtual(), c = db.vendedor.combos[area].find((x) => x.id === id), pag = getPag(area);
+      const area = areaAtual(), c = db.vendedor.combos[area].find((x) => x.id === id);
+      // Paçoca é pix confiança: entrega agora (sem pagamento), o recebimento é registrado depois
+      if (area === "pacoca") {
+        novoRegistro(area, { tipo: "entrega", comboId: c.id, nome: `Promo ${c.nome}`, valor: c.preco, pag: null, itens: { ...c.itens } });
+        render(); toast(`Entregue: ${c.nome} · a receber ${brl(c.preco)}`);
+        return;
+      }
+      const pag = getPag(area);
       novoRegistro(area, { comboId: c.id, nome: `Promo ${c.nome}`, valor: c.preco, pag, itens: { ...c.itens } });
       render(); toast(`Promo ${c.nome} · ${brl(c.preco)} · ${PAGS[pag]}`);
       return;
     }
     case "vend-normal": {
-      const area = areaAtual(), t = tiposArea(area).find((x) => x.key === val), pag = getPag(area), preco = precoNormal(area, val);
+      const area = areaAtual(), t = tiposArea(area).find((x) => x.key === val), preco = precoNormal(area, val);
+      if (area === "pacoca") {
+        novoRegistro(area, { tipo: "entrega", comboId: null, nome: "Entrega", valor: preco, pag: null, itens: { [val]: 1 } });
+        render(); toast(`Entregue: 1 pacote · a receber ${brl(preco)}`);
+        return;
+      }
+      const pag = getPag(area);
       novoRegistro(area, { comboId: null, nome: t.nome, valor: preco, pag, itens: { [val]: 1 } });
       render(); toast(`${t.nome} · ${brl(preco)} · ${PAGS[pag]}`);
+      return;
+    }
+    case "pac-entregar-lote": {
+      const q = Math.round(parseNum($("#pacQtdLote").value));
+      if (!(q > 0)) { toast("Informe a quantidade de pacotes"); return; }
+      const preco = precoNormal("pacoca", "U");
+      novoRegistro("pacoca", { tipo: "entrega", comboId: null, nome: "Entrega", valor: preco * q, pag: null, itens: { U: q } });
+      render(); toast(`Entregues: ${q} pacotes · a receber ${brl(preco * q)}`);
+      return;
+    }
+    case "pac-receber": {
+      const valor = val ? +val : parseNum($("#pacRecValor").value);
+      if (!(valor > 0)) { toast("Informe o valor recebido"); return; }
+      const pag = getPag("pacoca") === "especie" ? "especie" : "pix";
+      novoRegistro("pacoca", { tipo: "receb", comboId: null, nome: "Pagamento recebido", valor, pag, itens: {} });
+      render(); toast(`Recebido ${brl(valor)} em ${PAGS[pag]}`);
       return;
     }
     case "vend-undo": {
@@ -2436,7 +2558,11 @@ function onInput(e) {
     if ($("#pacUnit")) $("#pacUnit").innerHTML = pacUnitHtml();
     if ($("#pacSim")) $("#pacSim").innerHTML = pacSimHtml();
   }
-  if (act === "pac-sim") { db.pacocaSim[el.dataset.key] = parseNum(el.value); save(); $("#pacSim").innerHTML = pacSimHtml(); }
+  if (act === "pac-sim") {
+    db.pacocaSim[el.dataset.key] = parseNum(el.value); save();
+    $("#pacSim").innerHTML = pacSimHtml();
+    if ($("#pacUnit")) $("#pacUnit").innerHTML = pacUnitHtml();
+  }
   if (act === "sim-qtd") { db.sim.qtd[el.dataset.id] = parseNum(el.value); save(); refreshSim(); }
   if (act === "sim-fixo") { db.sim.fixos[el.dataset.key] = parseNum(el.value); save(); refreshSim(); }
   if (act === "sim-semanas") { db.sim.semanas = parseNum(el.value); save(); refreshSim(); }

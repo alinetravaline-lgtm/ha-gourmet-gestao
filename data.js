@@ -253,7 +253,8 @@ const SEED = {
   ],
 
   // porDia = pacotes vendidos por dia; porPacote = paçoquitas em cada pacote
-  pacocaSim: { porDia: 80, porPacote: 6, dias: 26, naoRecPct: 16.7, gasolinaDia: 11.02 },
+  // naoRecPct = % do valor entregue que não é pago (pix confiança); entra na margem da paçoca
+  pacocaSim: { porDia: 80, porPacote: 6, dias: 26, naoRecPct: 20, gasolinaDia: 11.02 },
 
   // Docinhos que vão em cada caixa (sabor: quantidade). Define o custo da massa e a produção na projeção de compra.
   caixas: {
