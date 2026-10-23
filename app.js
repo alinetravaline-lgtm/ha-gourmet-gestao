@@ -99,6 +99,12 @@ function buildSeed() {
     pacocaCompra: s.pacocaCompra.map(([nome, qtd, valor]) => ({ id: uid(), nome, qtd, valor })),
     pacocaSim: s.pacocaSim,
     receitasVistas: true,
+    caixasVistas: true,
+    caixas: s.caixas,
+    fixosPacoca: [
+      { id: uid(), nome: "Pró-labore (paçoca)", valor: 0 },
+      { id: uid(), nome: "Marketing (paçoca)", valor: 0 },
+    ],
     projecao: { doces: { caixasFds: 80, pctG: 70, fds: 4, mix: {} } },
     pagamentos: [],
     custosVar: [],
@@ -139,6 +145,15 @@ function migrar(data) {
     linkReceitas(data.insumos).sabores.forEach((s) => { if (!data.sabores.some((x) => x.nome === s.nome)) data.sabores.push(s); });
     data.receitasVistas = true;
   }
+  // Composição das caixas: massa das caixas passa a vir dos docinhos de cada caixa
+  if (!data.caixasVistas && data.sabores?.[0]?.lote) {
+    data.sabores.forEach((s) => { if (["Café", "Beijinho"].includes(s.nome) && !+s.rend[3] && +s.rend[4] === 83) s.rend[3] = 71; });
+    (data.params || []).forEach((p) => {
+      if (p.key === "massaBol4" && p.fonte?.tipo === "receita") p.fonte = { tipo: "caixa", key: "P" };
+      if (p.key === "massaBol9" && p.fonte?.tipo === "receita") p.fonte = { tipo: "caixa", key: "G" };
+    });
+    data.caixasVistas = true;
+  }
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
   (data.pagamentos || []).forEach((p) => { if (p.categoria === "Fornecedor / insumos") p.categoria = "Insumos"; });
@@ -147,6 +162,8 @@ function migrar(data) {
   (data.estoque?.pacocaItens || []).forEach((i) => {
     if (i.nome === "Paçoquita" && !("usaPacote" in i)) { i.usaPacote = true; if (+i.custo === 1.07) i.custo = 0.1783; }
   });
+  const nomesItensPac = (data.estoque?.pacocaItens || []).map((i) => i.nome);
+  if (data.pacocaCusto && nomesItensPac.length) data.pacocaCusto = data.pacocaCusto.filter((c) => !nomesItensPac.includes(c.nome));
   (data.vendedor?.tipos?.pacoca || []).forEach((t) => { if (t.key === "U" && t.nome === "Paçoca") { t.nome = "Pacote de paçoca"; t.desc = "pacote c/ 6"; } });
   if (!data.sabores?.[0]?.lote || !data.barras?.[0]?.itens) Object.assign(data, linkReceitas(data.insumos));
   Object.entries(seed.canais).forEach(([k, c]) => { if (data.canais[k] && !data.canais[k].taxas) data.canais[k].taxas = c.taxas; });
@@ -180,13 +197,16 @@ const estadoSemRegistros = () => ({ ...db, vendedor: { ...db.vendedor, registros
 function save() { salvarLocal(); if (typeof Sync !== "undefined") Sync.saveEstado(estadoSemRegistros()); }
 let db = load();
 
-const ui = { mes: 0, vendasCanal: "Todos", vendasMes: 0, pacMes: null, prodCanal: "Outbound", insTab: "insumos", busca: "", recTab: "doces", sabor: 0, barra: 0, dreMes: 0, pgTipo: "pagar", pgStatus: "pendente", pgMes: 0, estTab: { doces: "prontos", pacoca: "itens" }, estSoAlerta: false };
+const ui = { mes: 0, vendasCanal: "Todos", vendasMes: 0, pacMes: null, prodCanal: "Outbound", insTab: "insumos", busca: "", recTab: "doces", sabor: 0, barra: 0, dreMes: 0, pgTipo: "pagar", pgStatus: "pendente", pgMes: 0, estTab: { doces: "prontos", pacoca: "itens" }, estSoAlerta: false, dreMesPac: 0 };
 
 /* ---------- Cálculos ---------- */
 const recVenda = (v) => (+v.cartao || 0) + (+v.pix || 0) + (+v.especie || 0);
 const custoVenda = (v) => (+v.insumos || 0) + (+v.gasolina || 0) + (+v.comissoes || 0) + (+v.perdas || 0) + (+v.outros || 0);
 const lucroVenda = (v) => recVenda(v) - custoVenda(v);
-const custoUnitPacoca = () => sum(db.pacocaCusto, (c) => +c.valor || 0);
+// Custo de um pacote = insumos da paçoca (uso por pacote × custo unitário) + outros custos por pacote (ex.: mão de obra)
+const custoInsumosPacote = () => sum(db.estoque?.pacocaItens || [], (i) => consumoPacote(i) * (+i.custo || 0));
+const custoUnitPacoca = () => custoInsumosPacote() + sum(db.pacocaCusto, (c) => +c.valor || 0);
+const areaCV = (c) => c.area || "doces";
 const recPac = (p) => (+p.pix || 0) + (+p.especie || 0);
 const custoPac = (p) => (+p.insumos || 0) + (+p.gasolina || 0) + (+p.maoObra || 0);
 const lucroPac = (p) => recPac(p) - custoPac(p);
@@ -211,7 +231,17 @@ const kitItemValor = (i) => (+i.qtd || 0) * materialUnit(i.material);
 const kitTotal = (nome) => { const k = db.embalagens.find((e) => e.nome === nome); return k ? sum(k.itens, kitItemValor) : 0; };
 const round2 = (v) => Math.round(v * 100) / 100;
 // Valor de um custo padrão a partir da tela de origem (arredondado ao centavo, como aparece nas fichas)
+// Composição das caixas (docinhos por sabor)
+const caixaDe = (key) => db.caixas?.[key] || { formato: "Bolinha", itens: {} };
+const unidadesCaixa = (key) => sum(Object.values(caixaDe(key).itens), (q) => +q || 0);
+function custoMassaCaixa(key) {
+  const c = caixaDe(key), j = db.formatos.findIndex((f) => f.nome === c.formato);
+  return sum(Object.entries(c.itens), ([nome, q]) => { const s = db.sabores.find((x) => x.nome === nome); return s && +q ? +q * custoSabor(s, j) : 0; });
+}
+const nomeCurto = (n) => n.replace(/^Mousse de /, "").replace(/^Brigadeiro de /, "");
+const composicaoTxt = (key) => Object.entries(caixaDe(key).itens).filter(([, q]) => +q).map(([n, q]) => (+q > 1 ? `${q}× ${nomeCurto(n)}` : nomeCurto(n))).join(", ");
 function valorFonte(f) {
+  if (f.tipo === "caixa") { const u = unidadesCaixa(f.key); return u ? round2(custoMassaCaixa(f.key) / u) : 0; }
   if (f.tipo === "variavel") { const v = db.variaveis.find((x) => x.nome === f.nome); return v && v.rend ? v.custo / v.rend : 0; }
   let vals = [];
   if (f.tipo === "receita") {
@@ -232,6 +262,7 @@ function paramVal(key) {
 }
 function descFonte(f) {
   if (!f) return "Valor digitado";
+  if (f.tipo === "caixa") return `Composição da ${tiposArea("doces").find((t) => t.key === f.key)?.nome || "caixa"} (média por doce)`;
   if (f.tipo === "variavel") return `Insumos › Custos variáveis: ${f.nome}`;
   if (f.tipo === "receita") return f.criterio === "sabor" ? `Ficha: ${f.sabor} (${f.formato.toLowerCase()})` : `Fichas: ${f.criterio === "media" ? "média" : "maior custo"} de ${f.formato.toLowerCase()}${f.ignorar?.length ? ` (sem ${f.ignorar.join(", ")})` : ""}`;
   if (f.tipo === "barra") return f.criterio === "barra" ? `Ficha: barra ${f.barra}` : `Fichas: ${f.criterio === "media" ? "média" : "maior custo"} das barras${f.linha ? ` ${f.linha === "gourmet" ? "gourmet" : "trufadas"}` : ""}`;
@@ -249,6 +280,7 @@ function fonteItem(it) {
   if (it.regra) return { tag: "regra", onde: "Fichas Técnicas (maior custo de massa)", href: "receitas" };
   if (it.param) {
     const f = db.params.find((x) => x.key === it.param)?.fonte;
+    if (f?.tipo === "caixa") return { tag: "caixa", onde: `${descFonte(f)}: ${composicaoTxt(f.key)}`, href: "receitas" };
     if (f?.tipo === "receita" || f?.tipo === "barra") return { tag: "ficha", onde: descFonte(f), href: "receitas" };
     if (f?.tipo === "variavel") return { tag: "insumo", onde: descFonte(f), href: "insumos" };
     return { tag: "padrão", onde: "Personalizar custos", href: "personalizar" };
@@ -276,7 +308,7 @@ function mesesComDados(area) {
   const set = new Set([
     ...(area === "pacoca" ? [] : db.vendas.map((v) => monthOf(v.inicio))),
     ...(area === "doces" ? [] : db.pacoca.map((p) => monthOf(p.data))),
-    ...(area === "pacoca" ? [] : db.custosVar.map((c) => +c.mes)),
+    ...db.custosVar.filter((c) => !area || areaCV(c) === area).map((c) => +c.mes),
   ]);
   return [...set].sort((a, b) => a - b);
 }
@@ -293,7 +325,7 @@ function resumo(m, area) {
   const comissoes = sum(vendas, (v) => +v.comissoes || 0) + sum(pac, (p) => +p.maoObra || 0);
   const perdas = sum(vendas, (v) => (+v.perdas || 0) + (+v.outros || 0));
   // Custos variáveis lançados no DRE (doces finos), pelo mês de referência
-  const cvs = area === "pacoca" ? [] : db.custosVar.filter((c) => !m || +c.mes === m);
+  const cvs = db.custosVar.filter((c) => (!m || +c.mes === m) && (!area || areaCV(c) === area));
   const custosVar = sum(cvs, (c) => +c.valor || 0);
   const custos = insumos + gasolina + comissoes + perdas + custosVar;
   const qtd = sum(vendas, (v) => +v.qtd || 0) + sum(pac, (p) => +p.qtd || 0);
@@ -403,7 +435,9 @@ const PAGES = [
   { id: "vendedor-pacoca", area: "pacoca", label: "Área do vendedor", icon: "cart", sub: "Contador rápido de vendas da paçoca", section: "Operação" },
   { id: "pacoca", area: "pacoca", label: "Vendas diárias", icon: "cal", sub: "Registro diário de vendas da paçoca" },
   { id: "estoque-pacoca", area: "pacoca", label: "Estoque", icon: "pkg", sub: "Saldo de paçoquitas e materiais, com baixa automática das vendas" },
-  { id: "pagamentos-pacoca", area: "pacoca", label: "Pagamentos", icon: "wallet", sub: "Contas a pagar e a receber: o que já foi pago e o que está pendente", section: "Financeiro" },
+  { id: "insumos-pacoca", area: "pacoca", label: "Insumos", icon: "pkg", sub: "Custo de compra dos insumos e ficha do pacote", section: "Cadastros" },
+  { id: "dre-pacoca", area: "pacoca", label: "DRE", icon: "pie", sub: "Demonstrativo de resultado da paçoca", section: "Financeiro" },
+  { id: "pagamentos-pacoca", area: "pacoca", label: "Pagamentos", icon: "wallet", sub: "Contas a pagar e a receber: o que já foi pago e o que está pendente" },
   { id: "pacoca-custos", area: "pacoca", label: "Personalizar custos", icon: "gear", sub: "Custo por paçoca, preço, compra mensal e simulador", section: "Configurações" },
   { id: "equipe-pacoca", area: "pacoca", label: "Equipe & App", icon: "cart", sub: "Sincronização entre celulares e app do vendedor" },
   { id: "painel", area: "doces", label: "Painel", icon: "dash", sub: "Visão geral dos doces finos", section: "Visão geral" },
@@ -428,6 +462,7 @@ function opcoesFonte(p) {
   const o = [["manual", "Valor digitado"]];
   if (/^massaB(ol)/.test(p.key) || /^massaCop/.test(p.key)) {
     const formato = /Cop/.test(p.key) ? "Copinho" : "Bolinha";
+    tiposArea("doces").forEach((t) => o.push([`caixa:${t.key}`, `Composição da ${t.nome} (${composicaoTxt(t.key)})`]));
     o.push([`max:${formato}`, `Fichas: maior custo de ${formato.toLowerCase()} (sem pistache)`], [`media:${formato}`, `Fichas: média de ${formato.toLowerCase()} (sem pistache)`]);
     db.sabores.forEach((s) => o.push([`sabor:${formato}:${s.nome}`, `Ficha: ${s.nome}`]));
   } else if (p.key === "massaBarra" || p.key === "massaTrufada") {
@@ -441,6 +476,7 @@ function opcoesFonte(p) {
 function fonteAtual(p) {
   const f = p.fonte;
   if (!f) return "manual";
+  if (f.tipo === "caixa") return `caixa:${f.key}`;
   if (f.tipo === "variavel") return `var:${f.nome}`;
   if (f.tipo === "barra") return f.criterio === "barra" ? `barra:${f.barra}` : `${f.criterio === "media" ? "bmedia" : "bmax"}:${f.linha || "gourmet"}`;
   return f.criterio === "sabor" ? `sabor:${f.formato}:${f.sabor}` : `${f.criterio}:${f.formato}`;
@@ -448,7 +484,8 @@ function fonteAtual(p) {
 function aplicarFonte(p, v) {
   if (v === "manual") { p.valor = paramVal(p.key); delete p.fonte; return; }
   const [t, a] = v.split(":");
-  if (t === "var") p.fonte = { tipo: "variavel", nome: v.slice(4) };
+  if (t === "caixa") p.fonte = { tipo: "caixa", key: a };
+  else if (t === "var") p.fonte = { tipo: "variavel", nome: v.slice(4) };
   else if (t === "bmax" || t === "bmedia") p.fonte = { tipo: "barra", criterio: t === "bmax" ? "max" : "media", linha: a };
   else if (t === "barra") p.fonte = { tipo: "barra", criterio: "barra", barra: v.slice(6) };
   else if (t === "sabor") p.fonte = { tipo: "receita", formato: a, criterio: "sabor", sabor: v.split(":").slice(2).join(":") };
@@ -919,10 +956,25 @@ function formNovaReceita(tipo) {
 function matrizBarras() {
   return db.barras.map((b, k) => `<tr class="${k === ui.barra ? "row-sel" : ""}"><td><a class="link" data-act="set-barra" data-val="${k}">Barra ${esc(b.nome)}</a></td><td class="num"><b>${brl(custoBarra(b))}</b></td></tr>`).join("");
 }
+function viewCaixas() {
+  return `<div class="grid g-2">${tiposArea("doces").map((t) => {
+    const c = caixaDe(t.key), j = db.formatos.findIndex((f) => f.nome === c.formato), un = unidadesCaixa(t.key), esperado = infoCaixa(t.key).un;
+    return `<div class="card"><div class="card-head"><div><h3>${esc(t.nome)} <span class="hint">(${esc(t.desc)})</span></h3><div class="sub">${esc(composicaoTxt(t.key)) || "Nenhum docinho definido"}</div></div>
+        <select class="inline" data-act="cx-formato" data-key="${t.key}">${db.formatos.map((f) => `<option ${f.nome === c.formato ? "selected" : ""}>${esc(f.nome)}</option>`).join("")}</select></div>
+      <div class="table-wrap"><table class="compact"><thead><tr><th>Sabor</th><th class="num">Qtd na caixa</th><th class="num">Custo un.</th><th class="num">Subtotal</th></tr></thead><tbody>
+      ${db.sabores.map((s) => { const q = +c.itens[s.nome] || 0, temRend = +s.rend[j] > 0; return `<tr class="${q ? "" : "row-off"}"><td>${esc(s.nome)}${!temRend ? ' <span class="badge b-red" title="Sem rendimento nesse formato">sem rendimento</span>' : ""}</td>
+        <td class="num">${numIn("cx-qtd", q, `data-key="${t.key}" data-sabor="${esc(s.nome)}"`)}</td>
+        <td class="num">${temRend ? brl(custoSabor(s, j)) : "—"}</td><td class="num">${q && temRend ? brl(q * custoSabor(s, j)) : "—"}</td></tr>`; }).join("")}
+      </tbody><tfoot><tr><td>Total</td><td class="num ${un === esperado ? "pos" : "neg"}">${int(un)} de ${int(esperado)}</td><td></td><td class="num">${brl(custoMassaCaixa(t.key))}</td></tr></tfoot></table></div>
+      ${un !== esperado ? `<div class="alert yellow mt">${icon("alert")}<div><b>A caixa tem ${int(esperado)} lugares e a composição soma ${int(un)}</b><span>Ajuste as quantidades.</span></div></div>` : ""}
+      <div class="hint" style="margin-top:8px">Custo da massa por caixa: <b>${brl(custoMassaCaixa(t.key))}</b> (média ${brl(un ? custoMassaCaixa(t.key) / un : 0)} por doce). Usado nos produtos, no vendedor e na projeção de compra.</div></div>`;
+  }).join("")}</div>`;
+}
 function viewReceitas() {
-  setActions(`<button class="btn btn-primary" data-act="rec-nova" data-val="${ui.recTab === "barras" ? "barra" : "doce"}">${icon("plus")}${ui.recTab === "barras" ? "Nova barra" : "Nova receita"}</button>`);
-  const head = `<div class="toolbar">${tabs([["doces", "Doces (brigadeiros e mousses)"], ["barras", "Barras de chocolate"]], ui.recTab, "set-rectab")}
+  setActions(ui.recTab === "caixas" ? "" : `<button class="btn btn-primary" data-act="rec-nova" data-val="${ui.recTab === "barras" ? "barra" : "doce"}">${icon("plus")}${ui.recTab === "barras" ? "Nova barra" : "Nova receita"}</button>`);
+  const head = `<div class="toolbar">${tabs([["doces", "Doces (brigadeiros e mousses)"], ["caixas", "Caixas (docinhos por caixa)"], ["barras", "Barras de chocolate"]], ui.recTab, "set-rectab")}
     <span class="hint">Altere as quantidades nos campos — os custos são recalculados na hora com os preços da tela Insumos.</span></div>`;
+  if (ui.recTab === "caixas") return head + viewCaixas();
   if (ui.recTab === "barras") {
     const b = db.barras[ui.barra] || db.barras[0];
     return head + `<div class="grid g-21">
@@ -1098,7 +1150,7 @@ function refreshKit(e) {
 /* ---------- DRE ---------- */
 const CATS_VAR = ["Insumos extras", "Embalagens", "Entrega / frete", "Comissões", "Taxas de cartão / apps", "Perdas", "Marketing por venda", "Outros"];
 const mesAtual = () => new Date().getMonth() + 1;
-function formCustoVar(c) {
+function formCustoVar(c, area = "doces") {
   openForm({
     title: c ? "Editar custo variável" : "Novo custo variável",
     fields: [
@@ -1107,9 +1159,9 @@ function formCustoVar(c) {
       { key: "mes", label: "Mês de referência", type: "select", options: MESES_FULL },
       { key: "valor", label: "Valor (R$)", type: "num", full: true },
     ],
-    values: c ? { ...c, mes: MESES_FULL[c.mes - 1] } : { categoria: CATS_VAR[0], mes: MESES_FULL[(ui.dreMes || mesAtual()) - 1] },
+    values: c ? { ...c, mes: MESES_FULL[c.mes - 1] } : { categoria: CATS_VAR[0], mes: MESES_FULL[((area === "pacoca" ? ui.dreMesPac : ui.dreMes) || mesAtual()) - 1] },
     onSave: (v) => {
-      const novo = { ...v, mes: MESES_FULL.indexOf(v.mes) + 1, ano: db.config.ano };
+      const novo = { ...v, mes: MESES_FULL.indexOf(v.mes) + 1, ano: db.config.ano, area: c ? areaCV(c) : area };
       if (c) Object.assign(c, novo); else db.custosVar.push({ id: uid(), ...novo });
       toast("Custo variável salvo");
     },
@@ -1126,7 +1178,7 @@ function viewDre() {
   const totalFixos = sum(db.fixos, (f) => +f.valor || 0);
   if (!ui.dreMes) cols.push({ label: "Total", r: resumo(0, "doces"), total: true });
   const nFix = (c) => (c.total ? meses.length : 1);
-  const catsUsadas = CATS_VAR.filter((cat) => db.custosVar.some((c) => c.categoria === cat && (!ui.dreMes || +c.mes === ui.dreMes)));
+  const catsUsadas = CATS_VAR.filter((cat) => db.custosVar.some((c) => areaCV(c) === "doces" && c.categoria === cat && (!ui.dreMes || +c.mes === ui.dreMes)));
   const linhas = [
     { t: "RECEITA BRUTA", f: (r) => r.receita, cls: "total" },
     ...CANAIS_VENDA.map((c) => ({ t: "   " + c, f: (r) => r.porCanal[c] || 0 })),
@@ -1142,7 +1194,7 @@ function viewDre() {
     { t: "(=) RESULTADO OPERACIONAL", f: (r, c) => r.lucro - totalFixos * nFix(c), cls: "result" },
     { t: "   Margem líquida %", f: (r, c) => (r.receita ? ((r.lucro - totalFixos * nFix(c)) / r.receita) * 100 : 0), pct: true },
   ];
-  const cvLista = db.custosVar.filter((c) => !ui.dreMes || +c.mes === ui.dreMes).sort((a, b) => a.mes - b.mes);
+  const cvLista = db.custosVar.filter((c) => areaCV(c) === "doces" && (!ui.dreMes || +c.mes === ui.dreMes)).sort((a, b) => a.mes - b.mes);
   return `
   <div class="card"><div class="card-head"><div><h3>DRE ${db.config.ano}${ui.dreMes ? " · " + MESES_FULL[ui.dreMes - 1] : ""}</h3><div class="sub">Doces finos · vendas + custos variáveis lançados + despesas fixas</div></div></div>
     <div class="table-wrap"><table class="dre"><thead><tr><th>Descrição</th>${cols.map((c) => `<th class="num">${c.label}</th>`).join("")}</tr></thead>
@@ -1180,7 +1232,8 @@ function afterDre() {
 function viewPacPainel() {
   setActions(mesSelect(ui.mes, "set-mes", "pacoca"));
   const lista = db.pacoca.filter((p) => !ui.mes || monthOf(p.data) === ui.mes);
-  const qtd = sum(lista, (p) => +p.qtd || 0), rec = sum(lista, recPac), luc = sum(lista, lucroPac), nr = sum(lista, naoRecPac), esp = sum(lista, esperadoPac);
+  const cvPac = resumo(ui.mes, "pacoca").custosVar;
+  const qtd = sum(lista, (p) => +p.qtd || 0), rec = sum(lista, recPac), luc = sum(lista, lucroPac) - cvPac, nr = sum(lista, naoRecPac), esp = sum(lista, esperadoPac);
   const taxa = esp ? (nr / esp) * 100 : 0;
   const meses = mesesComDados("pacoca");
   const melhor = [...lista].sort((a, b) => lucroPac(b) - lucroPac(a))[0];
@@ -1225,6 +1278,114 @@ function afterPacPainel() {
   });
 }
 
+/* ---------- Paçoca · Ficha do pacote, Insumos e DRE ---------- */
+// Linhas do custo de um pacote: insumos (somente leitura, vêm de Insumos) + outros custos editáveis
+function fichaPacoteHtml() {
+  const itens = db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0);
+  return `<ul class="recipe-ings">${itens.map((i) => `<li><span>${esc(i.nome)} <a class="badge b-gold" href="#insumos-pacoca">insumo</a></span><span>${fmtQtd(consumoPacote(i))} × ${brlU(+i.custo || 0)}</span><span>${brl(consumoPacote(i) * (+i.custo || 0))}</span></li>`).join("")}</ul>
+    ${db.pacocaCusto.map((c) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(c.nome)} <span class="hint">(por pacote)</span></span><input inputmode="decimal" data-act="pac-custo" data-id="${c.id}" value="${String(c.valor).replace(".", ",")}" /></div>`).join("")}`;
+}
+function formItemPacocaInsumo(i) {
+  openForm({
+    title: i ? `Editar insumo · ${i.nome}` : "Novo insumo da paçoca",
+    fields: [
+      { key: "nome", label: "Item", required: true, full: true },
+      { key: "custoCompra", label: "Custo de compra (R$ por embalagem)", type: "num" },
+      { key: "pacote", label: "Unidades por embalagem", type: "num" },
+      { key: "unid", label: "Unidade (un, folha, rolo...)" },
+      ...(i?.usaPacote ? [] : [{ key: "consumo", label: "Uso por pacote vendido", type: "num" }]),
+    ],
+    values: i ? { ...i, custoCompra: round2((+i.custo || 0) * (+i.pacote || 1)), pacote: +i.pacote || 1 } : { unid: "un", pacote: 1, consumo: 0 },
+    preview: (v) => { const cu = v.pacote ? v.custoCompra / v.pacote : 0, uso = i?.usaPacote ? consumoPacote(i) : v.consumo; return `<span>Custo unitário: ${brlU(cu)}</span><span>No pacote: ${brl(cu * (uso || 0))}</span>`; },
+    onSave: (v) => {
+      const novo = { nome: v.nome, unid: v.unid, pacote: v.pacote || 1, custo: v.pacote ? v.custoCompra / v.pacote : 0, ...(i?.usaPacote ? {} : { consumo: v.consumo }) };
+      if (i) Object.assign(i, novo); else db.estoque.pacocaItens.push({ id: uid(), ...novo });
+      toast("Insumo salvo · custo do pacote recalculado");
+    },
+  });
+}
+function viewInsumosPacoca() {
+  setActions(`<button class="btn btn-primary" data-act="ins-pac-novo">${icon("plus")}Novo insumo</button>`);
+  const itens = db.estoque.pacocaItens, cu = custoUnitPacoca(), preco = +db.config.precoPacoca || 0;
+  return `<div class="grid g-21">
+    <div class="card"><div class="card-head"><div><h3>Insumos da paçoca</h3><div class="sub">Custo unitário = custo de compra ÷ unidades por embalagem. Alterou aqui, recalcula o custo do pacote, margens, simulador, DRE e projeção.</div></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Custo de compra</th><th class="num hide-m">Embalagem</th><th class="num">Custo unitário</th><th class="num">Uso por pacote</th><th class="num">No pacote</th><th class="num hide-m">Em estoque</th><th></th></tr></thead><tbody>
+      ${itens.map((i) => `<tr><td><b>${esc(i.nome)}</b></td><td class="num">${brl((+i.custo || 0) * (+i.pacote || 1))}</td><td class="num hide-m">${fmtQtd(+i.pacote || 1)} ${esc(i.unid)}</td>
+        <td class="num">${brlU(+i.custo || 0)}<span class="hint">/${esc(i.unid)}</span></td><td class="num">${fmtQtd(consumoPacote(i))} ${esc(i.unid)}</td>
+        <td class="num"><b>${brl(consumoPacote(i) * (+i.custo || 0))}</b></td><td class="num hide-m">${fmtQtd(saldoDe("pac:" + i.id).qtd)} ${esc(i.unid)}</td>
+        <td>${rowActions("ins-pac", i.id)}</td></tr>`).join("")}
+      </tbody><tfoot><tr><td colspan="5" class="hide-m">Insumos por pacote</td><td class="show-m-cell" colspan="3">Insumos por pacote</td><td class="num">${brl(custoInsumosPacote())}</td><td colspan="2" class="hide-m"></td><td class="show-m-cell"></td></tr></tfoot></table></div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Ficha do pacote</h3><div class="sub">Pacote com ${fmtQtd(+db.pacocaSim.porPacote || 1)} paçoquitas</div></div></div>
+      ${fichaPacoteHtml()}
+      <div id="pacUnit">${pacUnitHtml()}</div>
+    </div>
+  </div>`;
+}
+
+const fixosLista = (area) => (area === "pacoca" ? db.fixosPacoca : db.fixos);
+function viewDrePacoca() {
+  const todos = mesesComDados("pacoca");
+  setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Mês de referência
+    <select class="inline" data-act="set-dremespac"><option value="0">Todos os meses</option>
+    ${MESES_FULL.map((n, i) => `<option value="${i + 1}" ${ui.dreMesPac === i + 1 ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+    <button class="btn btn-primary" data-act="new-cvar" data-val="pacoca">${icon("plus")}Custo variável</button>`);
+  const meses = ui.dreMesPac ? [ui.dreMesPac] : todos;
+  const cols = meses.map((m) => ({ label: MESES_FULL[m - 1], r: resumo(m, "pacoca") }));
+  if (!ui.dreMesPac) cols.push({ label: "Total", r: resumo(0, "pacoca"), total: true });
+  const tf = sum(db.fixosPacoca, (f) => +f.valor || 0), nFix = (c) => (c.total ? meses.length : 1);
+  const cvsArea = db.custosVar.filter((c) => areaCV(c) === "pacoca");
+  const cats = CATS_VAR.filter((cat) => cvsArea.some((c) => c.categoria === cat && (!ui.dreMesPac || +c.mes === ui.dreMesPac)));
+  const linhas = [
+    { t: "RECEITA BRUTA (recebido)", f: (r) => r.receita, cls: "total" },
+    { t: "   Pix", f: (r) => sum(r.pac, (p) => +p.pix || 0) },
+    { t: "   Dinheiro", f: (r) => sum(r.pac, (p) => +p.especie || 0) },
+    { t: "   Não recebido (fiado / no-show) · informativo", f: (r) => sum(r.pac, naoRecPac), info: true },
+    { t: "(−) DESPESAS VARIÁVEIS", f: (r) => -r.custos, cls: "total" },
+    { t: "   Insumos (paçoquita, saquinho, papel)", f: (r) => -r.insumos },
+    { t: "   Gasolina", f: (r) => -r.gasolina },
+    { t: "   Mão de obra", f: (r) => -r.comissoes },
+    ...cats.map((cat) => ({ t: "   " + cat + " (lançado)", f: (r) => -sum(r.cvs.filter((c) => c.categoria === cat), (c) => +c.valor || 0) })),
+    { t: "(=) LUCRO BRUTO (margem de contribuição)", f: (r) => r.lucro, cls: "total" },
+    { t: "   Margem de contribuição %", f: (r) => (r.receita ? (r.lucro / r.receita) * 100 : 0), pct: true },
+    { t: "(−) DESPESAS FIXAS", f: (r, c) => -(tf * nFix(c)), cls: "total" },
+    { t: "(=) RESULTADO OPERACIONAL", f: (r, c) => r.lucro - tf * nFix(c), cls: "result" },
+    { t: "   Margem líquida %", f: (r, c) => (r.receita ? ((r.lucro - tf * nFix(c)) / r.receita) * 100 : 0), pct: true },
+  ];
+  const cvLista = cvsArea.filter((c) => !ui.dreMesPac || +c.mes === ui.dreMesPac).sort((a, b) => a.mes - b.mes);
+  return `
+  <div class="card"><div class="card-head"><div><h3>DRE Paçoca ${db.config.ano}${ui.dreMesPac ? " · " + MESES_FULL[ui.dreMesPac - 1] : ""}</h3><div class="sub">Vendas diárias + custos variáveis lançados + despesas fixas da paçoca</div></div></div>
+    <div class="table-wrap"><table class="dre"><thead><tr><th>Descrição</th>${cols.map((c) => `<th class="num">${c.label}</th>`).join("")}</tr></thead>
+    <tbody>${linhas.map((l) => `<tr class="${l.cls || ""}${l.info ? " row-off" : ""}"><td>${l.t.replace(/^ +/, (s) => "&nbsp;".repeat(s.length * 2))}</td>${cols.map((c) => { const v = l.f(c.r, c); return `<td class="num ${!l.cls && !l.pct && !l.info && v < 0 ? "neg" : ""}">${l.pct ? pct(v) : brl(v)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+  </div>
+  <div class="card mt"><div class="card-head"><div><h3>Custos variáveis lançados · Paçoca${ui.dreMesPac ? " · " + MESES_FULL[ui.dreMesPac - 1] : ""}</h3><div class="sub">Gastos que variam com as vendas e não estão no registro diário</div></div>
+    <button class="btn btn-sm btn-primary" data-act="new-cvar" data-val="pacoca">${icon("plus")}Adicionar</button></div>
+    ${cvLista.length ? `<div class="table-wrap"><table><thead><tr><th>Mês de referência</th><th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+    ${cvLista.map((c) => `<tr><td>${MESES_FULL[c.mes - 1]}</td><td>${esc(c.descricao)}</td><td><span class="badge b-gray">${esc(c.categoria)}</span></td><td class="num">${brl(c.valor)}</td><td>${rowActions("cvar", c.id)}</td></tr>`).join("")}
+    </tbody><tfoot><tr><td colspan="3">Total</td><td class="num">${brl(sum(cvLista, (c) => +c.valor || 0))}</td><td></td></tr></tfoot></table></div>`
+    : `<div class="empty">Nenhum custo variável lançado.</div>`}
+  </div>
+  <div class="grid g-2 mt">
+    <div class="card"><div class="card-head"><div><h3>Despesas fixas da paçoca</h3><div class="sub">Entram no DRE da paçoca em todos os meses com movimento</div></div><button class="btn btn-sm" data-act="new-fixo" data-val="pacoca">${icon("plus")}Adicionar</button></div>
+      ${db.fixosPacoca.map((f) => `<div class="sim-row" style="grid-template-columns:1fr 140px 34px"><span>${esc(f.nome)}</span><input inputmode="decimal" data-act="set-fixo" data-area="pacoca" data-id="${f.id}" value="${String(f.valor || "").replace(".", ",")}" placeholder="0,00" />
+        <button class="btn btn-ghost btn-sm btn-danger" data-act="del-fixo" data-val="pacoca" data-id="${f.id}">${icon("trash")}</button></div>`).join("")}
+      <div class="recipe-total" style="padding-top:14px"><span>Total por mês</span><span>${brl(tf)}</span></div>
+      <div class="hint" style="margin-top:8px">Contador, impostos e pró-labore do negócio todo ficam no DRE dos Doces Finos (despesas gerais).</div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Resultado operacional por mês</h3><div class="sub">Lucro bruto − despesas fixas</div></div></div>
+      <div class="chart-box sm"><canvas id="chDrePac"></canvas></div>
+    </div>
+  </div>`;
+}
+function afterDrePacoca() {
+  const meses = mesesComDados("pacoca"), tf = sum(db.fixosPacoca, (f) => +f.valor || 0);
+  chart("chDrePac", {
+    type: "line",
+    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [{ label: "Resultado", data: meses.map((m) => resumo(m, "pacoca").lucro - tf), borderColor: "#2f9e6b", backgroundColor: "rgba(47,158,107,.15)", fill: true, tension: .35 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+  });
+}
+
 /* ---------- Paçoca · Custos & Compras ---------- */
 function pacSimHtml() {
   const s = db.pacocaSim, preco = db.config.precoPacoca, cu = custoUnitPacoca();
@@ -1249,8 +1410,8 @@ function viewPacCustos() {
   const histNr = sum(db.pacoca, esperadoPac) ? (sum(db.pacoca, naoRecPac) / sum(db.pacoca, esperadoPac)) * 100 : 0;
   return `
   <div class="grid g-2">
-    <div class="card"><div class="card-head"><div><h3>Custo por paçoca</h3><div class="sub">Edite os valores — o lucro por unidade atualiza na hora</div></div></div>
-      ${db.pacocaCusto.map((c) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(c.nome)}</span><input inputmode="decimal" data-act="pac-custo" data-id="${c.id}" value="${String(c.valor).replace(".", ",")}" /></div>`).join("")}
+    <div class="card"><div class="card-head"><div><h3>Custo por pacote</h3><div class="sub">Insumos vêm da tela Insumos; mão de obra e outros custos você edita aqui</div></div><a class="btn btn-sm" href="#insumos-pacoca">Abrir Insumos</a></div>
+      ${fichaPacoteHtml()}
       <div id="pacUnit">${pacUnitHtml()}</div>
     </div>
     <div class="card"><div class="card-head"><div><h3>Simulador do mês</h3><div class="sub">Quanto a paçoca pode render no mês</div></div></div>
@@ -1272,7 +1433,7 @@ function pacUnitHtml() {
   const m = preco ? ((preco - cu) / preco) * 100 : 0;
   return `<div class="prod-stats mt">
     <div class="stat"><small>Custo total</small><strong>${brl(cu)}</strong></div>
-    <div class="stat"><small>Lucro / paçoca</small><strong class="${preco - cu >= 0 ? "pos" : "neg"}">${brl(preco - cu)}</strong></div>
+    <div class="stat"><small>Lucro / pacote</small><strong class="${preco - cu >= 0 ? "pos" : "neg"}">${brl(preco - cu)}</strong></div>
     <div class="stat"><small>Margem</small><strong class="pos">${pct(m)}</strong></div></div>
     <div class="hint" style="margin-top:8px">Preço de venda atual: ${brl(preco)} (altere no canto superior direito).</div>`;
 }
@@ -1367,6 +1528,7 @@ function viewVendedor(area) {
         <span class="combo-nome">${esc(t.nome)}</span>
         <span class="combo-preco">${brl(precoNormal(area, t.key))}</span>
         <span class="combo-desc">${esc(t.desc)}</span>
+        ${area === "doces" && composicaoTxt(t.key) ? `<span class="combo-desc">${esc(composicaoTxt(t.key))}</span>` : ""}
       </button>`).join("")}</div>
     <div class="vend-sec">Promoção</div>
     <div class="combo-grid">${db.vendedor.combos[area].map((c) => { const eco = valorNormalItens(area, c.itens) - c.preco; return `
@@ -1587,6 +1749,7 @@ function contasDoMes(area, m) {
     add("pacoca:insumos", "Insumos", `Insumos da paçoca · ${mes}`, sum(p, (x) => +x.insumos || 0), fimMes);
     add("pacoca:gasolina", "Gasolina", `Gasolina (paçoca) · ${mes}`, sum(p, (x) => +x.gasolina || 0), fimMes);
     add("pacoca:maoobra", "Mão de obra", `Mão de obra da paçoca · ${mes}`, sum(p, (x) => +x.maoObra || 0), fimMes);
+    db.fixosPacoca.filter((f) => +f.valor > 0).forEach((f) => add(`fixopac:${f.id}`, categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor, `${ano}-${mm}-10`, "pacoca"));
   }
   return out;
 }
@@ -1837,21 +2000,6 @@ function formMontagem() {
     },
   });
 }
-function formItemPacoca(i) {
-  openForm({
-    title: i ? "Editar item do estoque" : "Novo item do estoque da paçoca",
-    fields: [
-      { key: "nome", label: "Item", required: true, full: true },
-      { key: "unid", label: "Unidade (un, folha, rolo...)" },
-      { key: "custo", label: "Custo por unidade (R$)", type: "num" },
-      ...(i?.usaPacote ? [] : [{ key: "consumo", label: "Baixa automática por pacote vendido", type: "num" }]),
-      { key: "pacote", label: "Unidades por embalagem de compra", type: "num" },
-    ],
-    values: i ? { pacote: 1, ...i } : { unid: "un", consumo: 0, pacote: 1 },
-    preview: i?.usaPacote ? () => `<span>Baixa por pacote vendido: ${fmtQtd(consumoPacote(i))} un (paçoquitas por pacote, ajuste na Projeção de compra)</span>` : undefined,
-    onSave: (v) => { if (i) Object.assign(i, v); else db.estoque.pacocaItens.push({ id: uid(), ...v }); toast("Item salvo"); },
-  });
-}
 function baixaVendas(area, pend) {
   if (area === "pacoca") {
     const qtd = sum(pend, (r) => r.itens.U || 0);
@@ -1871,35 +2019,31 @@ function infoCaixa(key) {
   const nome = t?.produto || "";
   return { formato: /copinho/i.test(nome) ? "Copinho" : "Bolinha", un: +(nome.match(/(\d+)\s*un/i)?.[1] || (key === "G" ? 9 : 4)) };
 }
-function mixSabores() {
-  const p = db.projecao.doces;
-  if (!Object.keys(p.mix || {}).length) {
-    const j = db.formatos.findIndex((f) => f.nome === "Bolinha");
-    const ok = db.sabores.filter((s) => +s.rend[j] > 0 && !SEM_PISTACHE.includes(s.nome));
-    p.mix = Object.fromEntries(ok.map((s) => [s.nome, round2(100 / ok.length)]));
-  }
-  return p.mix;
-}
 function projDoces() {
-  const p = db.projecao.doces, mix = mixSabores();
+  const p = db.projecao.doces;
   const porFdsG = Math.round((p.caixasFds * p.pctG) / 100), porFdsP = Math.max(0, Math.round(p.caixasFds) - porFdsG);
   const G = porFdsG * p.fds, P = porFdsP * p.fds;
   const prontoG = Math.max(0, saldoDe("pronto:G").qtd), prontoP = Math.max(0, saldoDe("pronto:P").qtd);
   const prodG = Math.max(0, G - prontoG), prodP = Math.max(0, P - prontoP);
-  const unidades = {};
-  [["G", prodG], ["P", prodP]].forEach(([k, n]) => { const c = infoCaixa(k); unidades[c.formato] = (unidades[c.formato] || 0) + n * c.un; });
-  const totalMix = sum(Object.values(mix), (v) => +v || 0) || 100;
+  // Doces a produzir por sabor = caixas a montar × docinhos de cada sabor na composição da caixa
+  const unidades = {}, qtdSabor = {};
+  [["G", prodG], ["P", prodP]].forEach(([k, n]) => {
+    const c = caixaDe(k);
+    Object.entries(c.itens).forEach(([nome, q]) => {
+      const chave = `${nome}|${c.formato}`;
+      qtdSabor[chave] = (qtdSabor[chave] || 0) + n * (+q || 0);
+      unidades[c.formato] = (unidades[c.formato] || 0) + n * (+q || 0);
+    });
+  });
   const acc = {};
   const add = (x) => { acc[x.ref] = acc[x.ref] || { ...x, qtd: 0 }; acc[x.ref].qtd += x.qtd; };
   const porSabor = [];
-  Object.entries(mix).forEach(([nome, pct]) => {
-    const s = db.sabores.find((x) => x.nome === nome);
-    if (!s || !+pct) return;
-    Object.entries(unidades).forEach(([formato, u]) => {
-      const j = db.formatos.findIndex((f) => f.nome === formato), q = Math.round((u * pct) / totalMix);
-      porSabor.push({ nome, formato, q, semRend: !(+s.rend[j] > 0) });
-      consumoProducao(s, j, q).forEach(add);
-    });
+  Object.entries(qtdSabor).forEach(([chave, q]) => {
+    const [nome, formato] = chave.split("|"), s = db.sabores.find((x) => x.nome === nome);
+    const j = db.formatos.findIndex((f) => f.nome === formato);
+    if (!s || !q) return;
+    porSabor.push({ nome, formato, q, semRend: !(+s.rend[j] > 0) });
+    consumoProducao(s, j, q).forEach(add);
   });
   const insumos = Object.values(acc);
   const accM = {};
@@ -1950,10 +2094,9 @@ function viewProjecao(area) {
       ${tabelaCompra("pacoca", linhas, "dias")}
       <div class="hint" style="margin-top:10px">Para comprar em caixas/pacotes, informe "Unidades por embalagem de compra" no lápis de cada item (aba Itens).</div></div>`;
   }
-  const p = db.projecao.doces, r = projDoces(), mix = mixSabores();
+  const p = db.projecao.doces, r = projDoces();
   const ins = r.insumos.map((x) => linhaCompra(x, r.fds)), mats = r.materiais.map((x) => linhaCompra(x, r.fds));
-  const total = sum([...ins, ...mats], (l) => l.custo), totalMix = sum(Object.values(mix), (v) => +v || 0);
-  const j = db.formatos.findIndex((f) => f.nome === "Bolinha");
+  const total = sum([...ins, ...mats], (l) => l.custo);
   return `<div class="grid g-21">
     <div class="card"><div class="card-head"><div><h3>Previsão de vendas</h3><div class="sub">Média de caixas por fim de semana e divisão entre Cx G e Cx P</div></div></div>
       <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Caixas por fim de semana</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="caixasFds" value="${p.caixasFds}" /></div>
@@ -1967,10 +2110,9 @@ function viewProjecao(area) {
       </ul>
     </div>
     <div class="card"><div class="big-result"><small>Compra necessária no período</small><div>${brl(total)}</div><small>${ins.filter((l) => l.falta > 0).length + mats.filter((l) => l.falta > 0).length} item(ns) em falta</small></div>
-      <div class="vend-sec">Divisão dos sabores</div>
-      ${db.sabores.map((s) => { const sem = !(+s.rend[j] > 0); return `<div class="sim-row" style="grid-template-columns:1fr 70px"><span>${esc(s.nome)}${sem ? ' <span class="hint">(sem rendimento de bolinha)</span>' : ""}</span>
-        <input class="tbl-input" style="width:100%" inputmode="decimal" data-act="proj-mix" data-sabor="${esc(s.nome)}" value="${String(+mix[s.nome] || 0).replace(".", ",")}" ${sem ? "disabled" : ""} /></div>`; }).join("")}
-      <div class="hint" style="margin-top:6px">Soma: <b class="${Math.abs(totalMix - 100) < 0.5 ? "pos" : "neg"}">${fmtQtd(round2(totalMix))}%</b>${Math.abs(totalMix - 100) < 0.5 ? "" : " — a projeção redistribui proporcionalmente"}</div>
+      <div class="vend-sec">Docinhos a produzir no período</div>
+      <ul class="recipe-ings">${[...r.porSabor].sort((a, b) => b.q - a.q).map((x) => `<li><span>${esc(x.nome)}${x.semRend ? ' <span class="badge b-red">sem rendimento</span>' : ""}</span><span class="hint">${esc(x.formato.toLowerCase())}</span><span><b>${int(x.q)}</b></span></li>`).join("") || "<li><span>Nada a produzir</span></li>"}</ul>
+      <div class="hint" style="margin-top:6px">Pela composição das caixas: ${tiposArea("doces").map((t) => `<b>${esc(t.nome)}</b> = ${esc(composicaoTxt(t.key))}`).join(" · ")}. <a class="link" data-act="ir-caixas">Alterar</a></div>
     </div>
   </div>
   <div class="card mt"><div class="card-head"><div><h3>Ingredientes</h3><div class="sub">Baixa calculada pelas fichas técnicas. "Em estoque" é o saldo da tela Estoque — alterar aqui registra uma contagem.</div></div></div>
@@ -2030,8 +2172,8 @@ function viewEstoque(area) {
 }
 
 /* =================== Roteamento & eventos =================== */
-const VIEWS = { estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
-const AFTER = { "pacoca-painel": afterPacPainel, painel: afterPainel, pacoca: afterPacoca, dre: afterDre };
+const VIEWS = { "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
+const AFTER = { "dre-pacoca": afterDrePacoca, "pacoca-painel": afterPacPainel, painel: afterPainel, pacoca: afterPacoca, dre: afterDre };
 let currentPage = null;
 const areaAtual = () => PAGES.find((p) => p.id === currentPage)?.area;
 
@@ -2101,8 +2243,12 @@ function onClick(e) {
     case "est-mov": return formMovimento(areaAtual(), el.dataset.ref, val);
     case "est-producao": return formProducao();
     case "est-montagem": return formMontagem();
-    case "est-novo-pac": return formItemPacoca();
-    case "est-edit-pac": return formItemPacoca(db.estoque.pacocaItens.find((x) => x.id === id));
+    case "est-novo-pac": case "ins-pac-novo": return formItemPacocaInsumo();
+    case "est-edit-pac": case "edit-ins-pac": return formItemPacocaInsumo(db.estoque.pacocaItens.find((x) => x.id === id));
+    case "del-ins-pac": {
+      const it = db.estoque.pacocaItens.find((x) => x.id === id);
+      return confirmDel(`Excluir o insumo "${it.nome}"? Ele sai do custo do pacote e do estoque.`, () => { db.estoque.pacocaItens = db.estoque.pacocaItens.filter((x) => x.id !== id); delete db.estoque.saldos["pac:" + id]; });
+    }
     case "est-del-mov": {
       const m = db.estoque.movs.find((x) => x.id === id);
       return confirmDel(`Desfazer "${(TIPOS_MOV[m.tipo] || [m.tipo])[0]}" de ${fmtQtd(m.delta)} em ${m.nome}? O saldo volta ${m.delta >= 0 ? "a diminuir" : "a aumentar"}.`, () => {
@@ -2117,7 +2263,7 @@ function onClick(e) {
     case "del-pag": return confirmDel("Excluir esta conta?", () => { db.pagamentos = db.pagamentos.filter((x) => x.id !== id); });
     case "pg-gerar": return formGerarContas(areaAtual());
     case "pg-fiado": gerarFiadoPacoca(); save(); break;
-    case "new-cvar": return formCustoVar();
+    case "new-cvar": return formCustoVar(null, val === "pacoca" ? "pacoca" : "doces");
     case "edit-cvar": return formCustoVar(find(db.custosVar));
     case "del-cvar": return confirmDel("Excluir este custo variável?", () => { db.custosVar = db.custosVar.filter((x) => x.id !== id); });
     case "eq-copiar": {
@@ -2188,6 +2334,7 @@ function onClick(e) {
     case "new-combo": return formCombo(areaAtual());
     case "edit-combo": return formCombo(areaAtual(), db.vendedor.combos[areaAtual()].find((x) => x.id === id));
     case "del-combo": return confirmDel("Excluir esta promoção?", () => { const a = areaAtual(); db.vendedor.combos[a] = db.vendedor.combos[a].filter((x) => x.id !== id); });
+    case "ir-caixas": ui.recTab = "caixas"; if (location.hash === "#receitas") render(); else location.hash = "receitas"; return;
     case "rec-nova": return formNovaReceita(val);
     case "rec-excluir": {
       const barra = val === "barra", lista = barra ? db.barras : db.sabores, k = barra ? ui.barra : ui.sabor, r = lista[k];
@@ -2232,8 +2379,8 @@ function onClick(e) {
     case "new-compra": return formCompra();
     case "edit-compra": return formCompra(find(db.pacocaCompra));
     case "del-compra": return confirmDel("Excluir este item da compra?", () => { db.pacocaCompra = db.pacocaCompra.filter((x) => x.id !== id); });
-    case "new-fixo": return openForm({ title: "Nova despesa fixa", fields: [{ key: "nome", label: "Descrição", required: true, full: true }, { key: "valor", label: "Valor mensal (R$)", type: "num", full: true }], onSave: (v) => db.fixos.push({ id: uid(), ...v }) });
-    case "del-fixo": return confirmDel("Excluir esta despesa fixa?", () => { db.fixos = db.fixos.filter((x) => x.id !== id); });
+    case "new-fixo": return openForm({ title: "Nova despesa fixa", fields: [{ key: "nome", label: "Descrição", required: true, full: true }, { key: "valor", label: "Valor mensal (R$)", type: "num", full: true }], onSave: (v) => fixosLista(val).push({ id: uid(), ...v }) });
+    case "del-fixo": return confirmDel("Excluir esta despesa fixa?", () => { const l = fixosLista(val); l.splice(l.findIndex((x) => x.id === id), 1); });
     default: return;
   }
   render();
@@ -2242,8 +2389,9 @@ function onChange(e) {
   const el = e.target, act = el.dataset.act;
   if (act === "par-fonte") { aplicarFonte(db.params.find((x) => x.key === el.dataset.key), el.value); save(); render(); toast("Origem do custo atualizada"); }
   if (act === "bar-linha") { db.barras[ui.barra].linha = el.value; save(); render(); toast(`Barra marcada como ${el.value}`); }
+  if (act === "cx-qtd") { const c = caixaDe(el.dataset.key), q = parseNum(el.value); if (q) c.itens[el.dataset.sabor] = q; else delete c.itens[el.dataset.sabor]; save(); render(); }
+  if (act === "cx-formato") { caixaDe(el.dataset.key).formato = el.value; save(); render(); }
   if (act === "proj-par") { db.projecao.doces[el.dataset.key] = parseNum(el.value); save(); render(); }
-  if (act === "proj-mix") { mixSabores()[el.dataset.sabor] = parseNum(el.value); save(); render(); }
   if (act === "projp-par") { db.pacocaSim[el.dataset.key] = parseNum(el.value); save(); render(); }
   if (act === "proj-est") {
     const novo = parseNum(el.value), atual = saldoDe(el.dataset.ref).qtd;
@@ -2253,6 +2401,7 @@ function onChange(e) {
   if (act === "est-min") { saldoDe(el.dataset.ref).minimo = parseNum(el.value); save(); render(); }
   if (act === "est-filtro") { ui.estSoAlerta = el.checked; render(); }
   if (act === "set-dremes") { ui.dreMes = +el.value; render(); }
+  if (act === "set-dremespac") { ui.dreMesPac = +el.value; render(); }
   if (act === "set-pgmes") { ui.pgMes = +el.value; render(); }
   if (act === "pg-toggle") {
     const p = db.pagamentos.find((x) => x.id === el.dataset.id);
@@ -2264,7 +2413,7 @@ function onChange(e) {
   if (act === "vend-tipo-prod") { tiposArea("doces").find((t) => t.key === el.dataset.key).produto = el.value; save(); render(); }
   if (act === "set-mes") { ui.mes = +el.value; render(); }
   if (act === "set-vmes") { ui.vendasMes = +el.value; render(); }
-  if (act === "set-fixo") { const f = db.fixos.find((x) => x.id === el.dataset.id); f.valor = parseNum(el.value); save(); render(); }
+  if (act === "set-fixo") { const f = fixosLista(el.dataset.area).find((x) => x.id === el.dataset.id); f.valor = parseNum(el.value); save(); render(); }
   if (act === "set-preco-pac") { db.config.precoPacoca = parseNum(el.value) || 0; save(); render(); }
 }
 function onInput(e) {
@@ -2283,7 +2432,9 @@ function onInput(e) {
   if (act === "bar-qtd") { db.barras[ui.barra].itens[+el.dataset.i].qtd = parseNum(el.value); save(); refreshReceita(); }
   if (act === "pac-custo") {
     db.pacocaCusto.find((x) => x.id === el.dataset.id).valor = parseNum(el.value);
-    save(); $("#pacUnit").innerHTML = pacUnitHtml(); $("#pacSim").innerHTML = pacSimHtml();
+    save();
+    if ($("#pacUnit")) $("#pacUnit").innerHTML = pacUnitHtml();
+    if ($("#pacSim")) $("#pacSim").innerHTML = pacSimHtml();
   }
   if (act === "pac-sim") { db.pacocaSim[el.dataset.key] = parseNum(el.value); save(); $("#pacSim").innerHTML = pacSimHtml(); }
   if (act === "sim-qtd") { db.sim.qtd[el.dataset.id] = parseNum(el.value); save(); refreshSim(); }

@@ -322,6 +322,7 @@ details.comp-config[open] summary::before { content: "▾ "; }
 table.compact th, table.compact td { padding: 8px 8px; }
 table.compact .tbl-input { width: 64px; }
 tr.row-sel td { background: var(--gold-soft); }
+tr.row-off td { color: var(--muted); }
 a.link { color: var(--choc); font-weight: 700; cursor: pointer; text-decoration: none; }
 a.link:hover { text-decoration: underline; }
 

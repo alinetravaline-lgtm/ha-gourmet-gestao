@@ -124,11 +124,12 @@ const SEED = {
     { nome: "Churros", rend: [25, 8, 18, 71, 74, 990],
       lote: [["Leite Condensado Campos do Jordão", 2], ["Canela", 10], ["Creme de leite", 1], ["Manteiga", 25]],
       porUn: [["Cobertura Choc. Branco", [20, 30, 0, 0, 0, 0]], ["Cobertura Meio Amargo Gotas 2,05kg", [0, 0, 0, 0, 7, 0]], ["Gás", [0.01, 0.01, 0.01, 0.01, 0.01, 0.01]]] },
-    // Café e Beijinho: a planilha só tem rendimento para copinho (83 un); os outros formatos ficam em 0 até serem preenchidos
-    { nome: "Café", rend: [0, 0, 0, 0, 83, 0],
+    // Café e Beijinho: a planilha só tem rendimento de copinho (83 un). Bolinha (71) estimada pela proporção do brigadeiro (64/75);
+    // os demais formatos ficam em 0 até serem preenchidos
+    { nome: "Café", rend: [0, 0, 0, 71, 83, 0],
       lote: [["Leite Condensado Campos do Jordão", 2], ["Café em pó Manah", 10], ["Creme de leite", 1], ["Manteiga", 20], ["Café em grãos Manah", 1]],
       porUn: [["Cobertura Meio Amargo Gotas 2,05kg", [20, 30, 0, 0, 7, 0]], ["Gás", [0.01, 0.01, 0.01, 0.01, 0.01, 0.01]]] },
-    { nome: "Beijinho", rend: [0, 0, 0, 0, 83, 0],
+    { nome: "Beijinho", rend: [0, 0, 0, 71, 83, 0],
       lote: [["Leite Condensado Campos do Jordão", 2], ["Essência de coco", 1], ["Creme de leite", 1], ["Manteiga", 20]],
       porUn: [["Cobertura Meio Amargo Gotas 2,05kg", [20, 30, 0, 0, 7, 0]], ["Gás", [0.01, 0.01, 0.01, 0.01, 0.01, 0.01]]] },
     // Ganache: recheio vendido/usado por grama (rende 350 g)
@@ -168,8 +169,8 @@ const SEED = {
     { key: "comCx9", grupo: "Entrega e comissões", nome: "Comissão revenda · caixa 9un", valor: 6 },
     { key: "comBarra", grupo: "Entrega e comissões", nome: "Comissão revenda · barra gourmet", valor: 7 },
     { key: "comTrufada", grupo: "Entrega e comissões", nome: "Comissão revenda · barra trufada", valor: 9 },
-    { key: "massaBol4", grupo: "Massa por unidade", nome: "Massa bolinha (caixa 4un)", valor: 0.39, fonte: { tipo: "receita", formato: "Bolinha", criterio: "max", ignorar: ["Brigadeiro de Pistache"] } },
-    { key: "massaBol9", grupo: "Massa por unidade", nome: "Massa bolinha (caixa 9un)", valor: 0.2189, fonte: { tipo: "receita", formato: "Bolinha", criterio: "sabor", sabor: "Brigadeiro" } },
+    { key: "massaBol4", grupo: "Massa por unidade", nome: "Massa bolinha (caixa 4un)", valor: 0.39, fonte: { tipo: "caixa", key: "P" } },
+    { key: "massaBol9", grupo: "Massa por unidade", nome: "Massa bolinha (caixa 9un)", valor: 0.2189, fonte: { tipo: "caixa", key: "G" } },
     { key: "massaCop4", grupo: "Massa por unidade", nome: "Massa copinho (caixa 4un e unidade)", valor: 0.4475, fonte: { tipo: "receita", formato: "Copinho", criterio: "max", ignorar: ["Brigadeiro de Pistache"] } },
     { key: "massaCop9", grupo: "Massa por unidade", nome: "Massa copinho (caixa 9un)", valor: 0.4467, fonte: { tipo: "receita", formato: "Copinho", criterio: "max", ignorar: ["Brigadeiro de Pistache"] } },
     { key: "massaBarra", grupo: "Massa por unidade", nome: "Massa barra gourmet 300g", valor: 9.83, fonte: { tipo: "barra", criterio: "max", linha: "gourmet" } },
@@ -238,11 +239,8 @@ const SEED = {
     { canal: "Encomenda", inicio: "2026-09-09", fim: "2026-09-15", qtd: 200, cartao: 290, pix: 0, especie: 0, insumos: 170.13, gasolina: 38.86, comissoes: 0, perdas: 0, outros: 0 },
   ],
 
-  // Custo de cada paçoca vendida (aba PAÇOCA)
+  // Outros custos por pacote vendido; paçoquita, saquinho e papel vêm dos insumos da paçoca (estoque.pacocaItens)
   pacocaCusto: [
-    ["Paçoquita", 1.07],
-    ["Saquinho", 0.05],
-    ["Papel", 0.03],
     ["Mão de obra", 0.5],
   ],
 
@@ -256,6 +254,12 @@ const SEED = {
 
   // porDia = pacotes vendidos por dia; porPacote = paçoquitas em cada pacote
   pacocaSim: { porDia: 80, porPacote: 6, dias: 26, naoRecPct: 16.7, gasolinaDia: 11.02 },
+
+  // Docinhos que vão em cada caixa (sabor: quantidade). Define o custo da massa e a produção na projeção de compra.
+  caixas: {
+    G: { formato: "Bolinha", itens: { "Brigadeiro": 1, "Ninho com Nutella": 1, "Mousse de Limão": 2, "Mousse de Morango": 1, "Mousse de Maracujá": 1, "Churros": 1, "Café": 1, "Beijinho": 1 } },
+    P: { formato: "Bolinha", itens: { "Café": 1, "Mousse de Limão": 1, "Mousse de Morango": 1, "Churros": 1 } },
+  },
 
   // Área do vendedor: tipos de item vendidos e combos com preço próprio.
   // "produto" liga o tipo a um produto do Outbound para calcular o custo.
