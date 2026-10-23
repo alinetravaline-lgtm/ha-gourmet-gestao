@@ -442,3 +442,15 @@ body.home-mode .content { max-width: none; padding: 0; }
   .sim-row { grid-template-columns: minmax(0, 1fr) 58px 78px 78px; gap: 6px; font-size: 13px; }
   .sim-row input { padding: 6px 4px; }
 }
+
+/* Estoque: pedido comum e itens a comprar */
+tr.row-comprar td { background: var(--red-soft); }
+tr.row-comprar td:first-child b { color: var(--red); }
+.pedido-card { padding: 14px; }
+.pedido-card .alert { margin-bottom: 12px; }
+.pedido-cfg { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.pedido-cfg > span:first-child { font-weight: 700; }
+.pedido-cfg label { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pedido-card .alert strong { color: var(--text); }
+.pedido-cfg .tbl-input { width: 70px; }
+.pedido-cfg .hint { flex-basis: 100%; }

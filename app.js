@@ -615,7 +615,9 @@ function alertas() {
       out.push({ tipo: st === "red" ? "red" : "yellow", t: `${p.nome} (${p.canal}) com margem de ${pct(m)}`, d: `Meta do canal: a partir de ${alvo}%. ${sug ? `Preço sugerido: ${brl(sug)}.` : ""}` });
     }
   });
-  const est = alertasEstoque("doces");
+  const pb = pedidoBase(), comprar = itensEstoque("doces").filter((i) => pb.faltam.includes(i.ref));
+  if (comprar.length) out.push({ tipo: "red", t: `Comprar ${comprar.length} item(ns): o estoque faz só ${int(pb.capacidade)} de ${int(pb.n)} caixas`, d: `${comprar.slice(0, 4).map((i) => i.nome).join(", ")}${comprar.length > 4 ? "…" : ""}. Pedido comum: ${pb.G} Cx G + ${pb.P} Cx P. Veja a tela Estoque.` });
+  const est = alertasEstoque("doces").filter((i) => !pb.faltam.includes(i.ref));
   if (est.length) out.push({ tipo: "yellow", t: `${est.length} item(ns) do estoque abaixo do mínimo`, d: `${est.slice(0, 4).map((i) => i.nome).join(", ")}${est.length > 4 ? "…" : ""}. Veja a tela Estoque.` });
   const semanasPrejuizo = db.vendas.filter((v) => v.canal === "Outbound" && lucroVenda(v) < 0);
   if (semanasPrejuizo.length) out.push({ tipo: "yellow", t: `${semanasPrejuizo.length} semana(s) com prejuízo no Outbound`, d: `Semanas com custos (gasolina/insumos) e sem vendas lançadas. Confira se faltam lançamentos.` });
@@ -2034,14 +2036,17 @@ function itensEstoque(area) {
     ...db.materiais.map((i) => ({ ref: "mat:" + i.id, nome: i.nome, unid: i.unid, grupo: "materiais", custo: unit(i) })),
   ];
 }
-function situacaoEstoque(ref) {
-  const s = saldoDe(ref);
-  if (s.qtd < 0) return { t: "Negativo", c: "red" };
-  if (s.qtd === 0) return { t: "Zerado", c: "red" };
-  if (s.minimo && s.qtd < s.minimo) return { t: "Baixo", c: "yellow" };
+// Situação considerando as vendas ainda não fechadas e, nos doces, o que um pedido comum (pedido base) precisa
+const ctxEstoque = (area) => ({ pend: pendenteEstoque(area), base: area === "doces" ? pedidoBase() : null });
+function situacaoEstoque(ref, area, ctx = ctxEstoque(area)) {
+  const s = saldoDe(ref), q = round3(s.qtd - (ctx.pend[ref] || 0)), nec = ctx.base?.nec[ref] || 0;
+  if (q < 0) return { t: "Negativo", c: "red" };
+  if (nec > 0 && q < nec) return { t: "Comprar", c: "red" };
+  if (q === 0) return { t: "Zerado", c: "red" };
+  if (s.minimo && q < s.minimo) return { t: "Baixo", c: "yellow" };
   return { t: "OK", c: "green" };
 }
-const alertasEstoque = (area) => itensEstoque(area).filter((i) => { const s = saldoDe(i.ref); return s.qtd < 0 || (s.minimo && s.qtd < s.minimo); });
+const alertasEstoque = (area, ctx = ctxEstoque(area)) => itensEstoque(area).filter((i) => ["Negativo", "Comprar", "Baixo"].includes(situacaoEstoque(i.ref, area, ctx).t));
 const fmtQtd = (v) => (+v || 0).toLocaleString("pt-BR", { maximumFractionDigits: 3 });
 
 // Baixa de ingredientes ao produzir: lote proporcional ao rendimento + gasto por unidade (cobertura, gás...)
@@ -2140,10 +2145,7 @@ function baixaVendas(area, pend) {
     db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => movimentar("pacoca", "pac:" + i.id, i.nome, -qtd * consumoPacote(i), "venda", `Vendas de ${ddmm(ui.vendData)}`));
     return;
   }
-  tiposArea("doces").forEach((t) => {
-    const q = sum(pend, (r) => r.itens[t.key] || 0);
-    movimentar("doces", "pronto:" + t.key, `${t.nome} (${t.desc})`, -q, "venda", `Vendas de ${ddmm(ui.vendData)}`);
-  });
+  consumoVendasDoces(pend).forEach((x) => movimentar("doces", x.ref, x.nome, -x.qtd, "venda", `Vendas de ${ddmm(ui.vendData)}${x.feitas ? ` · ${int(x.feitas)} ${x.tipo} sem caixa pronta` : ""}`));
 }
 
 /* ---------- Projeção de compra (estoque) ---------- */
@@ -2183,7 +2185,12 @@ function projDoces() {
   }
   const prontoG = Math.max(0, saldoDe("pronto:G").qtd), prontoP = Math.max(0, saldoDe("pronto:P").qtd);
   const prodG = Math.max(0, G - prontoG), prodP = Math.max(0, P - prontoP);
-  // Doces a produzir por sabor = caixas a montar × docinhos de cada sabor na composição da caixa
+  const cc = consumoCaixas(prodG, prodP);
+  return { porFdsG, porFdsP, G, P, prontoG, prontoP, prodG, prodP, unidades: cc.unidades, porSabor: cc.porSabor, insumos: cc.insumos, materiais: cc.materiais, fds };
+}
+// Ingredientes e embalagens para fazer G caixas grandes e P pequenas:
+// docinhos de cada sabor pela composição da caixa → fichas técnicas (gramas ÷ rendimento) + kit de embalagem
+function consumoCaixas(prodG, prodP) {
   const unidades = {}, qtdSabor = {};
   [["G", prodG], ["P", prodP]].forEach(([k, n]) => {
     const c = caixaDe(k);
@@ -2206,7 +2213,43 @@ function projDoces() {
   const insumos = Object.values(acc);
   const accM = {};
   [...consumoMontagem("G", prodG), ...consumoMontagem("P", prodP)].forEach((x) => { accM[x.ref] = accM[x.ref] || { ...x, qtd: 0 }; accM[x.ref].qtd += x.qtd; });
-  return { porFdsG, porFdsP, G, P, prontoG, prontoP, prodG, prodP, unidades, porSabor, insumos, materiais: Object.values(accM), fds };
+  return { unidades, porSabor, insumos, materiais: Object.values(accM) };
+}
+// Baixa das vendas de doces: sai primeiro das caixas prontas; o que passar disso foi feito na hora
+// e consome ingredientes (fichas técnicas) e embalagens
+function consumoVendasDoces(regs) {
+  const out = [];
+  tiposArea("doces").forEach((t) => {
+    const q = sum(regs, (r) => +r.itens?.[t.key] || 0);
+    if (!q) return;
+    const dePronto = Math.min(q, Math.max(0, saldoDe("pronto:" + t.key).qtd)), feitas = q - dePronto;
+    if (dePronto) out.push({ ref: "pronto:" + t.key, nome: `${t.nome} (${t.desc})`, qtd: dePronto });
+    if (feitas && ["G", "P"].includes(t.key)) {
+      const cc = consumoCaixas(t.key === "G" ? feitas : 0, t.key === "P" ? feitas : 0);
+      [...cc.insumos, ...cc.materiais].filter((x) => x.qtd > 0).forEach((x) => out.push({ ...x, feitas, tipo: t.nome }));
+    }
+  });
+  return out;
+}
+// O que as vendas registradas e ainda não fechadas já tiraram do estoque (ref → quantidade)
+function pendenteEstoque(area) {
+  const regs = db.vendedor.registros.filter((r) => r.area === area && !r.lancado), m = {};
+  if (area === "pacoca") {
+    const q = sum(regs, (r) => +r.itens?.U || 0);
+    if (q) db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => { m["pac:" + i.id] = q * consumoPacote(i); });
+  } else consumoVendasDoces(regs).forEach((x) => { m[x.ref] = (m[x.ref] || 0) + x.qtd; });
+  return m;
+}
+// Pedido comum (padrão 50 caixas, 70% Cx G): o que ele precisa e quantas caixas o estoque atual permite fazer
+function pedidoBase() {
+  const p = db.projecao.doces, n = Math.max(1, Math.round(+p.pedidoBase || 50)), pctG = p.pedidoPctG ?? 70;
+  const G = Math.round((n * pctG) / 100), P = n - G, cc = consumoCaixas(G, P), pend = pendenteEstoque("doces");
+  const nec = {};
+  [...cc.insumos, ...cc.materiais].forEach((x) => { if (x.qtd > 0) nec[x.ref] = (nec[x.ref] || 0) + x.qtd; });
+  const disp = (ref) => saldoDe(ref).qtd - (pend[ref] || 0);
+  const refs = Object.keys(nec), faltam = refs.filter((r) => disp(r) < nec[r] - 1e-9);
+  const fator = refs.length ? Math.min(...refs.map((r) => Math.max(0, disp(r)) / nec[r])) : 0;
+  return { n, pctG, G, P, nec, faltam, disp, capacidade: Math.floor(n * fator + 1e-9) };
 }
 // Compra sugerida: falta arredondada para embalagens inteiras de compra (rendimento do insumo)
 function linhaCompra(x, periodos) {
@@ -2293,15 +2336,18 @@ function viewEstoque(area) {
   if (!abas.some(([k]) => k === ui.estTab[area])) ui.estTab[area] = abas[0][0];
   const aba = ui.estTab[area];
   const todos = itensEstoque(area);
-  const alertas = alertasEstoque(area);
-  const valor = sum(todos, (i) => Math.max(0, saldoDe(i.ref).qtd) * i.custo);
+  const ctx = ctxEstoque(area), pb = ctx.base;
+  const alertas = alertasEstoque(area, ctx);
+  const disp = (ref) => round3(saldoDe(ref).qtd - (ctx.pend[ref] || 0));
+  const valor = sum(todos, (i) => Math.max(0, disp(i.ref)) * i.custo);
   const movsArea = db.estoque.movs.filter((m) => m.area === area);
   setActions(`${area === "doces" ? `<button class="btn" data-act="est-producao">${icon("book")}Registrar produção</button><button class="btn" data-act="est-montagem">${icon("gift")}Montar caixas</button>` : `<button class="btn" data-act="est-novo-pac">${icon("plus")}Novo item</button>`}
     <button class="btn btn-primary" data-act="est-mov" data-val="entrada">${icon("plus")}Entrada</button>`);
   const kpis = `<div class="grid g-4">
     ${kpi("Valor em estoque", brl(valor), "Saldo × custo unitário", "money")}
-    ${kpi("Abaixo do mínimo", int(alertas.length), alertas.length ? esc(alertas.slice(0, 2).map((a) => a.nome).join(", ")) + (alertas.length > 2 ? "…" : "") : "Tudo em dia", "alert", alertas.length ? "neg" : "pos")}
-    ${kpi("Itens com saldo", `${int(todos.filter((i) => saldoDe(i.ref).qtd > 0).length)} / ${int(todos.length)}`, "Itens com quantidade em estoque", "pkg")}
+    ${kpi(pb ? "Precisa comprar / baixo" : "Abaixo do mínimo", int(alertas.length), alertas.length ? esc(alertas.slice(0, 2).map((a) => a.nome).join(", ")) + (alertas.length > 2 ? "…" : "") : "Tudo em dia", "alert", alertas.length ? "neg" : "pos")}
+    ${pb ? kpi("Dá para fazer", `${int(Math.min(pb.capacidade, 9999))} caixas`, `com a matéria-prima em estoque · pedido comum: ${int(pb.n)}`, "gift", pb.capacidade < pb.n ? "neg" : "pos")
+      : kpi("Itens com saldo", `${int(todos.filter((i) => disp(i.ref) > 0).length)} / ${int(todos.length)}`, "Itens com quantidade em estoque", "pkg")}
     ${kpi("Movimentações hoje", int(movsArea.filter((m) => m.data === hojeISO()).length), `${int(movsArea.length)} no total`, "trend")}
   </div>`;
   const head = `<div class="toolbar mt">${tabs(abas.map(([k, l]) => [k, k === "movs" || k === "projecao" ? l : `${l} <span class="badge b-gray">${todos.filter((i) => i.grupo === k).length}</span>`]), aba, "set-esttab")}
@@ -2319,14 +2365,29 @@ function viewEstoque(area) {
   }
   const q = ui.busca.toLowerCase();
   const lista = todos.filter((i) => i.grupo === aba && i.nome.toLowerCase().includes(q) && (!ui.estSoAlerta || alertas.includes(i)));
-  const dica = { prontos: "Caixas montadas e prontas para vender. A Área do vendedor dá baixa ao fechar o dia.", ingredientes: "Em gramas/ml/unidades, como na tela Insumos. A produção dá baixa conforme as fichas técnicas.", materiais: "Embalagens e brindes. A montagem de caixas dá baixa conforme os kits.", itens: "A Área do vendedor dá baixa ao fechar o dia, conforme a coluna \"Baixa por venda\"." }[aba];
-  return kpis + head + `<div class="card"><div class="card-head"><div><h3>${abas.find(([k]) => k === aba)[1]}</h3><div class="sub">${dica}</div></div></div>
-    ${lista.length ? `<div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Saldo</th><th class="num hide-m">Mínimo</th>${area === "pacoca" ? '<th class="num hide-m">Baixa por venda</th>' : ""}<th class="num hide-m">Valor</th><th class="hide-m">Situação</th><th class="num">Movimentar</th></tr></thead><tbody>
-    ${lista.map((i) => { const s = saldoDe(i.ref), st = situacaoEstoque(i.ref); return `<tr><td><b>${esc(i.nome)}</b><div class="hint">${brlU(i.custo)}/${esc(i.unid)}</div></td>
-      <td class="num"><b class="${s.qtd < 0 ? "neg" : ""}">${fmtQtd(s.qtd)}</b> <span class="hint">${esc(i.unid)}</span><div class="show-m"><span class="badge b-${st.c}">${st.t}</span></div></td>
+  const comPedido = pb && aba !== "prontos";
+  if (comPedido) lista.sort((a, b) => pb.faltam.includes(b.ref) - pb.faltam.includes(a.ref));
+  const comprar = pb ? todos.filter((i) => pb.faltam.includes(i.ref)) : [];
+  const temPend = Object.keys(ctx.pend).length > 0;
+  const pedidoCard = pb ? `<div class="card pedido-card ${comprar.length ? "falta" : ""}">
+    <div class="alert ${comprar.length ? "red" : "green"}">${icon(comprar.length ? "alert" : "check")}<div>
+      <b>${comprar.length ? `Precisa comprar ${comprar.length} item(ns): não dá para um pedido de ${int(pb.n)} caixas` : `Estoque dá para um pedido de ${int(pb.n)} caixas`}</b>
+      <span>Pedido comum: ${int(pb.G)} Cx G + ${int(pb.P)} Cx P. Com a matéria-prima de hoje dá para fazer <strong>${int(Math.min(pb.capacidade, 9999))} caixas</strong>.
+      ${comprar.length ? `Em vermelho: ${esc(comprar.slice(0, 6).map((i) => i.nome).join(", "))}${comprar.length > 6 ? "…" : ""}.` : ""}</span></div></div>
+    <div class="pedido-cfg"><span>Pedido comum</span>
+      <label>${numIn("est-pedido", pb.n, 'data-key="pedidoBase"')} caixas</label>
+      <label>${numIn("est-pedido", pb.pctG, 'data-key="pedidoPctG"')} % Cx G <span class="hint">(${fmtQtd(100 - pb.pctG)}% Cx P)</span></label>
+      <span class="hint">As vendas dão baixa automática: primeiro nas caixas prontas; o que passar disso desconta ingredientes (gramas ÷ rendimento das fichas técnicas) e embalagens.${temPend ? " O saldo já desconta as vendas de hoje ainda não fechadas." : ""}</span></div>
+  </div>` : "";
+  const dica = { prontos: "Conte aqui as caixas já montadas (botão Contar). As vendas saem primeiro destas caixas; o que passar disso desconta ingredientes e embalagens.", ingredientes: "Em gramas/ml/unidades, como na tela Insumos. Vendas sem caixa pronta e produções dão baixa conforme as fichas técnicas (gramas ÷ rendimento).", materiais: "Embalagens e brindes. Vendas sem caixa pronta e montagens dão baixa conforme os kits.", itens: "A Área do vendedor dá baixa ao fechar o dia, conforme a coluna \"Baixa por venda\"." }[aba];
+  return kpis + head + pedidoCard + `<div class="card ${pb ? "mt" : ""}"><div class="card-head"><div><h3>${abas.find(([k]) => k === aba)[1]}</h3><div class="sub">${dica}</div></div></div>
+    ${lista.length ? `<div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Saldo</th>${comPedido ? `<th class="num">Pedido de ${int(pb.n)} cx</th>` : ""}<th class="num hide-m">Mínimo</th>${area === "pacoca" ? '<th class="num hide-m">Baixa por venda</th>' : ""}<th class="num hide-m">Valor</th><th class="hide-m">Situação</th><th class="num">Movimentar</th></tr></thead><tbody>
+    ${lista.map((i) => { const s = saldoDe(i.ref), d = disp(i.ref), pend = ctx.pend[i.ref] || 0, st = situacaoEstoque(i.ref, area, ctx), nec = pb?.nec[i.ref] || 0; return `<tr class="${st.t === "Comprar" || st.t === "Negativo" ? "row-comprar" : ""}"><td><b>${esc(i.nome)}</b><div class="hint">${brlU(i.custo)}/${esc(i.unid)}</div></td>
+      <td class="num"><b class="${d < 0 || st.t === "Comprar" ? "neg" : ""}">${fmtQtd(d)}</b> <span class="hint">${esc(i.unid)}</span>${pend ? `<div class="hint">−${fmtQtd(round3(pend))} em vendas abertas</div>` : ""}<div class="show-m"><span class="badge b-${st.c}">${st.t}</span></div></td>
+      ${comPedido ? `<td class="num">${nec ? `${fmtQtd(round2(nec))} <span class="hint">${esc(i.unid)}</span>${d < nec ? `<div class="neg"><b>falta ${fmtQtd(round2(nec - Math.max(0, d)))}</b></div>` : ""}` : '<span class="hint">—</span>'}</td>` : ""}
       <td class="num hide-m">${numIn("est-min", s.minimo, `data-ref="${i.ref}"`)}</td>
       ${area === "pacoca" ? `<td class="num hide-m">${fmtQtd(consumoPacote(i.item))} <span class="hint">${esc(i.unid)}</span></td>` : ""}
-      <td class="num hide-m">${brl(Math.max(0, s.qtd) * i.custo)}</td><td class="hide-m"><span class="badge b-${st.c}">${st.t}</span></td>
+      <td class="num hide-m">${brl(Math.max(0, d) * i.custo)}</td><td class="hide-m"><span class="badge b-${st.c}">${st.t}</span></td>
       <td class="num" style="white-space:nowrap">
         <button class="btn btn-sm" title="Entrada" data-act="est-mov" data-val="entrada" data-ref="${i.ref}">+<span class="hide-m"> Entrada</span></button>
         <button class="btn btn-sm" title="Saída / perda" data-act="est-mov" data-val="saida" data-ref="${i.ref}">−<span class="hide-m"> Saída</span></button>
@@ -2610,6 +2671,7 @@ function onChange(e) {
     if (Math.abs(novo - atual) > 1e-9) { movimentar(el.dataset.area, el.dataset.ref, el.dataset.nome, novo - atual, "ajuste", "Contagem (projeção)"); save(); toast(`Estoque atualizado: ${el.dataset.nome}`); }
     render();
   }
+  if (act === "est-pedido") { const v = parseNum(el.value); db.projecao.doces[el.dataset.key] = el.dataset.key === "pedidoPctG" ? Math.min(100, Math.max(0, v)) : Math.max(1, Math.round(v)); save(); render(); }
   if (act === "est-min") { saldoDe(el.dataset.ref).minimo = parseNum(el.value); save(); render(); }
   if (act === "est-filtro") { ui.estSoAlerta = el.checked; render(); }
   if (act === "set-dremes") { ui.dreMes = +el.value; render(); }
