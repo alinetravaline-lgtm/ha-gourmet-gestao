@@ -534,7 +534,7 @@ function confirmDel(msg, fn) { if (confirm(msg)) { fn(); save(); render(); toast
 const AREAS = {
   pacoca: { nome: "Paçoca", desc: "Vendas diárias, recebimentos, custos e compra mensal da paçoca", inicial: "pacoca-painel", cor: "#2f9e6b" },
   doces: { nome: "Doces Finos", desc: "Brigadeiros, mousses e barras: vendas por canal, preços, fichas técnicas e DRE", inicial: "painel", cor: "#c8963e" },
-  geral: { nome: "Negócio todo", desc: "DRE unificado de doces + paçoca, com DAS, DARF e contabilidade divididos entre as áreas", inicial: "dre-geral", cor: "#5a3826" },
+  geral: { nome: "Negócio todo", desc: "Painel e DRE unificados de doces + paçoca, com DAS, DARF e contabilidade divididos entre as áreas", inicial: "painel-geral", cor: "#5a3826" },
 };
 const PAGES = [
   { id: "inicio", label: "Início", icon: "dash", sub: "Escolha a área que deseja gerenciar" },
@@ -560,6 +560,7 @@ const PAGES = [
   { id: "pagamentos", area: "doces", label: "Pagamentos", icon: "wallet", sub: "Contas a pagar e a receber: o que já foi pago e o que está pendente" },
   { id: "personalizar", area: "doces", label: "Personalizar custos", icon: "gear", sub: "Taxas, metas de margem e custos padrão — tudo que mexe no custo", section: "Configurações" },
   { id: "equipe", area: "doces", label: "Equipe & App", icon: "cart", sub: "Sincronização entre celulares e app do vendedor" },
+  { id: "painel-geral", area: "geral", label: "Painel", icon: "dash", sub: "Visão geral de doces + paçoca juntos", section: "Visão geral" },
   { id: "dre-geral", area: "geral", label: "DRE unificado", icon: "pie", sub: "Doces + paçoca, com impostos e contabilidade divididos entre as áreas", section: "Financeiro" },
 ];
 
@@ -675,9 +676,9 @@ function viewInicio() {
   const cardGeral = () => {
     const meses = mesesComDados(), ult = meses[meses.length - 1], r = resumo(ult), rat = rateioImpostos(ult);
     const fx = sum(db.fixos, (f) => +f.valor || 0) + sum(db.fixosPacoca, (f) => +f.valor || 0), resultado = r.lucro - rat.total - fx;
-    return `<a class="area-card" href="#dre-geral" style="--area:${AREAS.geral.cor}">
+    return `<a class="area-card" href="#painel-geral" style="--area:${AREAS.geral.cor}">
       <div class="area-top"><span class="area-icon">${icon("pie")}</span><span class="area-go">Entrar →</span></div>
-      <h2>DRE unificado</h2><p>${AREAS.geral.desc}</p>
+      <h2>Negócio todo</h2><p>${AREAS.geral.desc}</p>
       <div class="hint" style="margin-top:6px">Último mês com movimento: <b>${ult ? MESES_FULL[ult - 1] : "—"}</b></div>
       <div class="area-stats" style="margin-top:0">
         <div><small>Faturamento</small><strong>${brl(r.receita)}</strong></div>
@@ -1448,6 +1449,98 @@ function afterDre() {
     type: "line",
     data: { labels: meses.map((m) => MESES[m - 1]), datasets: [{ label: "Resultado", data: meses.map((m) => resumo(m, "doces").lucro - rateioImpostos(m, "doces").total - tf), borderColor: "#5a3826", backgroundColor: "rgba(200,150,62,.18)", fill: true, tension: .35 }] },
     options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+  });
+}
+
+/* ---------- Painel unificado (doces + paçoca) ---------- */
+// Resultado do mês (0 = ano) do negócio ou de uma área: lucro bruto − impostos/contabilidade − despesas fixas
+function resultadoArea(m, area) {
+  const r = resumo(m, area), rat = rateioImpostos(m, area);
+  const nMeses = m ? 1 : mesesComDados(area).length;
+  const fixos = (area === "pacoca" ? 0 : sum(db.fixos, (f) => +f.valor || 0)) + (area === "doces" ? 0 : sum(db.fixosPacoca, (f) => +f.valor || 0));
+  const res = r.lucro - rat.total - fixos * nMeses;
+  return { r, rat, fixos: fixos * nMeses, res, margem: r.receita ? (res / r.receita) * 100 : 0 };
+}
+function alertasGerais() {
+  const out = [], hoje = hojeISO();
+  const pend = db.pagamentos.filter((p) => p.tipo === "pagar" && !p.pago);
+  const venc = pend.filter((p) => p.vencimento && p.vencimento < hoje);
+  const em7 = pend.filter((p) => { const d = new Date(hoje + "T12:00:00"); d.setDate(d.getDate() + 7); return p.vencimento >= hoje && p.vencimento <= d.toISOString().slice(0, 10); });
+  if (venc.length) out.push({ tipo: "red", t: `${venc.length} conta(s) vencida(s): ${brl(sum(venc, (p) => +p.valor || 0))}`, d: "Veja em Pagamentos e marque as que já foram pagas." });
+  if (em7.length) out.push({ tipo: "yellow", t: `${em7.length} conta(s) vencem nos próximos 7 dias: ${brl(sum(em7, (p) => +p.valor || 0))}`, d: em7.slice(0, 3).map((p) => `${ddmm(p.vencimento)} ${p.descricao}`).join(" · ") });
+  const pb = pedidoBase(), comprar = itensEstoque("doces").filter((i) => pb.faltam.includes(i.ref));
+  if (comprar.length) out.push({ tipo: "red", t: `Doces: comprar ${comprar.length} item(ns) — o estoque faz ${int(pb.capacidade)} de ${int(pb.n)} caixas`, d: comprar.slice(0, 4).map((i) => i.nome).join(", ") });
+  const estP = alertasEstoque("pacoca");
+  if (estP.length) out.push({ tipo: "yellow", t: `Paçoca: ${estP.length} item(ns) do estoque em alerta`, d: estP.slice(0, 4).map((i) => i.nome).join(", ") });
+  const lista = db.pacoca.filter((p) => !ui.mes || monthOf(p.data) === ui.mes);
+  const esp = sum(lista, esperadoPac), nr = sum(lista, naoRecPac), taxa = esp ? (nr / esp) * 100 : 0;
+  if (esp) out.push(taxa > naoRecPctPacoca()
+    ? { tipo: "red", t: `Paçoca: ${brl(nr)} não recebidos (${pct(taxa)})`, d: `Acima da previsão de ${pct(naoRecPctPacoca())} de não recebimento (pix confiança).` }
+    : { tipo: "green", t: `Paçoca: não recebido em ${pct(taxa)}`, d: `Dentro da previsão de ${pct(naoRecPctPacoca())}.` });
+  alertas().filter((a) => a.tipo === "red").slice(0, 3).forEach((a) => out.push({ ...a, t: "Doces: " + a.t }));
+  return out.length ? out : [{ tipo: "green", t: "Tudo em dia", d: "Nenhum ponto de atenção no momento." }];
+}
+function viewPainelGeral() {
+  setActions(mesSelect(ui.mes, "set-mes"));
+  const per = ui.mes ? MESES_FULL[ui.mes - 1] : "Todo o período";
+  const g = resultadoArea(ui.mes), d = resultadoArea(ui.mes, "doces"), p = resultadoArea(ui.mes, "pacoca");
+  const share = (x) => (g.r.receita ? (x.r.receita / g.r.receita) * 100 : 0);
+  const cartaoArea = (nome, x, href, cor) => `<div class="card" style="border-top:4px solid ${cor}"><div class="card-head"><div><h3>${nome}</h3><div class="sub">${per} · ${pct(share(x))} do faturamento</div></div><a class="btn btn-sm" href="#${href}">Abrir painel</a></div>
+    <ul class="recipe-ings">
+      <li><span>Faturamento</span><span></span><span><b>${brl(x.r.receita)}</b></span></li>
+      <li><span>Custos variáveis</span><span></span><span class="neg">−${brl(x.r.custos)}</span></li>
+      <li><span>Impostos e contabilidade (parte da área)</span><span></span><span class="neg">−${brl(x.rat.total)}</span></li>
+      ${x.fixos ? `<li><span>Despesas fixas</span><span></span><span class="neg">−${brl(x.fixos)}</span></li>` : ""}
+      <li><span><b>Resultado</b></span><span class="hint">margem ${pct(x.margem)}</span><span class="${x.res >= 0 ? "pos" : "neg"}"><b>${brl(x.res)}</b></span></li>
+    </ul></div>`;
+  const meses = mesesComDados();
+  const pend = db.pagamentos.filter((x) => x.tipo === "pagar" && !x.pago).sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
+  return `
+  <div class="grid g-4">
+    ${kpi("Faturamento", brl(g.r.receita), `${per} · doces + paçoca`, "money")}
+    ${kpi("Lucro bruto", brl(g.r.lucro), `Custos variáveis: ${brl(g.r.custos)}`, "wallet", g.r.lucro >= 0 ? "pos" : "neg")}
+    ${kpi("Impostos e contabilidade", brl(g.rat.total), `DAS ${brl(g.rat.das)} · fixos ${brl(g.rat.fixos)}`, "alert", "neg")}
+    ${kpi("Resultado líquido", brl(g.res), `Margem de ${pct(g.margem)}`, "percent", g.res >= 0 ? "pos" : "neg")}
+  </div>
+  <div class="grid g-2 mt">${cartaoArea("Doces finos", d, "painel", AREAS.doces.cor)}${cartaoArea("Paçoca", p, "pacoca-painel", AREAS.pacoca.cor)}</div>
+  <div class="grid g-21 mt">
+    <div class="card"><div class="card-head"><div><h3>Faturamento por área e resultado</h3><div class="sub">Mês a mês · resultado já descontando impostos e despesas fixas</div></div></div><div class="chart-box"><canvas id="chGerMes"></canvas></div></div>
+    <div class="card"><div class="card-head"><div><h3>Participação no faturamento</h3><div class="sub">${per}</div></div></div>
+      ${g.r.receita ? '<div class="chart-box"><canvas id="chGerArea"></canvas></div>' : '<div class="empty">Sem vendas no período</div>'}</div>
+  </div>
+  <div class="grid g-2 mt">
+    <div class="card"><div class="card-head"><div><h3>Pontos de atenção</h3><div class="sub">Doces, paçoca, estoque e contas a pagar</div></div></div>
+      <div class="alert-list">${alertasGerais().map((a) => `<div class="alert ${a.tipo}">${icon(a.tipo === "green" ? "check" : "alert")}<div><b>${esc(a.t)}</b><span>${esc(a.d)}</span></div></div>`).join("")}</div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Próximas contas a pagar</h3><div class="sub">${pend.length} pendente(s) · ${brl(sum(pend, (x) => +x.valor || 0))}</div></div><a class="btn btn-sm" href="#pagamentos">Ver pagamentos</a></div>
+      ${pend.length ? `<div class="table-wrap"><table><thead><tr><th>Vencimento</th><th>Descrição</th><th>Área</th><th class="num">Valor</th></tr></thead><tbody>
+      ${pend.slice(0, 8).map((x) => { const s = situacaoPag(x); return `<tr><td>${x.vencimento ? ddmm(x.vencimento) : "—"} <span class="badge b-${s.c}">${s.t}</span></td><td>${esc(x.descricao)}</td><td class="hint">${AREA_LABEL[x.area] || ""}</td><td class="num"><b>${brl(x.valor)}</b></td></tr>`; }).join("")}
+      </tbody></table></div>` : '<div class="empty">Nenhuma conta pendente.</div>'}
+    </div>
+  </div>
+  ${meses.length ? `<div class="card mt"><div class="card-head"><div><h3>Resumo por mês</h3><div class="sub">Doces + paçoca, com impostos e despesas fixas</div></div><a class="btn btn-sm" href="#dre-geral">Ver DRE unificado</a></div>
+    <div class="table-wrap"><table><thead><tr><th>Mês</th><th class="num">Doces</th><th class="num">Paçoca</th><th class="num">Faturamento</th><th class="num hide-m">Custos variáveis</th><th class="num hide-m">Impostos</th><th class="num">Resultado</th><th class="num">Margem</th></tr></thead>
+    <tbody>${meses.map((m) => { const x = resultadoArea(m); return `<tr class="${ui.mes === m ? "row-sel" : ""}"><td><b>${MESES_FULL[m - 1]}</b></td><td class="num">${brl(resumo(m, "doces").receita)}</td><td class="num">${brl(resumo(m, "pacoca").receita)}</td><td class="num"><b>${brl(x.r.receita)}</b></td>
+      <td class="num hide-m">${brl(x.r.custos)}</td><td class="num hide-m">${brl(x.rat.total)}</td><td class="num ${x.res >= 0 ? "pos" : "neg"}"><b>${brl(x.res)}</b></td><td class="num">${pct(x.margem)}</td></tr>`; }).join("")}</tbody>
+    <tfoot>${(() => { const x = resultadoArea(0); return `<tr><td>Total</td><td class="num">${brl(resumo(0, "doces").receita)}</td><td class="num">${brl(resumo(0, "pacoca").receita)}</td><td class="num">${brl(x.r.receita)}</td><td class="num hide-m">${brl(x.r.custos)}</td><td class="num hide-m">${brl(x.rat.total)}</td><td class="num">${brl(x.res)}</td><td class="num">${pct(x.margem)}</td></tr>`; })()}</tfoot></table></div>
+  </div>` : ""}`;
+}
+function afterPainelGeral() {
+  const meses = mesesComDados();
+  chart("chGerMes", {
+    type: "bar",
+    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [
+      { label: "Doces", data: meses.map((m) => resumo(m, "doces").receita), backgroundColor: AREAS.doces.cor, borderRadius: 6, maxBarThickness: 46, stack: "fat" },
+      { label: "Paçoca", data: meses.map((m) => resumo(m, "pacoca").receita), backgroundColor: AREAS.pacoca.cor, borderRadius: 6, maxBarThickness: 46, stack: "fat" },
+      { label: "Resultado", type: "line", data: meses.map((m) => resultadoArea(m).res), borderColor: "#5a3826", backgroundColor: "#5a3826", tension: 0.35 },
+    ] },
+    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { stacked: true, ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { stacked: true, grid: { display: false } } } },
+  });
+  const d = resumo(ui.mes, "doces").receita, p = resumo(ui.mes, "pacoca").receita;
+  chart("chGerArea", {
+    type: "doughnut",
+    data: { labels: ["Doces", "Paçoca"], datasets: [{ data: [d, p], backgroundColor: [AREAS.doces.cor, AREAS.pacoca.cor], borderWidth: 0 }] },
+    options: { maintainAspectRatio: false, cutout: "68%", plugins: { legend: { position: "bottom" }, tooltip: { callbacks: { label: (c) => ` ${c.label}: ${brl(c.parsed)}` } } } },
   });
 }
 
@@ -2665,8 +2758,8 @@ function viewEstoque(area) {
 }
 
 /* =================== Roteamento & eventos =================== */
-const VIEWS = { "dre-geral": viewDreGeral, "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
-const AFTER = { "dre-pacoca": afterDrePacoca, "pacoca-painel": afterPacPainel, painel: afterPainel, pacoca: afterPacoca, dre: afterDre };
+const VIEWS = { "painel-geral": viewPainelGeral, "dre-geral": viewDreGeral, "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
+const AFTER = { "painel-geral": afterPainelGeral, "dre-pacoca": afterDrePacoca, "pacoca-painel": afterPacPainel, painel: afterPainel, pacoca: afterPacoca, dre: afterDre };
 let currentPage = null;
 const areaAtual = () => PAGES.find((p) => p.id === currentPage)?.area;
 
@@ -2676,7 +2769,7 @@ function renderNav(page) {
   const outras = Object.keys(AREAS).filter((k) => k !== page.area);
   let html = `<div class="area-switch" style="--area:${area.cor}">
     <small>Área atual</small><b>${area.nome}</b>
-    <div class="area-switch-links">${outras.map((k) => `<a href="#${AREAS[k].inicial}">${k === "geral" ? "DRE unificado" : "Ir para " + AREAS[k].nome}</a>`).join("")}<a href="#inicio">Início</a></div>
+    <div class="area-switch-links">${outras.map((k) => `<a href="#${AREAS[k].inicial}">${k === "geral" ? "Negócio todo" : "Ir para " + AREAS[k].nome}</a>`).join("")}<a href="#inicio">Início</a></div>
     ${page.area === "geral" ? "" : `<a class="area-config ${["personalizar", "pacoca-custos"].includes(page.id) ? "active" : ""}" href="#${page.area === "pacoca" ? "pacoca-custos" : "personalizar"}">${icon("gear")}Personalizar custos</a>`}</div>`;
   PAGES.filter((p) => p.area === page.area).forEach((p) => {
     if (p.section) html += `<div class="nav-section">${p.section}</div>`;
