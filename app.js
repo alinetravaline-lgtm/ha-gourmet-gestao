@@ -1399,11 +1399,11 @@ function pacSimHtml() {
   const recebido = esperado * (1 - (+s.naoRecPct || 0) / 100);
   const custos = qtd * cu + (+s.gasolinaDia || 0) * (+s.dias || 0);
   const lucro = recebido - custos;
-  return `<div class="big-result"><small>Lucro previsto no mês</small><div>${brl(lucro)}</div><small>${int(qtd)} paçocas · ${int(s.dias)} dias de venda</small></div>
+  return `<div class="big-result"><small>Lucro previsto no mês</small><div>${brl(lucro)}</div><small>${int(qtd)} pacotes · ${int(s.dias)} dias de venda</small></div>
     <div class="grid g-2 mt" style="gap:12px">
       <div class="stat"><small>Faturamento esperado</small><strong>${brl(esperado)}</strong></div>
       <div class="stat"><small>Recebido (após não recebidos)</small><strong>${brl(recebido)}</strong></div>
-      <div class="stat"><small>Custo das paçocas</small><strong>${brl(qtd * cu)}</strong></div>
+      <div class="stat"><small>Custo dos pacotes</small><strong>${brl(qtd * cu)}</strong></div>
       <div class="stat"><small>Gasolina no mês</small><strong>${brl((+s.gasolinaDia || 0) * (+s.dias || 0))}</strong></div>
     </div>`;
 }
