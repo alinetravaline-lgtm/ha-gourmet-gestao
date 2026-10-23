@@ -2,6 +2,7 @@
   "name": "HA Gourmet",
   "short_name": "HA Gourmet",
   "description": "Gestão e vendas da HA Gourmet",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

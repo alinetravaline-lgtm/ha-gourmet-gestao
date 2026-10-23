@@ -1522,12 +1522,10 @@ const registrosDia = (area) => db.vendedor.registros.filter((r) => r.area === ar
 const getPag = (area) => localStorage.getItem("hag_pag_" + area) || "pix";
 const setPag = (area, v) => localStorage.setItem("hag_pag_" + area, v);
 const nomeVendedor = () => localStorage.getItem("hag_vendedor_nome") || "";
-const APP_VENDEDOR = (() => {
-  const q = new URLSearchParams(location.search).get("app");
-  if (q === "vendedor") localStorage.setItem("hag_modo", "vendedor");
-  if (q === "gestao") localStorage.removeItem("hag_modo");
-  return localStorage.getItem("hag_modo") === "vendedor";
-})();
+// O modo vem só da página aberta (vendedor.html ou index.html), nunca de algo gravado no aparelho
+localStorage.removeItem("hag_modo");
+const APP_VENDEDOR = window.HAG_MODO === "vendedor";
+const urlApp = (pagina = "") => new URL("./" + pagina, location.href).href.split("#")[0];
 function novoRegistro(area, dados) {
   const r = { id: uid(), area, data: ui.vendData, hora: new Date().toTimeString().slice(0, 5), ts: Date.now(), device: Sync.client, vendedor: nomeVendedor() || "Gestão", lancado: false, ...dados };
   db.vendedor.registros.push(r);
@@ -1944,7 +1942,6 @@ function lerConfigFirebase(txt) {
 const codigoConexao = (cfg) => encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(cfg)))));
 function viewEquipe() {
   const cfg = Sync.getCfg();
-  const base = location.origin + location.pathname;
   const publicado = location.protocol === "https:";
   const st = { local: "Só neste aparelho", conectando: "Conectando…", online: "Sincronizado", offline: "Offline (envia quando a internet voltar)", erro: "Erro de sincronização — confira a configuração" }[Sync.status];
   const status = `<div class="card"><div class="card-head"><div><h3>Situação da sincronização</h3><div class="sub">${cfg ? `Equipe <b>${esc(cfg.equipe)}</b> · projeto ${esc(cfg.firebase.projectId)}` : "Sem nuvem: os dados ficam só neste aparelho"}</div></div>
@@ -1972,8 +1969,8 @@ function viewEquipe() {
     </div>
     ${publicarHtml(publicado)}`;
   }
-  const linkVend = `${base}?app=vendedor#conectar=${codigoConexao(cfg)}`;
-  const linkGest = `${base}?app=gestao#conectar=${codigoConexao(cfg)}`;
+  const linkVend = `${urlApp("vendedor.html")}#conectar=${codigoConexao(cfg)}`;
+  const linkGest = `${urlApp()}#conectar=${codigoConexao(cfg)}`;
   const qr = (l) => `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(l)}`;
   return status + `
   ${publicado ? "" : `<div class="alert yellow mt">${icon("alert")}<div><b>Publique o app antes de chamar a equipe</b><span>Este endereço (${esc(location.host || "arquivo local")}) só abre neste computador. Siga "Publicar o app" abaixo e conecte de novo no endereço publicado.</span></div></div>`}
@@ -2496,8 +2493,8 @@ function onClick(e) {
     case "edit-cvar": return formCustoVar(find(db.custosVar));
     case "del-cvar": return confirmDel("Excluir este custo variável?", () => { db.custosVar = db.custosVar.filter((x) => x.id !== id); });
     case "eq-copiar": {
-      const cfg = Sync.getCfg(), base = location.origin + location.pathname;
-      const txt = val === "regras" ? REGRAS_FIRESTORE : `${base}?app=${val === "vend" ? "vendedor" : "gestao"}#conectar=${codigoConexao(cfg)}`;
+      const cfg = Sync.getCfg();
+      const txt = val === "regras" ? REGRAS_FIRESTORE : `${urlApp(val === "vend" ? "vendedor.html" : "")}#conectar=${codigoConexao(cfg)}`;
       navigator.clipboard?.writeText(txt).then(() => toast("Copiado"), () => prompt("Copie:", txt));
       return;
     }
@@ -2580,8 +2577,7 @@ function onClick(e) {
       const pin = db.config.pinGestao;
       if (pin && prompt("PIN da gestão:") !== String(pin)) { toast("PIN incorreto"); return; }
       if (!pin && !confirm("Sair do modo vendedor e abrir a gestão completa neste aparelho?")) return;
-      localStorage.removeItem("hag_modo");
-      location.href = location.pathname + "#inicio";
+      location.href = urlApp() + "#inicio";
       return;
     }
     case "vend-lancar": {
@@ -2779,7 +2775,7 @@ Sync.onStatus((s) => {
   el.onclick = () => { if (!APP_VENDEDOR) location.hash = areaAtual() === "pacoca" ? "equipe-pacoca" : "equipe"; };
 });
 
-// Link de convite: ...?app=vendedor#conectar=CODIGO conecta o aparelho à equipe
+// Link de convite: .../vendedor.html#conectar=CODIGO (ou .../#conectar=CODIGO na gestão) conecta o aparelho à equipe
 (() => {
   const m = location.hash.match(/conectar=([^&]+)/);
   if (!m) return;

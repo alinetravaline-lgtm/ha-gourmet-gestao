@@ -1,6 +1,6 @@
 // Mantém o app abrindo sem internet. Busca sempre a versão nova quando há conexão.
-const CACHE = "hag-v1";
-const ARQUIVOS = ["./", "./index.html", "./styles.css", "./app.js", "./data.js", "./sync.js", "./config.js", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
+const CACHE = "hag-v2";
+const ARQUIVOS = ["./", "./index.html", "./vendedor.html", "./manifest-vendedor.webmanifest", "./styles.css", "./app.js", "./data.js", "./sync.js", "./config.js", "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)));
