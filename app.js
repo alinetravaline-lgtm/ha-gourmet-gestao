@@ -1645,16 +1645,16 @@ function viewDreGeral() {
   </div>
   <div class="grid g-2 mt">
     <div class="card"><div class="card-head"><div><h3>Impostos e contabilidade</h3><div class="sub">Valores do negócio todo · geram as contas a pagar automaticamente</div></div><button class="btn btn-sm" data-act="ig-add">${icon("plus")}Adicionar</button></div>
-      <div class="sim-row" style="grid-template-columns:1fr 90px 110px"><span><b>DAS</b> <span class="hint">% sobre o faturamento bruto</span></span>${numIn("ig-das", dasPct())}<label class="hint" style="display:flex;gap:4px;align-items:center">dia ${numIn("ig-dasdia", +impGerais().dasDia || 20)}</label></div>
-      ${fixos.map((f) => `<div class="sim-row" style="grid-template-columns:1fr 110px 90px 34px">
+      <div class="sim-row" style="grid-template-columns:1fr 90px auto"><span><b>DAS</b> <span class="hint">% sobre o faturamento bruto</span></span>${numIn("ig-das", dasPct())}<label class="hint" style="display:flex;gap:4px;align-items:center;white-space:nowrap">dia ${numIn("ig-dasdia", +impGerais().dasDia || 20, `style="width:56px"`)}</label></div>
+      ${fixos.map((f) => `<div class="sim-row" style="grid-template-columns:minmax(0,1fr) 100px auto 34px">
         <input data-act="ig-nome" data-id="${f.id}" value="${esc(f.nome)}" style="text-align:left" />${numIn("ig-val", f.valor, `data-id="${f.id}"`)}
-        <label class="hint" style="display:flex;gap:4px;align-items:center">dia ${numIn("ig-dia", +f.dia || 10, `data-id="${f.id}"`)}</label>
+        <label class="hint" style="display:flex;gap:4px;align-items:center;white-space:nowrap">dia ${numIn("ig-dia", +f.dia || 10, `data-id="${f.id}" style="width:56px"`)}</label>
         <button class="btn btn-ghost btn-sm btn-danger" data-act="ig-del" data-id="${f.id}">${icon("trash")}</button></div>
         <label class="hint" style="display:flex;gap:6px;align-items:center;margin:-4px 0 8px"><input type="checkbox" data-act="ig-seguinte" data-id="${f.id}" ${f.mesSeguinte ? "checked" : ""} style="width:auto" /> Referente ao mês anterior (vence no mês seguinte)</label>`).join("")}
       <div class="recipe-total" style="padding-top:14px"><span>Fixos por mês</span><span>${brl(fixosGeraisTot())}</span></div>
-      <div class="sim-row" style="grid-template-columns:1fr 190px${rateioPorFaturamento() ? "" : " 90px"};border:0"><span>Divisão dos fixos entre as áreas</span>
+      <div class="sim-row quebra-m" style="grid-template-columns:minmax(0,1fr) auto${rateioPorFaturamento() ? "" : " auto"};border:0"><span>Divisão dos fixos entre as áreas</span>
         <select class="inline" data-act="ig-modo"><option value="fixo" ${rateioPorFaturamento() ? "" : "selected"}>Percentual fixo</option><option value="faturamento" ${rateioPorFaturamento() ? "selected" : ""}>Pelo faturamento do mês</option></select>
-        ${rateioPorFaturamento() ? "" : `<label class="hint" style="display:flex;gap:4px;align-items:center">doces ${numIn("ig-pctdoces", pctFixosDoces())}%</label>`}</div>
+        ${rateioPorFaturamento() ? "" : `<label class="hint" style="display:flex;gap:4px;align-items:center;white-space:nowrap">doces ${numIn("ig-pctdoces", pctFixosDoces(), `style="width:56px"`)}%</label>`}</div>
       ${rateioPorFaturamento() ? "" : `<div class="hint">Paçoca fica com ${fmtQtd(100 - pctFixosDoces())}%.</div>`}
       <div class="hint" style="margin-top:8px">O DAS de cada mês vence no dia escolhido do mês seguinte (ex.: outubro vence em 20/11). Os fixos marcados como "referente ao mês anterior" também; os demais vencem no próprio mês.</div>
     </div>
@@ -1920,7 +1920,7 @@ function viewPacCustos() {
 function pacUnitHtml() {
   const cu = custoUnitPacoca(), preco = +db.config.precoPacoca || 0, nr = naoRecPctPacoca();
   const lucro = lucroPacoca(preco), m = preco ? (lucro / preco) * 100 : 0;
-  return `<div class="prod-stats mt" style="grid-template-columns:repeat(4,1fr)">
+  return `<div class="prod-stats mt" style="grid-template-columns:repeat(auto-fit,minmax(104px,1fr))">
     <div class="stat"><small>Custo</small><strong>${brl(cu)}</strong></div>
     <div class="stat"><small>Não recebido (${pct(nr)})</small><strong class="neg">${brl((preco * nr) / 100)}</strong></div>
     <div class="stat"><small>Lucro / pacote</small><strong class="${lucro >= 0 ? "pos" : "neg"}">${brl(lucro)}</strong></div>
@@ -2125,7 +2125,7 @@ function viewVendedorPacoca() {
     <div class="card-head" style="margin-top:22px"><div><h3>2. Registrar pagamento recebido</h3><div class="sub">Quando o cliente pagar (no dia ou depois), registre aqui</div></div></div>
     <div class="pag-row">${["pix", "especie"].map((k) => `<button class="pag-btn ${pag === k ? "active" : ""}" data-act="vend-pag" data-val="${k}">${PAGS[k]}</button>`).join("")}</div>
     <div class="chip-row mt">${[1, 2, 3, 5].map((n) => `<button class="btn" data-act="pac-receber" data-val="${preco * n}">+ ${brl(preco * n)}</button>`).join("")}</div>
-    <div class="sim-row mt" style="grid-template-columns:1fr 110px 150px;border:0"><span>Outro valor</span>
+    <div class="sim-row mt" style="grid-template-columns:1fr 110px auto;border:0"><span>Outro valor</span>
       <input id="pacRecValor" class="tbl-input" style="width:100%" inputmode="decimal" placeholder="R$" />
       <button class="btn btn-sm btn-primary" data-act="pac-receber">Registrar em ${PAGS[pag]}</button></div>
   </div>

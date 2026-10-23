@@ -455,3 +455,21 @@ tr.row-comprar td:first-child b { color: var(--red); }
 .pedido-card .alert strong { color: var(--text); }
 .pedido-cfg .tbl-input { width: 70px; }
 .pedido-cfg .hint { flex-basis: 100%; }
+
+/* Ajustes de textos encavalados */
+.card-head > .btn, .card-head > a.btn, .card-head > label { flex-shrink: 0; white-space: nowrap; }
+.card-head > div:first-child { min-width: 0; }
+.sim-row > .btn { white-space: nowrap; }
+.topbar-actions label { white-space: nowrap; }
+.area-stats div { min-width: 0; }
+.area-stats strong { white-space: nowrap; font-size: clamp(12.5px, 1vw, 15px); }
+.kpi-foot { min-width: 0; }
+.kpi-foot .badge { white-space: normal; line-height: 1.35; }
+@media (max-width: 760px) {
+  .sim-row.head { font-size: 9.5px; letter-spacing: 0; }
+  .sim-row.head span { overflow-wrap: anywhere; }
+}
+.sim-row.quebra-m { grid-template-columns: minmax(0, 1fr) auto !important; }
+.sim-row.quebra-m select { width: 100%; min-width: 0; }
+.sim-row.quebra-m > span:first-child { grid-column: 1 / -1; }
+.prod-stats .stat strong { white-space: nowrap; }
