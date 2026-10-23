@@ -91,7 +91,6 @@ function buildSeed() {
     fixos: [
       { id: uid(), nome: "Pró-labore", valor: 0 },
       { id: uid(), nome: "Marketing", valor: 0 },
-      { id: uid(), nome: "Contabilidade", valor: 0 },
       { id: uid(), nome: "INSS", valor: 0 },
       { id: uid(), nome: "Emissão de NF-e", valor: 0 },
       { id: uid(), nome: "Telefonia / Internet", valor: 0 },
@@ -113,6 +112,8 @@ function buildSeed() {
     contasIgnoradas: [],
     contasAutoV1: true,
     impostoPacV1: true,
+    impGeraisV1: true,
+    impostosGerais: { dasPct: 4.5, dasDia: 20, fixos: [{ id: uid(), nome: "DARF", valor: 178.3, dia: 20 }, { id: uid(), nome: "Contabilidade", valor: 350, dia: 10 }] },
     custosVar: [],
     estoque: {
       saldos: {},
@@ -188,6 +189,13 @@ function migrar(data) {
     }
     data.impostoPacV1 = true;
   }
+  // DAS, DARF e contabilidade passam a ser do negócio todo (DRE unificado); a contabilidade sai das despesas fixas dos doces
+  if (!data.impGeraisV1) {
+    const contab = (data.fixos || []).find((f) => /contab|contador/i.test(f.nome));
+    data.fixos = (data.fixos || []).filter((f) => f !== contab);
+    data.impostosGerais = data.impostosGerais || { dasPct: 4.5, dasDia: 20, fixos: [{ id: uid(), nome: "DARF", valor: 178.3, dia: 20 }, { id: uid(), nome: "Contabilidade", valor: +contab?.valor || 350, dia: 10 }] };
+    data.impGeraisV1 = true;
+  }
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
   (data.pagamentos || []).forEach((p) => { if (p.categoria === "Fornecedor / insumos") p.categoria = "Insumos"; });
@@ -230,6 +238,7 @@ const salvarLocal = () => localStorage.setItem(STORE_KEY, JSON.stringify(db));
 // Estado compartilhado na nuvem; as vendas do vendedor sincronizam uma a uma (ver Sync.putRegistro)
 const estadoSemRegistros = () => ({ ...db, vendedor: { ...db.vendedor, registros: [] } });
 function save() {
+  resetCarga();
   if (typeof sincronizarContasAuto === "function") sincronizarContasAuto();
   salvarLocal();
   if (typeof Sync !== "undefined") Sync.saveEstado(estadoSemRegistros());
@@ -247,7 +256,9 @@ const custoInsumosPacote = () => sum(db.estoque?.pacocaItens || [], (i) => consu
 // Imposto / taxa de NF-e pago junto com a compra do insumo (R$ por embalagem), separado do custo para aparecer no DRE
 const impostoUnitItem = (i) => (+i.imposto || 0) / (+i.pacote || 1);
 const impostoPacote = () => sum(db.estoque?.pacocaItens || [], (i) => consumoPacote(i) * impostoUnitItem(i));
-const custoUnitPacoca = () => custoInsumosPacote() + impostoPacote() + sum(db.pacocaCusto, (c) => +c.valor || 0);
+// Impostos e contabilidade "derretidos" no pacote: carga % sobre o que de fato é recebido (preço − não recebido)
+const impostoVendaPacote = () => (+db.config.precoPacoca || 0) * (1 - naoRecPctPacoca() / 100) * cargaImpostosPct() / 100;
+const custoUnitPacoca = () => custoInsumosPacote() + impostoPacote() + impostoVendaPacote() + sum(db.pacocaCusto, (c) => +c.valor || 0);
 const areaCV = (c) => c.area || "doces";
 // Pix confiança: parte do valor entregue não é paga; a margem da paçoca já desconta esse percentual
 const naoRecPctPacoca = () => +db.pacocaSim?.naoRecPct || 0;
@@ -339,10 +350,44 @@ function fonteItem(it) {
 }
 const custoBase = (p) => (p.itens ? sum(p.itens, (it) => (+it.qtd || 0) * valorItem(it)) : +p.custoFixo || 0);
 const taxaCanal = (canal) => sum(db.canais[canal]?.taxas || [], (t) => +t.pct || 0);
-const custoProd = (p) => custoBase(p) + (p.preco * taxaCanal(p.canal)) / 100;
+const custoProd = (p) => custoBase(p) + (p.preco * (taxaCanal(p.canal) + cargaImpostosPct())) / 100;
 const lucroProd = (p) => p.preco - custoProd(p);
 const margemProd = (p) => (p.preco ? (lucroProd(p) / p.preco) * 100 : 0);
-const precoAlvo = (p, alvo) => { const d = 1 - taxaCanal(p.canal) / 100 - alvo / 100; return d > 0 ? custoBase(p) / d : null; };
+const precoAlvo = (p, alvo) => { const d = 1 - (taxaCanal(p.canal) + cargaImpostosPct()) / 100 - alvo / 100; return d > 0 ? custoBase(p) / d : null; };
+/* ---------- Impostos do negócio todo (DAS, DARF, contabilidade) ---------- */
+// Calculados sobre doces + paçoca juntos. Cada área recebe a sua parte: o DAS sobre o próprio faturamento e
+// os valores fixos (DARF, contabilidade) pela participação da área no faturamento do mês.
+const impGerais = () => db.impostosGerais || { dasPct: 0, fixos: [] };
+const dasPct = () => +impGerais().dasPct || 0;
+const fixosGeraisTot = () => sum(impGerais().fixos || [], (f) => +f.valor || 0);
+function rateioImpostos(m, area) {
+  const fixos = impGerais().fixos || [];
+  if (!m) {
+    const partes = mesesComDados().map((x) => rateioImpostos(x, area));
+    const itens = fixos.map((f, i) => ({ nome: f.nome, valor: sum(partes, (p) => p.itens[i].valor) }));
+    const rA = resumo(0, area).receita, rT = resumo(0).receita;
+    const das = sum(partes, (p) => p.das), tf = sum(itens, (x) => x.valor);
+    return { das, itens, fixos: tf, total: das + tf, share: rT ? rA / rT : 0 };
+  }
+  const rT = resumo(m).receita, rA = area ? resumo(m, area).receita : rT;
+  const share = area ? (rT ? rA / rT : 0) : 1;
+  const itens = fixos.map((f) => ({ nome: f.nome, valor: (+f.valor || 0) * share }));
+  const das = (rA * dasPct()) / 100, tf = sum(itens, (x) => x.valor);
+  return { das, itens, fixos: tf, total: das + tf, share };
+}
+// Faturamento médio do negócio nos últimos 3 meses com vendas: base para "derreter" DARF e contabilidade no preço
+function faturamentoMedioMensal() {
+  const ms = mesesComDados().filter((m) => resumo(m).receita > 0).slice(-3);
+  return ms.length ? sum(ms, (m) => resumo(m).receita) / ms.length : 0;
+}
+var cacheCarga = null;
+function resetCarga() { cacheCarga = null; }
+// % do preço de venda que vai para impostos e contabilidade: DAS + (DARF + contabilidade) ÷ faturamento médio
+function cargaImpostosPct() {
+  if (cacheCarga === null) { const fat = faturamentoMedioMensal(); cacheCarga = dasPct() + (fat ? (fixosGeraisTot() / fat) * 100 : 0); }
+  return cacheCarga;
+}
+const cargaFixosPct = () => cargaImpostosPct() - dasPct();
 function statusMargem(m, canal) {
   const c = db.canais[canal] || { alvoMin: 30 };
   if (m >= c.alvoMin) return "green";
@@ -478,6 +523,7 @@ function confirmDel(msg, fn) { if (confirm(msg)) { fn(); save(); render(); toast
 const AREAS = {
   pacoca: { nome: "Paçoca", desc: "Vendas diárias, recebimentos, custos e compra mensal da paçoca", inicial: "pacoca-painel", cor: "#2f9e6b" },
   doces: { nome: "Doces Finos", desc: "Brigadeiros, mousses e barras: vendas por canal, preços, fichas técnicas e DRE", inicial: "painel", cor: "#c8963e" },
+  geral: { nome: "Negócio todo", desc: "DRE unificado de doces + paçoca, com DAS, DARF e contabilidade divididos entre as áreas", inicial: "dre-geral", cor: "#5a3826" },
 };
 const PAGES = [
   { id: "inicio", label: "Início", icon: "dash", sub: "Escolha a área que deseja gerenciar" },
@@ -503,6 +549,7 @@ const PAGES = [
   { id: "pagamentos", area: "doces", label: "Pagamentos", icon: "wallet", sub: "Contas a pagar e a receber: o que já foi pago e o que está pendente" },
   { id: "personalizar", area: "doces", label: "Personalizar custos", icon: "gear", sub: "Taxas, metas de margem e custos padrão — tudo que mexe no custo", section: "Configurações" },
   { id: "equipe", area: "doces", label: "Equipe & App", icon: "cart", sub: "Sincronização entre celulares e app do vendedor" },
+  { id: "dre-geral", area: "geral", label: "DRE unificado", icon: "pie", sub: "Doces + paçoca, com impostos e contabilidade divididos entre as áreas", section: "Financeiro" },
 ];
 
 /* ---------- Personalizar custos ---------- */
@@ -614,10 +661,25 @@ function viewInicio() {
       <div class="area-foot">Acumulado no ano: ${brl(tot.receita)} faturados · ${brl(tot.lucro)} de lucro</div>
     </a>`;
   };
+  const cardGeral = () => {
+    const meses = mesesComDados(), ult = meses[meses.length - 1], r = resumo(ult), rat = rateioImpostos(ult);
+    const fx = sum(db.fixos, (f) => +f.valor || 0) + sum(db.fixosPacoca, (f) => +f.valor || 0), resultado = r.lucro - rat.total - fx;
+    return `<a class="area-card" href="#dre-geral" style="--area:${AREAS.geral.cor}">
+      <div class="area-top"><span class="area-icon">${icon("pie")}</span><span class="area-go">Entrar →</span></div>
+      <h2>DRE unificado</h2><p>${AREAS.geral.desc}</p>
+      <div class="hint" style="margin-top:6px">Último mês com movimento: <b>${ult ? MESES_FULL[ult - 1] : "—"}</b></div>
+      <div class="area-stats" style="margin-top:0">
+        <div><small>Faturamento</small><strong>${brl(r.receita)}</strong></div>
+        <div><small>Impostos</small><strong class="neg">${brl(rat.total)}</strong></div>
+        <div><small>Resultado</small><strong class="${resultado >= 0 ? "pos" : "neg"}">${brl(resultado)}</strong></div>
+      </div>
+      <div class="area-foot">DAS ${pct(dasPct())} + ${esc((impGerais().fixos || []).map((f) => f.nome).join(" + "))}: ${pct(cargaImpostosPct())} do preço</div>
+    </a>`;
+  };
   const g = resumo(0);
   return `<div class="home">
     <div class="home-head"><div class="brand-logo big">H&amp;A</div><h1>HA Gourmet</h1><p>Escolha a área que deseja gerenciar</p></div>
-    <div class="area-grid">${card("pacoca")}${card("doces")}</div>
+    <div class="area-grid">${card("pacoca")}${card("doces")}${cardGeral()}</div>
     <div class="home-total">Negócio todo em ${db.config.ano}: <b>${brl(g.receita)}</b> faturados e <b class="${g.lucro >= 0 ? "pos" : "neg"}">${brl(g.lucro)}</b> de lucro</div>
   </div>`;
 }
@@ -862,8 +924,10 @@ function compHtml(p) {
   (db.canais[p.canal]?.taxas || []).forEach((t) => {
     linhas.push(`<li><span>${esc(t.nome)} <a class="badge b-gold" href="#personalizar" title="Altere em: Personalizar custos">taxa</a></span><span>${pct(t.pct)} de ${brl(p.preco)}</span><span>${brl((p.preco * t.pct) / 100)}</span></li>`);
   });
+  if (cargaImpostosPct()) linhas.push(`<li><span>Impostos e contabilidade <a class="badge b-gold" href="#dre-geral" title="Altere em: DRE unificado">imposto</a></span><span>${pct(cargaImpostosPct())} de ${brl(p.preco)}</span><span>${brl((p.preco * cargaImpostosPct()) / 100)}</span></li>`);
   return `<ul class="recipe-ings">${linhas.join("")}</ul>
     <div class="recipe-total"><span>Custo total</span><span>${brl(custoProd(p))}</span></div>
+    ${cargaImpostosPct() ? `<div class="hint" style="margin-top:6px">Impostos: DAS ${pct(dasPct())} + DARF e contabilidade ${pct(cargaFixosPct())} (${brl(fixosGeraisTot())}/mês ÷ faturamento médio de ${brl(faturamentoMedioMensal())}).</div>` : ""}
     <div class="hint" style="margin-top:6px">As etiquetas mostram onde cada valor é alterado — clique nelas para ir até lá.</div>`;
 }
 const ITENS_PADRAO = [
@@ -909,7 +973,7 @@ function viewProdutos() {
       ${taxaCanal(ui.prodCanal) ? `<span class="badge b-red">Taxas: ${pct(taxaCanal(ui.prodCanal))} do preço</span>` : ""}<a class="btn btn-sm" href="#personalizar">Alterar metas e taxas</a></div></div>
   <div class="grid g-3">${lista.map((p) => { const st = statusMargem(margemProd(p), p.canal); return `
     <div class="prod" data-prod="${p.id}">
-      <div class="prod-top"><div><h4>${esc(p.nome)}</h4><div class="hint">${taxaCanal(p.canal) ? `Custo ${brl(custoBase(p))} + ${pct(taxaCanal(p.canal))} de taxas sobre o preço` : `Custo ${brl(custoBase(p))}`}</div></div>
+      <div class="prod-top"><div><h4>${esc(p.nome)}</h4><div class="hint">${taxaCanal(p.canal) + cargaImpostosPct() ? `Custo ${brl(custoBase(p))} + ${pct(taxaCanal(p.canal) + cargaImpostosPct())} de taxas e impostos sobre o preço` : `Custo ${brl(custoBase(p))}`}</div></div>
         <span class="badge b-${st}" data-badge>${statusLabel[st]}</span></div>
       <div class="price-row"><label>Preço de venda</label><input inputmode="decimal" data-act="set-preco" data-id="${p.id}" value="${String(p.preco).replace(".", ",")}" />
         ${rowActions("prod", p.id)}</div>
@@ -1228,6 +1292,16 @@ function formCustoVar(c, area = "doces") {
     },
   });
 }
+// Linhas do DRE de uma área com a parte dela nos impostos do negócio (colunas trazem c.rat = rateioImpostos)
+function linhasImpostos(area) {
+  const nome = area === "pacoca" ? "da paçoca" : "dos doces";
+  return [
+    { t: `(−) IMPOSTOS E CONTABILIDADE (parte ${nome})`, f: (r, c) => -c.rat.total, cls: "total" },
+    { t: `   DAS ${pct(dasPct())} sobre o faturamento`, f: (r, c) => -c.rat.das },
+    ...(impGerais().fixos || []).map((f, i) => ({ t: `   ${f.nome} (rateio)`, f: (r, c) => -c.rat.itens[i].valor })),
+    { t: `   Participação ${nome} no faturamento do negócio`, f: (r, c) => c.rat.share * 100, pct: true },
+  ];
+}
 function viewDre() {
   const todos = mesesComDados("doces");
   setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Mês de referência
@@ -1235,9 +1309,9 @@ function viewDre() {
     ${MESES_FULL.map((n, i) => `<option value="${i + 1}" ${ui.dreMes === i + 1 ? "selected" : ""}>${n}</option>`).join("")}</select></label>
     <button class="btn btn-primary" data-act="new-cvar">${icon("plus")}Custo variável</button>`);
   const meses = ui.dreMes ? [ui.dreMes] : todos;
-  const cols = meses.map((m) => ({ label: MESES_FULL[m - 1], r: resumo(m, "doces") }));
+  const cols = meses.map((m) => ({ label: MESES_FULL[m - 1], r: resumo(m, "doces"), rat: rateioImpostos(m, "doces") }));
   const totalFixos = sum(db.fixos, (f) => +f.valor || 0);
-  if (!ui.dreMes) cols.push({ label: "Total", r: resumo(0, "doces"), total: true });
+  if (!ui.dreMes) cols.push({ label: "Total", r: resumo(0, "doces"), rat: rateioImpostos(0, "doces"), total: true });
   const nFix = (c) => (c.total ? meses.length : 1);
   const catsUsadas = CATS_VAR.filter((cat) => db.custosVar.some((c) => areaCV(c) === "doces" && c.categoria === cat && (!ui.dreMes || +c.mes === ui.dreMes)));
   const linhas = [
@@ -1251,9 +1325,10 @@ function viewDre() {
     ...catsUsadas.map((cat) => ({ t: "   " + cat + " (lançado)", f: (r) => -sum(r.cvs.filter((c) => c.categoria === cat), (c) => +c.valor || 0) })),
     { t: "(=) LUCRO BRUTO (margem de contribuição)", f: (r) => r.lucro, cls: "total" },
     { t: "   Margem de contribuição %", f: (r) => (r.receita ? (r.lucro / r.receita) * 100 : 0), pct: true },
+    ...linhasImpostos("doces"),
     { t: "(−) DESPESAS FIXAS", f: (r, c) => -(totalFixos * nFix(c)), cls: "total" },
-    { t: "(=) RESULTADO OPERACIONAL", f: (r, c) => r.lucro - totalFixos * nFix(c), cls: "result" },
-    { t: "   Margem líquida %", f: (r, c) => (r.receita ? ((r.lucro - totalFixos * nFix(c)) / r.receita) * 100 : 0), pct: true },
+    { t: "(=) RESULTADO OPERACIONAL", f: (r, c) => r.lucro - c.rat.total - totalFixos * nFix(c), cls: "result" },
+    { t: "   Margem líquida %", f: (r, c) => (r.receita ? ((r.lucro - c.rat.total - totalFixos * nFix(c)) / r.receita) * 100 : 0), pct: true },
   ];
   const cvLista = db.custosVar.filter((c) => areaCV(c) === "doces" && (!ui.dreMes || +c.mes === ui.dreMes)).sort((a, b) => a.mes - b.mes);
   return `
@@ -1284,9 +1359,83 @@ function afterDre() {
   const tf = sum(db.fixos, (f) => +f.valor || 0);
   chart("chDre", {
     type: "line",
-    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [{ label: "Resultado", data: meses.map((m) => resumo(m, "doces").lucro - tf), borderColor: "#5a3826", backgroundColor: "rgba(200,150,62,.18)", fill: true, tension: .35 }] },
+    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [{ label: "Resultado", data: meses.map((m) => resumo(m, "doces").lucro - rateioImpostos(m, "doces").total - tf), borderColor: "#5a3826", backgroundColor: "rgba(200,150,62,.18)", fill: true, tension: .35 }] },
     options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
   });
+}
+
+/* ---------- DRE unificado (doces + paçoca) ---------- */
+function viewDreGeral() {
+  const todos = mesesComDados();
+  setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Mês de referência
+    <select class="inline" data-act="set-dremesger"><option value="0">Todos os meses</option>
+    ${MESES_FULL.map((n, i) => `<option value="${i + 1}" ${ui.dreMesGer === i + 1 ? "selected" : ""}>${n}</option>`).join("")}</select></label>`);
+  const meses = ui.dreMesGer ? [ui.dreMesGer] : todos;
+  const col = (m, total) => ({ m, total, d: resumo(m, "doces"), p: resumo(m, "pacoca"), g: resumo(m), rat: rateioImpostos(m) });
+  const cols = meses.map((m) => ({ label: MESES_FULL[m - 1], ...col(m) }));
+  if (!ui.dreMesGer) cols.push({ label: "Total", ...col(0, true) });
+  const fD = sum(db.fixos, (f) => +f.valor || 0), fP = sum(db.fixosPacoca, (f) => +f.valor || 0), nFix = (c) => (c.total ? meses.length : 1);
+  const res = (c) => c.g.lucro - c.rat.total - (fD + fP) * nFix(c);
+  const fixos = impGerais().fixos || [];
+  const linhas = [
+    { t: "RECEITA BRUTA", f: (c) => c.g.receita, cls: "total" },
+    { t: "   Doces finos", f: (c) => c.d.receita },
+    { t: "   Paçoca", f: (c) => c.p.receita },
+    { t: "(−) DESPESAS VARIÁVEIS", f: (c) => -c.g.custos, cls: "total" },
+    { t: "   Doces finos", f: (c) => -c.d.custos },
+    { t: "   Paçoca", f: (c) => -c.p.custos },
+    { t: "(=) LUCRO BRUTO", f: (c) => c.g.lucro, cls: "total" },
+    { t: "(−) IMPOSTOS E CONTABILIDADE", f: (c) => -c.rat.total, cls: "total" },
+    { t: `   DAS ${pct(dasPct())} sobre o faturamento bruto`, f: (c) => -c.rat.das },
+    ...fixos.map((f, i) => ({ t: "   " + f.nome, f: (c) => -c.rat.itens[i].valor })),
+    { t: "(−) DESPESAS FIXAS DAS ÁREAS", f: (c) => -(fD + fP) * nFix(c), cls: "total" },
+    { t: "   Doces finos", f: (c) => -fD * nFix(c) },
+    { t: "   Paçoca", f: (c) => -fP * nFix(c) },
+    { t: "(=) RESULTADO DO NEGÓCIO", f: res, cls: "result" },
+    { t: "   Margem líquida %", f: (c) => (c.g.receita ? (res(c) / c.g.receita) * 100 : 0), pct: true },
+  ];
+  // Rateio do mês escolhido (ou do ano) entre as áreas
+  const mR = ui.dreMesGer || 0, rD = rateioImpostos(mR, "doces"), rP = rateioImpostos(mR, "pacoca"), rG = rateioImpostos(mR);
+  const fatD = resumo(mR, "doces").receita, fatP = resumo(mR, "pacoca").receita;
+  const linhaRateio = (nome, fat, r) => `<tr><td><b>${nome}</b></td><td class="num">${brl(fat)}</td><td class="num">${pct(r.share * 100)}</td><td class="num">${brl(r.das)}</td>
+    ${r.itens.map((x) => `<td class="num">${brl(x.valor)}</td>`).join("")}<td class="num"><b>${brl(r.total)}</b></td><td class="num">${pct(fat ? (r.total / fat) * 100 : 0)}</td></tr>`;
+  const fat = faturamentoMedioMensal(), carga = cargaImpostosPct();
+  const exProd = db.produtos.find((p) => p.canal === "Outbound" && /9un/.test(p.nome)) || db.produtos[0];
+  const recPacote = (+db.config.precoPacoca || 0) * (1 - naoRecPctPacoca() / 100);
+  return `
+  <div class="card"><div class="card-head"><div><h3>DRE unificado ${db.config.ano}${ui.dreMesGer ? " · " + MESES_FULL[ui.dreMesGer - 1] : ""}</h3><div class="sub">Doces finos + paçoca, com os impostos e a contabilidade do negócio</div></div></div>
+    <div class="table-wrap"><table class="dre"><thead><tr><th>Descrição</th>${cols.map((c) => `<th class="num">${c.label}</th>`).join("")}</tr></thead>
+    <tbody>${linhas.map((l) => `<tr class="${l.cls || ""}"><td>${l.t.replace(/^ +/, (s) => "&nbsp;".repeat(s.length * 2))}</td>${cols.map((c) => { const v = l.f(c); return `<td class="num ${!l.cls && !l.pct && v < 0 ? "neg" : ""}">${l.pct ? pct(v) : brl(v)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+  </div>
+  <div class="card mt"><div class="card-head"><div><h3>Divisão dos impostos entre as áreas · ${mR ? MESES_FULL[mR - 1] : "ano todo"}</h3><div class="sub">DAS sobre o faturamento de cada área; ${esc(fixos.map((f) => f.nome).join(" e ") || "valores fixos")} pela participação no faturamento. É essa parte que aparece no DRE de cada área.</div></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Área</th><th class="num">Faturamento</th><th class="num">Participação</th><th class="num">DAS</th>${fixos.map((f) => `<th class="num">${esc(f.nome)}</th>`).join("")}<th class="num">Total</th><th class="num">% do faturamento</th></tr></thead>
+    <tbody>${linhaRateio("Doces finos", fatD, rD)}${linhaRateio("Paçoca", fatP, rP)}</tbody>
+    <tfoot>${linhaRateio("Negócio todo", fatD + fatP, rG).replace(/<\/?b>/g, "")}</tfoot></table></div>
+  </div>
+  <div class="grid g-2 mt">
+    <div class="card"><div class="card-head"><div><h3>Impostos e contabilidade</h3><div class="sub">Valores do negócio todo · geram as contas a pagar automaticamente</div></div><button class="btn btn-sm" data-act="ig-add">${icon("plus")}Adicionar</button></div>
+      <div class="sim-row" style="grid-template-columns:1fr 90px 110px"><span><b>DAS</b> <span class="hint">% sobre o faturamento bruto</span></span>${numIn("ig-das", dasPct())}<label class="hint" style="display:flex;gap:4px;align-items:center">dia ${numIn("ig-dasdia", +impGerais().dasDia || 20)}</label></div>
+      ${fixos.map((f) => `<div class="sim-row" style="grid-template-columns:1fr 110px 90px 34px">
+        <input data-act="ig-nome" data-id="${f.id}" value="${esc(f.nome)}" style="text-align:left" />${numIn("ig-val", f.valor, `data-id="${f.id}"`)}
+        <label class="hint" style="display:flex;gap:4px;align-items:center">dia ${numIn("ig-dia", +f.dia || 10, `data-id="${f.id}"`)}</label>
+        <button class="btn btn-ghost btn-sm btn-danger" data-act="ig-del" data-id="${f.id}">${icon("trash")}</button></div>`).join("")}
+      <div class="recipe-total" style="padding-top:14px"><span>Fixos por mês</span><span>${brl(fixosGeraisTot())}</span></div>
+      <div class="hint" style="margin-top:8px">O DAS do mês vence no dia escolhido do mês seguinte; os fixos vencem no dia escolhido do próprio mês.</div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Impostos dentro do preço</h3><div class="sub">"Derretidos" no custo de cada produto e de cada pacote de paçoca</div></div></div>
+      <ul class="recipe-ings">
+        <li><span>DAS</span><span></span><span>${pct(dasPct())}</span></li>
+        <li><span>${esc(fixos.map((f) => f.nome).join(" + ") || "Fixos")}</span><span class="hint">${brl(fixosGeraisTot())} ÷ ${brl(fat)}/mês</span><span>${pct(cargaFixosPct())}</span></li>
+        <li><span><b>Carga sobre o preço de venda</b></span><span></span><span><b>${pct(carga)}</b></span></li>
+      </ul>
+      <div class="vend-sec">Exemplos</div>
+      <ul class="recipe-ings">
+        ${exProd ? `<li><span>${esc(exProd.nome)} (${esc(exProd.canal)})</span><span class="hint">${pct(carga)} de ${brl(exProd.preco)}</span><span>${brl((exProd.preco * carga) / 100)}</span></li>` : ""}
+        <li><span>Pacote de paçoca</span><span class="hint">${pct(carga)} de ${brl(recPacote)} recebido</span><span>${brl(impostoVendaPacote())}</span></li>
+      </ul>
+      <div class="hint" style="margin-top:8px">Faturamento médio dos últimos 3 meses com vendas (doces + paçoca). Esse percentual entra no custo em Produtos &amp; Preços, no simulador e no custo do pacote da paçoca.</div>
+    </div>
+  </div>`;
 }
 
 /* ---------- Paçoca · Painel ---------- */
@@ -1346,6 +1495,7 @@ function fichaPacoteHtml() {
   const itens = db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0);
   const comImposto = itens.filter((i) => impostoUnitItem(i) > 0);
   return `<ul class="recipe-ings">${itens.map((i) => `<li><span>${esc(i.nome)} <a class="badge b-gold" href="#insumos-pacoca">insumo</a></span><span>${fmtQtd(consumoPacote(i))} × ${brlU(+i.custo || 0)}</span><span>${brl(consumoPacote(i) * (+i.custo || 0))}</span></li>`).join("")}
+    ${impostoVendaPacote() ? `<li><span>Impostos e contabilidade <a class="badge b-gold" href="#dre-geral">imposto</a></span><span>${pct(cargaImpostosPct())} de ${brl((+db.config.precoPacoca || 0) * (1 - naoRecPctPacoca() / 100))} recebido</span><span>${brl(impostoVendaPacote())}</span></li>` : ""}
     ${comImposto.map((i) => `<li><span>Imposto NF-e · ${esc(i.nome)} <span class="badge b-gray">imposto</span></span><span>${brl(+i.imposto)} ÷ ${fmtQtd(+i.pacote || 1)} × ${fmtQtd(consumoPacote(i))}</span><span>${brl(consumoPacote(i) * impostoUnitItem(i))}</span></li>`).join("")}</ul>
     ${db.pacocaCusto.map((c) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(c.nome)} <span class="hint">(por pacote)</span></span><input inputmode="decimal" data-act="pac-custo" data-id="${c.id}" value="${String(c.valor).replace(".", ",")}" /></div>`).join("")}`;
 }
@@ -1400,8 +1550,8 @@ function viewDrePacoca() {
     ${MESES_FULL.map((n, i) => `<option value="${i + 1}" ${ui.dreMesPac === i + 1 ? "selected" : ""}>${n}</option>`).join("")}</select></label>
     <button class="btn btn-primary" data-act="new-cvar" data-val="pacoca">${icon("plus")}Custo variável</button>`);
   const meses = ui.dreMesPac ? [ui.dreMesPac] : todos;
-  const cols = meses.map((m) => ({ label: MESES_FULL[m - 1], r: resumo(m, "pacoca") }));
-  if (!ui.dreMesPac) cols.push({ label: "Total", r: resumo(0, "pacoca"), total: true });
+  const cols = meses.map((m) => ({ label: MESES_FULL[m - 1], r: resumo(m, "pacoca"), rat: rateioImpostos(m, "pacoca") }));
+  if (!ui.dreMesPac) cols.push({ label: "Total", r: resumo(0, "pacoca"), rat: rateioImpostos(0, "pacoca"), total: true });
   const tf = sum(db.fixosPacoca, (f) => +f.valor || 0), nFix = (c) => (c.total ? meses.length : 1);
   const cvsArea = db.custosVar.filter((c) => areaCV(c) === "pacoca");
   const cats = CATS_VAR.filter((cat) => cvsArea.some((c) => c.categoria === cat && (!ui.dreMesPac || +c.mes === ui.dreMesPac)));
@@ -1418,9 +1568,10 @@ function viewDrePacoca() {
     ...cats.map((cat) => ({ t: "   " + cat + " (lançado)", f: (r) => -sum(r.cvs.filter((c) => c.categoria === cat), (c) => +c.valor || 0) })),
     { t: "(=) LUCRO BRUTO (margem de contribuição)", f: (r) => r.lucro, cls: "total" },
     { t: "   Margem de contribuição %", f: (r) => (r.receita ? (r.lucro / r.receita) * 100 : 0), pct: true },
+    ...linhasImpostos("pacoca"),
     { t: "(−) DESPESAS FIXAS", f: (r, c) => -(tf * nFix(c)), cls: "total" },
-    { t: "(=) RESULTADO OPERACIONAL", f: (r, c) => r.lucro - tf * nFix(c), cls: "result" },
-    { t: "   Margem líquida %", f: (r, c) => (r.receita ? ((r.lucro - tf * nFix(c)) / r.receita) * 100 : 0), pct: true },
+    { t: "(=) RESULTADO OPERACIONAL", f: (r, c) => r.lucro - c.rat.total - tf * nFix(c), cls: "result" },
+    { t: "   Margem líquida %", f: (r, c) => (r.receita ? ((r.lucro - c.rat.total - tf * nFix(c)) / r.receita) * 100 : 0), pct: true },
   ];
   const cvLista = cvsArea.filter((c) => !ui.dreMesPac || +c.mes === ui.dreMesPac).sort((a, b) => a.mes - b.mes);
   return `
@@ -1451,7 +1602,7 @@ function afterDrePacoca() {
   const meses = mesesComDados("pacoca"), tf = sum(db.fixosPacoca, (f) => +f.valor || 0);
   chart("chDrePac", {
     type: "line",
-    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [{ label: "Resultado", data: meses.map((m) => resumo(m, "pacoca").lucro - tf), borderColor: "#2f9e6b", backgroundColor: "rgba(47,158,107,.15)", fill: true, tension: .35 }] },
+    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [{ label: "Resultado", data: meses.map((m) => resumo(m, "pacoca").lucro - rateioImpostos(m, "pacoca").total - tf), borderColor: "#2f9e6b", backgroundColor: "rgba(47,158,107,.15)", fill: true, tension: .35 }] },
     options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
   });
 }
@@ -1890,7 +2041,7 @@ function viewPagamentos(area) {
 function categoriaFixo(nome) {
   if (/contab|contador/i.test(nome)) return "Contador";
   if (/nf-?e|nota fiscal|notas fiscais/i.test(nome)) return "Notas fiscais (NF-e)";
-  if (/inss|imposto|simples|das\b|iss\b|mei/i.test(nome)) return "Impostos";
+  if (/inss|imposto|simples|das\b|darf|iss\b|mei/i.test(nome)) return "Impostos";
   if (/pr[óo]-?\s?labore/i.test(nome)) return "Pró-labore";
   if (/marketing/i.test(nome)) return "Marketing";
   if (/m[ãa]o de obra|sal[áa]rio|funcion/i.test(nome)) return "Mão de obra";
@@ -1923,6 +2074,9 @@ function contasAutomaticas() {
     const mm = String(m).padStart(2, "0"), mes = MESES_FULL[m - 1], venc = `${ano}-${mm}-10`;
     db.fixos.forEach((f) => push(`fixo:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, venc));
     db.fixosPacoca.forEach((f) => push(`fixopac:${f.id}:${m}`, "pacoca", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, venc));
+    (impGerais().fixos || []).forEach((f) => push(`imp:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, `${ano}-${mm}-${String(Math.min(28, +f.dia || 10)).padStart(2, "0")}`));
+    const fat = resumo(m).receita, prox = m === 12 ? `${ano + 1}-01` : `${ano}-${String(m + 1).padStart(2, "0")}`;
+    push(`das:${m}`, "geral", "Impostos", `DAS ${pct(dasPct())} · faturamento de ${mes} (${brl(fat)})`, (fat * dasPct()) / 100, `${prox}-${String(Math.min(28, +impGerais().dasDia || 20)).padStart(2, "0")}`);
   }
   return out;
 }
@@ -2425,7 +2579,7 @@ function viewEstoque(area) {
 }
 
 /* =================== Roteamento & eventos =================== */
-const VIEWS = { "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
+const VIEWS = { "dre-geral": viewDreGeral, "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
 const AFTER = { "dre-pacoca": afterDrePacoca, "pacoca-painel": afterPacPainel, painel: afterPainel, pacoca: afterPacoca, dre: afterDre };
 let currentPage = null;
 const areaAtual = () => PAGES.find((p) => p.id === currentPage)?.area;
@@ -2433,11 +2587,11 @@ const areaAtual = () => PAGES.find((p) => p.id === currentPage)?.area;
 function renderNav(page) {
   const area = AREAS[page.area];
   if (!area) { $("#nav").innerHTML = ""; return; }
-  const outra = page.area === "pacoca" ? "doces" : "pacoca";
+  const outras = Object.keys(AREAS).filter((k) => k !== page.area);
   let html = `<div class="area-switch" style="--area:${area.cor}">
     <small>Área atual</small><b>${area.nome}</b>
-    <div class="area-switch-links"><a href="#${AREAS[outra].inicial}">Ir para ${AREAS[outra].nome}</a><a href="#inicio">Início</a></div>
-    <a class="area-config ${["personalizar", "pacoca-custos"].includes(page.id) ? "active" : ""}" href="#${page.area === "pacoca" ? "pacoca-custos" : "personalizar"}">${icon("gear")}Personalizar custos</a></div>`;
+    <div class="area-switch-links">${outras.map((k) => `<a href="#${AREAS[k].inicial}">${k === "geral" ? "DRE unificado" : "Ir para " + AREAS[k].nome}</a>`).join("")}<a href="#inicio">Início</a></div>
+    ${page.area === "geral" ? "" : `<a class="area-config ${["personalizar", "pacoca-custos"].includes(page.id) ? "active" : ""}" href="#${page.area === "pacoca" ? "pacoca-custos" : "personalizar"}">${icon("gear")}Personalizar custos</a>`}</div>`;
   PAGES.filter((p) => p.area === page.area).forEach((p) => {
     if (p.section) html += `<div class="nav-section">${p.section}</div>`;
     html += `<a href="#${p.id}" class="${p.id === page.id ? "active" : ""}">${icon(p.icon)}${p.label}</a>`;
@@ -2445,6 +2599,7 @@ function renderNav(page) {
   $("#nav").innerHTML = html;
 }
 function render() {
+  resetCarga();
   if (APP_VENDEDOR) {
     const area = localStorage.getItem("hag_vend_area") || "doces";
     currentPage = "vendedor-" + area;
@@ -2513,6 +2668,8 @@ function onClick(e) {
     case "set-pgstatus": ui.pgStatus = val; break;
     case "new-pag": return formPagamento(areaAtual());
     case "edit-pag": return formPagamento(areaAtual(), find(db.pagamentos));
+    case "ig-add": { db.impostosGerais.fixos.push({ id: uid(), nome: "Novo imposto", valor: 0, dia: 20 }); save(); render(); return; }
+    case "ig-del": return confirmDel("Remover este imposto?", () => { db.impostosGerais.fixos = db.impostosGerais.fixos.filter((x) => x.id !== id); });
     case "del-pag": return confirmDel("Excluir esta conta?", () => {
       const p = db.pagamentos.find((x) => x.id === id);
       if (p?.auto) db.contasIgnoradas = [...new Set([...(db.contasIgnoradas || []), p.auto])];
@@ -2703,6 +2860,12 @@ function onChange(e) {
   if (act === "set-dremes") { ui.dreMes = +el.value; render(); }
   if (act === "set-dremespac") { ui.dreMesPac = +el.value; render(); }
   if (act === "set-pgmes") { ui.pgMes = +el.value; render(); }
+  if (act === "set-dremesger") { ui.dreMesGer = +el.value; render(); }
+  if (act === "ig-das" || act === "ig-dasdia") { impGerais()[act === "ig-das" ? "dasPct" : "dasDia"] = parseNum(el.value); save(); render(); }
+  if (["ig-nome", "ig-val", "ig-dia"].includes(act)) {
+    const it = (impGerais().fixos || []).find((x) => x.id === el.dataset.id);
+    if (it) { if (act === "ig-nome") it.nome = el.value.trim() || it.nome; else it[act === "ig-val" ? "valor" : "dia"] = parseNum(el.value); save(); render(); }
+  }
   if (act === "pg-auto-desde" && el.value) { db.config.contasAutoDesde = el.value; save(); render(); toast(`Contas automáticas a partir de ${ddmm(el.value)}`); }
   if (act === "pg-toggle") {
     const p = db.pagamentos.find((x) => x.id === el.dataset.id);

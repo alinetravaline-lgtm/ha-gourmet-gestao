@@ -368,7 +368,8 @@ body.home-mode .content { max-width: none; padding: 0; }
 .brand-logo.big { width: 64px; height: 64px; font-size: 22px; border-radius: 18px; margin: 0 auto 14px; }
 .home-head h1 { margin: 0; font-size: 30px; letter-spacing: -.02em; }
 .home-head p { margin: 6px 0 0; color: var(--muted); font-size: 15px; }
-.area-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 420px)); gap: 24px; width: 100%; justify-content: center; }
+.area-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 380px)); gap: 20px; width: 100%; justify-content: center; }
+@media (max-width: 1200px) { .area-grid { grid-template-columns: repeat(2, minmax(0, 420px)); } }
 .area-card {
   display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: var(--text);
   background: #fff; border-radius: 20px; padding: 26px; border: 1px solid #f0e9e1;
