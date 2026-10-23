@@ -201,6 +201,7 @@ function migrar(data) {
     (data.impostosGerais?.fixos || []).forEach((f) => { if (/darf/i.test(f.nome) && !("mesSeguinte" in f)) f.mesSeguinte = true; });
     data.darfMesSeguinteV1 = true;
   }
+  if (data.pacocaSim && !data.pacocaSim.fixos) data.pacocaSim.fixos = { "Comissão vendedor": 0, "Alimentação vendedor": 0, Marketing: 0 };
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
   (data.pagamentos || []).forEach((p) => { if (p.categoria === "Fornecedor / insumos") p.categoria = "Insumos"; });
@@ -546,11 +547,12 @@ const PAGES = [
   { id: "pacoca-painel", area: "pacoca", label: "Painel", icon: "dash", sub: "Visão geral da paçoca", section: "Visão geral" },
   { id: "vendedor-pacoca", area: "pacoca", label: "Área do vendedor", icon: "cart", sub: "Contador rápido de vendas da paçoca", section: "Operação" },
   { id: "pacoca", area: "pacoca", label: "Vendas diárias", icon: "cal", sub: "Registro diário de vendas da paçoca" },
+  { id: "simulador-pacoca", area: "pacoca", label: "Simulador", icon: "calc", sub: "Projete quanto vai gastar e lucrar por semana e no mês" },
   { id: "estoque-pacoca", area: "pacoca", label: "Estoque", icon: "pkg", sub: "Saldo de paçoquitas e materiais, com baixa automática das vendas" },
   { id: "insumos-pacoca", area: "pacoca", label: "Insumos", icon: "pkg", sub: "Custo de compra dos insumos e ficha do pacote", section: "Cadastros" },
   { id: "dre-pacoca", area: "pacoca", label: "DRE", icon: "pie", sub: "Demonstrativo de resultado da paçoca", section: "Financeiro" },
   { id: "pagamentos-pacoca", area: "pacoca", label: "Pagamentos", icon: "wallet", sub: "Contas a pagar e a receber: o que já foi pago e o que está pendente" },
-  { id: "pacoca-custos", area: "pacoca", label: "Personalizar custos", icon: "gear", sub: "Custo por paçoca, preço, compra mensal e simulador", section: "Configurações" },
+  { id: "pacoca-custos", area: "pacoca", label: "Personalizar custos", icon: "gear", sub: "Custo por paçoca, preço e compra mensal", section: "Configurações" },
   { id: "equipe-pacoca", area: "pacoca", label: "Equipe & App", icon: "cart", sub: "Sincronização entre celulares e app do vendedor" },
   { id: "painel", area: "doces", label: "Painel", icon: "dash", sub: "Visão geral dos doces finos", section: "Visão geral" },
   { id: "vendedor-doces", area: "doces", label: "Área do vendedor", icon: "cart", sub: "Contador rápido de vendas com combos", section: "Operação" },
@@ -1067,8 +1069,9 @@ function gastosSimPacoca() {
   db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => acc.add(i.usaPacote ? "Ingredientes" : "Embalagens e materiais", i.nome, qtd * consumoPacote(i) * (+i.custo || 0)));
   acc.add("Impostos", "Imposto NF-e da paçoquita", qtd * impostoPacote());
   db.pacocaCusto.forEach((c) => acc.add(/m[ãa]o/i.test(c.nome) ? "Mão de obra" : "Outros custos", c.nome, qtd * (+c.valor || 0)));
-  acc.add("Gasolina", "Gasolina", (+s.gasolinaDia || 0) * dias);
   const variavelMes = sum(acc.linhas(), (l) => l.mes) + (recMes * dasPct()) / 100;
+  acc.add("Gasolina", "Gasolina", (+s.gasolinaDia || 0) * dias);
+  Object.entries(s.fixos || {}).forEach(([k, v]) => acc.add(grupoDespesa(k), k, (+v || 0) * semanas));
   impostosSimulados(acc, "pacoca", recMes);
   return { recMes, esperado, semanas, linhas: acc.linhas(), variavelMes, unMes: qtd, periodo: "semana (6 dias)" };
 }
@@ -1794,6 +1797,46 @@ function afterDrePacoca() {
   });
 }
 
+/* ---------- Paçoca · Simulador ---------- */
+// Média histórica de pacotes por dia de venda, por mês e geral
+function mediaHistoricaPacoca() {
+  const media = (l) => ({ dias: l.length, porDia: l.length ? sum(l, (p) => +p.qtd || 0) / l.length : 0, nr: sum(l, esperadoPac) ? (sum(l, naoRecPac) / sum(l, esperadoPac)) * 100 : 0 });
+  const meses = mesesComDados("pacoca").filter((m) => db.pacoca.some((p) => monthOf(p.data) === m));
+  return { meses: meses.map((m) => ({ m, ...media(db.pacoca.filter((p) => monthOf(p.data) === m)) })), geral: media(db.pacoca) };
+}
+function histPacocaHtml() {
+  const { meses, geral } = mediaHistoricaPacoca();
+  if (!geral.dias) return "";
+  return `<div class="card hist-card"><div class="card-head"><div><h3>${icon("trend")} Média histórica de vendas</h3><div class="sub">Pacotes por dia de venda · ${geral.dias} dias registrados</div></div><a class="btn btn-sm" href="#pacoca">Ver vendas diárias</a></div>
+    <div class="hist-grid">${meses.map((x) => `<div class="stat"><small>${MESES_FULL[x.m - 1]} · ${x.dias} dia(s)</small><strong>${fmtQtd(Math.round(x.porDia))} pacotes/dia</strong><div class="hint">não recebido ${pct(x.nr)}</div></div>`).join("")}
+      <div class="stat"><small>Média geral</small><strong>${fmtQtd(Math.round(geral.porDia))} pacotes/dia</strong><div class="hint">não recebido ${pct(geral.nr)}</div></div></div></div>
+  <div class="chip-row" style="margin:10px 0 18px;align-items:center"><span class="hint">Preencher "pacotes por dia" do simulador com:</span>
+    <button class="btn btn-sm" data-act="pacsim-hist" data-val="0">Média geral</button>
+    ${meses.map((x) => `<button class="btn btn-sm" data-act="pacsim-hist" data-val="${x.m}">${MESES_FULL[x.m - 1]}</button>`).join("")}</div>`;
+}
+function viewSimPacoca() {
+  const s = db.pacocaSim, h = mediaHistoricaPacoca().geral;
+  setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Preço do pacote
+    <input class="inline" style="width:90px" inputmode="decimal" data-act="set-preco-pac" value="${String(db.config.precoPacoca).replace(".", ",")}" /></label>`);
+  const linha = (rotulo, key, valor, modo = "decimal", borda = true) => `<div class="sim-row" style="grid-template-columns:1fr 140px${borda ? "" : ";border:0"}"><span>${rotulo}</span><input inputmode="${modo}" data-act="pac-sim" data-key="${key}" value="${String(valor).replace(".", ",")}" /></div>`;
+  return `${histPacocaHtml()}
+  <div class="grid g-21">
+    <div class="card">
+      <div class="card-head"><div><h3>Vendas previstas</h3><div class="sub">Custos do pacote vêm de Insumos e Personalizar custos</div></div></div>
+      ${linha("Pacotes vendidos por dia", "porDia", s.porDia, "numeric")}
+      ${linha("Dias de venda no mês", "dias", s.dias, "numeric")}
+      ${linha(`% não recebido · pix confiança <span class="hint">(histórico: ${pct(h.nr)})</span>`, "naoRecPct", s.naoRecPct)}
+      ${linha("Gasolina por dia (R$)", "gasolinaDia", s.gasolinaDia, "decimal", false)}
+      <h3 style="font-size:14px;margin:22px 0 8px">Outras despesas por semana</h3>
+      ${Object.entries(s.fixos || {}).map(([k, v]) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(k)}</span><input inputmode="decimal" data-act="pacsim-fixo" data-key="${esc(k)}" value="${String(v || "").replace(".", ",")}" placeholder="0" /></div>`).join("")}
+      <div class="hint" style="margin-top:8px">Semana = 6 dias de venda. Mão de obra, insumos e NF-e entram por pacote; impostos (DAS, DARF, contabilidade) entram com os valores reais.</div>
+    </div>
+    <div class="card" id="pacSim">${pacSimHtml()}</div>
+  </div>
+  <div class="card mt"><div class="card-head"><div><h3>Quanto você vai gastar</h3><div class="sub">Calculado a partir das vendas previstas: insumos de cada pacote, mão de obra, gasolina, despesas da semana e impostos reais (NF-e, DAS sobre o recebido e a parte da paçoca em DARF e contabilidade)</div></div></div>
+    <div id="pacGastos">${gastosHtml(gastosSimPacoca())}</div></div>`;
+}
+
 /* ---------- Paçoca · Custos & Compras ---------- */
 function pacSimHtml() {
   const s = db.pacocaSim, g = gastosSimPacoca(), tot = sum(g.linhas, (l) => l.mes), lucro = g.recMes - tot;
@@ -1803,7 +1846,12 @@ function pacSimHtml() {
       <div class="stat"><small>Recebido (após não recebidos)</small><strong>${brl(g.recMes)}</strong></div>
       <div class="stat"><small>Total de gastos no mês</small><strong>${brl(tot)}</strong></div>
       <div class="stat"><small>Margem líquida</small><strong class="${lucro >= 0 ? "pos" : "neg"}">${pct(g.recMes ? (lucro / g.recMes) * 100 : 0)}</strong></div>
-    </div>`;
+    </div>
+    ${(() => {
+      const contrib = g.unMes ? (g.recMes - g.variavelMes) / g.unMes : 0, fixo = tot - g.variavelMes, eq = contrib > 0 && +s.dias ? Math.ceil(fixo / contrib / +s.dias) : null;
+      return `<div class="alert ${eq === null ? "yellow" : "green"} mt">${icon(eq === null ? "alert" : "check")}<div><b>Ponto de equilíbrio</b>
+        <span>${eq === null ? "Informe pacotes por dia e dias de venda para calcular." : `Você precisa vender <b>${int(eq)} pacotes por dia</b> (${int(eq * 6)} por semana) para pagar gasolina, despesas e impostos fixos. Cada pacote deixa ${brl(contrib)} depois dos custos variáveis.`}</span></div></div>`;
+    })()}`;
 }
 function viewPacCustos() {
   setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Preço de venda
@@ -1817,16 +1865,10 @@ function viewPacCustos() {
       ${fichaPacoteHtml()}
       <div id="pacUnit">${pacUnitHtml()}</div>
     </div>
-    <div class="card"><div class="card-head"><div><h3>Simulador do mês</h3><div class="sub">Quanto a paçoca pode render no mês</div></div></div>
-      <div class="sim-row" style="grid-template-columns:1fr 120px"><span>Pacotes vendidos por dia</span><input inputmode="numeric" data-act="pac-sim" data-key="porDia" value="${s.porDia}" /></div>
-      <div class="sim-row" style="grid-template-columns:1fr 120px"><span>Dias de venda no mês</span><input inputmode="numeric" data-act="pac-sim" data-key="dias" value="${s.dias}" /></div>
-      <div class="sim-row" style="grid-template-columns:1fr 120px"><span>% não recebido · pix confiança <span class="hint">(histórico: ${pct(histNr)})</span></span><input inputmode="decimal" data-act="pac-sim" data-key="naoRecPct" value="${String(s.naoRecPct).replace(".", ",")}" /></div>
-      <div class="sim-row" style="grid-template-columns:1fr 120px;border:0"><span>Gasolina por dia (R$)</span><input inputmode="decimal" data-act="pac-sim" data-key="gasolinaDia" value="${String(s.gasolinaDia).replace(".", ",")}" /></div>
-      <div id="pacSim" class="mt">${pacSimHtml()}</div>
+    <div class="card"><div class="card-head"><div><h3>Simulador</h3><div class="sub">${int(s.porDia)} pacotes/dia · ${int(s.dias)} dias · ${pct(s.naoRecPct)} não recebido (histórico: ${pct(histNr)})</div></div><a class="btn btn-sm btn-primary" href="#simulador-pacoca">Abrir simulador</a></div>
+      <div id="pacSim">${pacSimHtml()}</div>
     </div>
   </div>
-  <div class="card mt"><div class="card-head"><div><h3>Quanto você vai gastar</h3><div class="sub">Calculado a partir do simulador acima: insumos de cada pacote, mão de obra, gasolina e impostos reais (NF-e, DAS sobre o recebido e a parte da paçoca em DARF e contabilidade). Semana = 6 dias de venda.</div></div></div>
-    <div id="pacGastos">${gastosHtml(gastosSimPacoca())}</div></div>
   <div class="card mt"><div class="card-head"><div><h3>Compra mensal</h3><div class="sub">Lista de reposição de estoque da paçoca</div></div><button class="btn btn-primary btn-sm" data-act="new-compra">${icon("plus")}Adicionar item</button></div>
     <div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Quantidade</th><th class="num">Valor unitário</th><th class="num">Total</th><th></th></tr></thead>
     <tbody>${db.pacocaCompra.map((c) => `<tr><td>${esc(c.nome)}</td><td class="num">${int(c.qtd)}</td><td class="num">${brlU(c.valor)}</td><td class="num"><b>${brl((+c.qtd || 0) * (+c.valor || 0))}</b></td><td>${rowActions("compra", c.id)}</td></tr>`).join("")}</tbody>
@@ -1841,7 +1883,7 @@ function pacUnitHtml() {
     <div class="stat"><small>Não recebido (${pct(nr)})</small><strong class="neg">${brl((preco * nr) / 100)}</strong></div>
     <div class="stat"><small>Lucro / pacote</small><strong class="${lucro >= 0 ? "pos" : "neg"}">${brl(lucro)}</strong></div>
     <div class="stat"><small>Margem</small><strong class="${m >= 0 ? "pos" : "neg"}">${pct(m)}</strong></div></div>
-    <div class="hint" style="margin-top:8px">Preço ${brl(preco)} − ${pct(nr)} de não recebimento (pix confiança) − custo ${brl(cu)}${impostoPacote() ? ` (insumos ${brl(custoInsumosPacote())} + imposto NF-e ${brl(impostoPacote())} + mão de obra e outros)` : ""}. O % é ajustado no Simulador do mês (Personalizar custos).</div>`;
+    <div class="hint" style="margin-top:8px">Preço ${brl(preco)} − ${pct(nr)} de não recebimento (pix confiança) − custo ${brl(cu)}${impostoPacote() ? ` (insumos ${brl(custoInsumosPacote())} + imposto NF-e ${brl(impostoPacote())} + mão de obra e outros)` : ""}. O % é ajustado no Simulador da paçoca.</div>`;
 }
 const compraFields = [
   { key: "nome", label: "Item", required: true, full: true },
@@ -2781,7 +2823,7 @@ function viewEstoque(area) {
 }
 
 /* =================== Roteamento & eventos =================== */
-const VIEWS = { "painel-geral": viewPainelGeral, "dre-geral": viewDreGeral, "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
+const VIEWS = { "simulador-pacoca": viewSimPacoca, "painel-geral": viewPainelGeral, "dre-geral": viewDreGeral, "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
 const AFTER = { "painel-geral": afterPainelGeral, "dre-pacoca": afterDrePacoca, "pacoca-painel": afterPacPainel, painel: afterPainel, pacoca: afterPacoca, dre: afterDre };
 let currentPage = null;
 const areaAtual = () => PAGES.find((p) => p.id === currentPage)?.area;
@@ -2998,6 +3040,13 @@ function onClick(e) {
     }
     case "set-simcanal": db.sim.canal = val; save(); break;
     case "sim-zerar": db.sim.qtd = {}; save(); break;
+    case "pacsim-hist": {
+      const { meses, geral } = mediaHistoricaPacoca(), x = +val ? meses.find((y) => y.m === +val) : geral;
+      if (!x) return;
+      db.pacocaSim.porDia = Math.round(x.porDia); save(); render();
+      toast(`Simulador com ${int(db.pacocaSim.porDia)} pacotes/dia (${+val ? MESES_FULL[+val - 1] : "média geral"})`);
+      return;
+    }
     case "sim-hist": {
       const { semanas, geral } = mediaHistoricaSemanas(), m = +val ? semanas[+val - 1] : geral;
       const filled = [];
@@ -3105,9 +3154,14 @@ function onInput(e) {
     if ($("#pacUnit")) $("#pacUnit").innerHTML = pacUnitHtml();
     if ($("#pacSim")) $("#pacSim").innerHTML = pacSimHtml();
   }
+  if (act === "pacsim-fixo") {
+    db.pacocaSim.fixos[el.dataset.key] = parseNum(el.value); save();
+    if ($("#pacSim")) $("#pacSim").innerHTML = pacSimHtml();
+    if ($("#pacGastos")) $("#pacGastos").innerHTML = gastosHtml(gastosSimPacoca());
+  }
   if (act === "pac-sim") {
     db.pacocaSim[el.dataset.key] = parseNum(el.value); save();
-    $("#pacSim").innerHTML = pacSimHtml();
+    if ($("#pacSim")) $("#pacSim").innerHTML = pacSimHtml();
     if ($("#pacGastos")) $("#pacGastos").innerHTML = gastosHtml(gastosSimPacoca());
     if ($("#pacUnit")) $("#pacUnit").innerHTML = pacUnitHtml();
   }
