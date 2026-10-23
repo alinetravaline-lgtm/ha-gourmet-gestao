@@ -112,12 +112,13 @@ function buildSeed() {
     pagamentos: [],
     contasIgnoradas: [],
     contasAutoV1: true,
+    impostoPacV1: true,
     custosVar: [],
     estoque: {
       saldos: {},
       movs: [],
       pacocaItens: [
-        { id: uid(), nome: "Paçoquita", unid: "un", consumo: 6, custo: 0.1783, pacote: 1, usaPacote: true },
+        { id: uid(), nome: "Paçoquita", unid: "un", consumo: 6, custo: 20 / 112, pacote: 112, imposto: 2, usaPacote: true },
         { id: uid(), nome: "Saquinho", unid: "un", consumo: 1, custo: 0.05, pacote: 1 },
         { id: uid(), nome: "Papel", unid: "folha", consumo: 1, custo: 0.03, pacote: 1 },
         { id: uid(), nome: "Fita durex", unid: "rolo", consumo: 0, custo: 3.64, pacote: 1 },
@@ -176,6 +177,17 @@ function migrar(data) {
     }
     data.contasAutoV1 = true;
   }
+  // Imposto da NF-e da paçoquita sai do custo da caixa (R$ 22 = R$ 20 + R$ 2) e da despesa fixa "NF-e", e vira uma linha própria
+  if (!data.impostoPacV1 && data.estoque?.pacocaItens) {
+    const pq = data.estoque.pacocaItens.find((i) => /pa[çc]oquita/i.test(i.nome));
+    if (pq && !("imposto" in pq)) {
+      const caixa = (+pq.custo || 0) * (+pq.pacote || 1);
+      if (Math.abs(caixa - 22) < 0.06) Object.assign(pq, { custo: 20 / (+pq.pacote || 112), imposto: 2 });
+      else if (+pq.pacote === 1 && Math.abs(+pq.custo - 0.1783) < 0.001) Object.assign(pq, { custo: 20 / 112, pacote: 112, imposto: 2 });
+      if (+pq.imposto) data.fixosPacoca = (data.fixosPacoca || []).filter((f) => !/^\s*(imposto\s*)?nf-?e\s*$/i.test(f.nome));
+    }
+    data.impostoPacV1 = true;
+  }
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
   (data.pagamentos || []).forEach((p) => { if (p.categoria === "Fornecedor / insumos") p.categoria = "Insumos"; });
@@ -232,13 +244,19 @@ const custoVenda = (v) => (+v.insumos || 0) + (+v.gasolina || 0) + (+v.comissoes
 const lucroVenda = (v) => recVenda(v) - custoVenda(v);
 // Custo de um pacote = insumos da paçoca (uso por pacote × custo unitário) + outros custos por pacote (ex.: mão de obra)
 const custoInsumosPacote = () => sum(db.estoque?.pacocaItens || [], (i) => consumoPacote(i) * (+i.custo || 0));
-const custoUnitPacoca = () => custoInsumosPacote() + sum(db.pacocaCusto, (c) => +c.valor || 0);
+// Imposto / taxa de NF-e pago junto com a compra do insumo (R$ por embalagem), separado do custo para aparecer no DRE
+const impostoUnitItem = (i) => (+i.imposto || 0) / (+i.pacote || 1);
+const impostoPacote = () => sum(db.estoque?.pacocaItens || [], (i) => consumoPacote(i) * impostoUnitItem(i));
+const custoUnitPacoca = () => custoInsumosPacote() + impostoPacote() + sum(db.pacocaCusto, (c) => +c.valor || 0);
 const areaCV = (c) => c.area || "doces";
 // Pix confiança: parte do valor entregue não é paga; a margem da paçoca já desconta esse percentual
 const naoRecPctPacoca = () => +db.pacocaSim?.naoRecPct || 0;
 const lucroPacoca = (preco, pacotes = 1) => preco * (1 - naoRecPctPacoca() / 100) - custoUnitPacoca() * pacotes;
 const recPac = (p) => (+p.pix || 0) + (+p.especie || 0);
-const custoPac = (p) => (+p.insumos || 0) + (+p.gasolina || 0) + (+p.maoObra || 0);
+// Registros antigos (planilha) têm o imposto dentro de "insumos"; os novos guardam o imposto à parte
+const impostoReg = (p) => ("imposto" in p ? +p.imposto || 0 : Math.min(+p.insumos || 0, (+p.qtd || 0) * impostoPacote()));
+const insumosReg = (p) => ("imposto" in p ? +p.insumos || 0 : (+p.insumos || 0) - impostoReg(p));
+const custoPac = (p) => (+p.insumos || 0) + (+p.imposto || 0) + (+p.gasolina || 0) + (+p.maoObra || 0);
 const lucroPac = (p) => recPac(p) - custoPac(p);
 const esperadoPac = (p) => (+p.qtd || 0) * db.config.precoPacoca;
 const naoRecPac = (p) => esperadoPac(p) - recPac(p);
@@ -350,17 +368,18 @@ function resumo(m, area) {
   const pacRec = sum(pac, recPac);
   if (pacRec) porCanal["Paçoca"] = pacRec;
   const receita = sum(vendas, recVenda) + pacRec;
-  const insumos = sum(vendas, (v) => +v.insumos || 0) + sum(pac, (p) => +p.insumos || 0);
+  const insumos = sum(vendas, (v) => +v.insumos || 0) + sum(pac, insumosReg);
+  const impostos = sum(pac, impostoReg);
   const gasolina = sum(vendas, (v) => +v.gasolina || 0) + sum(pac, (p) => +p.gasolina || 0);
   const comissoes = sum(vendas, (v) => +v.comissoes || 0) + sum(pac, (p) => +p.maoObra || 0);
   const perdas = sum(vendas, (v) => (+v.perdas || 0) + (+v.outros || 0));
   // Custos variáveis lançados no DRE (doces finos), pelo mês de referência
   const cvs = db.custosVar.filter((c) => (!m || +c.mes === m) && (!area || areaCV(c) === area));
   const custosVar = sum(cvs, (c) => +c.valor || 0);
-  const custos = insumos + gasolina + comissoes + perdas + custosVar;
+  const custos = insumos + impostos + gasolina + comissoes + perdas + custosVar;
   const qtd = sum(vendas, (v) => +v.qtd || 0) + sum(pac, (p) => +p.qtd || 0);
   const cxP = sum(vendas, (v) => +v.cxP || 0), cxG = sum(vendas, (v) => +v.cxG || 0);
-  return { receita, custos, lucro: receita - custos, qtd, cxP, cxG, porCanal, insumos, gasolina, comissoes, perdas, custosVar, cvs, vendas, pac };
+  return { receita, custos, lucro: receita - custos, qtd, cxP, cxG, porCanal, insumos, impostos, gasolina, comissoes, perdas, custosVar, cvs, vendas, pac };
 }
 
 /* ---------- Gráficos ---------- */
@@ -765,6 +784,7 @@ const pacFields = [
   { key: "pix", label: "Recebido no Pix (R$)", type: "num" },
   { key: "especie", label: "Recebido em espécie (R$)", type: "num" },
   { key: "insumos", label: "Custo de insumos (R$)", type: "num" },
+  { key: "imposto", label: "Imposto NF-e (R$)", type: "num" },
   { key: "gasolina", label: "Gasolina (R$)", type: "num" },
   { key: "maoObra", label: "Mão de obra (R$)", type: "num" },
 ];
@@ -772,7 +792,7 @@ function formPac(p) {
   openForm({
     title: p ? "Editar dia" : "Registrar dia de vendas",
     fields: pacFields,
-    values: p || { data: new Date().toISOString().slice(0, 10), gasolina: 11.02 },
+    values: p ? { ...p, insumos: round2(insumosReg(p)), imposto: round2(impostoReg(p)) } : { data: new Date().toISOString().slice(0, 10), gasolina: 11.02, imposto: 0 },
     preview: (v) => `<span>Recebido: ${brl(recPac(v))}</span><span>Não recebido: ${brl(naoRecPac(v))}</span><span class="${lucroPac(v) >= 0 ? "pos" : "neg"}">Lucro: ${brl(lucroPac(v))}</span>`,
     onSave: (vals) => { if (p) Object.assign(p, vals); else db.pacoca.push({ id: uid(), ...vals }); toast("Dia registrado"); },
   });
@@ -798,13 +818,13 @@ function viewPacoca() {
     ${lista.length ? '<div class="chart-box sm"><canvas id="chPac"></canvas></div>' : '<div class="empty">Sem registros</div>'}</div>
   <div class="card mt"><div class="card-head"><div><h3>Registro diário</h3><div class="sub">"Não recebido" = vendas × preço unitário − valor recebido</div></div></div>
     ${lista.length ? `<div class="table-wrap"><table>
-    <thead><tr><th>Data</th><th class="num">Vendidas</th><th class="num">Pix</th><th class="num">Espécie</th><th class="num">Recebido</th><th class="num">Não recebido</th><th class="num">Insumos</th><th class="num">Gasolina</th><th class="num">Mão de obra</th><th class="num">Lucro</th><th></th></tr></thead>
+    <thead><tr><th>Data</th><th class="num">Vendidas</th><th class="num">Pix</th><th class="num">Espécie</th><th class="num">Recebido</th><th class="num">Não recebido</th><th class="num">Insumos</th><th class="num">Imposto NF-e</th><th class="num">Gasolina</th><th class="num">Mão de obra</th><th class="num">Lucro</th><th></th></tr></thead>
     <tbody>${lista.map((p) => { const n = naoRecPac(p); return `<tr>
       <td>${ddmm(p.data)}</td><td class="num">${int(p.qtd)}</td><td class="num">${brl(p.pix)}</td><td class="num">${brl(p.especie)}</td><td class="num"><b>${brl(recPac(p))}</b></td>
       <td class="num">${n > 0 ? `<span class="badge b-red">${brl(n)}</span>` : `<span class="badge b-green">${brl(n)}</span>`}</td>
-      <td class="num">${brl(p.insumos)}</td><td class="num">${brl(p.gasolina)}</td><td class="num">${brl(p.maoObra)}</td>
+      <td class="num">${brl(insumosReg(p))}</td><td class="num">${brl(impostoReg(p))}</td><td class="num">${brl(p.gasolina)}</td><td class="num">${brl(p.maoObra)}</td>
       <td class="num ${lucroPac(p) >= 0 ? "pos" : "neg"}"><b>${brl(lucroPac(p))}</b></td><td>${rowActions("pac", p.id)}</td></tr>`; }).join("")}</tbody>
-    <tfoot><tr><td>Total</td><td class="num">${int(qtd)}</td><td class="num">${brl(sum(lista, (p) => +p.pix || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.especie || 0))}</td><td class="num">${brl(rec)}</td><td class="num">${brl(nr)}</td><td class="num">${brl(sum(lista, (p) => +p.insumos || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.gasolina || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.maoObra || 0))}</td><td class="num">${brl(luc)}</td><td></td></tr></tfoot>
+    <tfoot><tr><td>Total</td><td class="num">${int(qtd)}</td><td class="num">${brl(sum(lista, (p) => +p.pix || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.especie || 0))}</td><td class="num">${brl(rec)}</td><td class="num">${brl(nr)}</td><td class="num">${brl(sum(lista, insumosReg))}</td><td class="num">${brl(sum(lista, impostoReg))}</td><td class="num">${brl(sum(lista, (p) => +p.gasolina || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.maoObra || 0))}</td><td class="num">${brl(luc)}</td><td></td></tr></tfoot>
     </table></div>` : ""}
   </div>`;
 }
@@ -1324,7 +1344,9 @@ function afterPacPainel() {
 // Linhas do custo de um pacote: insumos (somente leitura, vêm de Insumos) + outros custos editáveis
 function fichaPacoteHtml() {
   const itens = db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0);
-  return `<ul class="recipe-ings">${itens.map((i) => `<li><span>${esc(i.nome)} <a class="badge b-gold" href="#insumos-pacoca">insumo</a></span><span>${fmtQtd(consumoPacote(i))} × ${brlU(+i.custo || 0)}</span><span>${brl(consumoPacote(i) * (+i.custo || 0))}</span></li>`).join("")}</ul>
+  const comImposto = itens.filter((i) => impostoUnitItem(i) > 0);
+  return `<ul class="recipe-ings">${itens.map((i) => `<li><span>${esc(i.nome)} <a class="badge b-gold" href="#insumos-pacoca">insumo</a></span><span>${fmtQtd(consumoPacote(i))} × ${brlU(+i.custo || 0)}</span><span>${brl(consumoPacote(i) * (+i.custo || 0))}</span></li>`).join("")}
+    ${comImposto.map((i) => `<li><span>Imposto NF-e · ${esc(i.nome)} <span class="badge b-gray">imposto</span></span><span>${brl(+i.imposto)} ÷ ${fmtQtd(+i.pacote || 1)} × ${fmtQtd(consumoPacote(i))}</span><span>${brl(consumoPacote(i) * impostoUnitItem(i))}</span></li>`).join("")}</ul>
     ${db.pacocaCusto.map((c) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(c.nome)} <span class="hint">(por pacote)</span></span><input inputmode="decimal" data-act="pac-custo" data-id="${c.id}" value="${String(c.valor).replace(".", ",")}" /></div>`).join("")}`;
 }
 function formItemPacocaInsumo(i) {
@@ -1332,15 +1354,19 @@ function formItemPacocaInsumo(i) {
     title: i ? `Editar insumo · ${i.nome}` : "Novo insumo da paçoca",
     fields: [
       { key: "nome", label: "Item", required: true, full: true },
-      { key: "custoCompra", label: "Custo de compra (R$ por embalagem)", type: "num" },
+      { key: "custoCompra", label: "Custo de compra sem imposto (R$ por embalagem)", type: "num" },
+      { key: "imposto", label: "Imposto / NF-e (R$ por embalagem)", type: "num" },
       { key: "pacote", label: "Unidades por embalagem", type: "num" },
       { key: "unid", label: "Unidade (un, folha, rolo...)" },
       ...(i?.usaPacote ? [] : [{ key: "consumo", label: "Uso por pacote vendido", type: "num" }]),
     ],
-    values: i ? { ...i, custoCompra: round2((+i.custo || 0) * (+i.pacote || 1)), pacote: +i.pacote || 1 } : { unid: "un", pacote: 1, consumo: 0 },
-    preview: (v) => { const cu = v.pacote ? v.custoCompra / v.pacote : 0, uso = i?.usaPacote ? consumoPacote(i) : v.consumo; return `<span>Custo unitário: ${brlU(cu)}</span><span>No pacote: ${brl(cu * (uso || 0))}</span>`; },
+    values: i ? { ...i, custoCompra: round2((+i.custo || 0) * (+i.pacote || 1)), imposto: +i.imposto || 0, pacote: +i.pacote || 1 } : { unid: "un", pacote: 1, consumo: 0, imposto: 0 },
+    preview: (v) => {
+      const cu = v.pacote ? v.custoCompra / v.pacote : 0, iu = v.pacote ? (v.imposto || 0) / v.pacote : 0, uso = i?.usaPacote ? consumoPacote(i) : v.consumo;
+      return `<span>Custo unitário: ${brlU(cu)}</span><span>No pacote: ${brl(cu * (uso || 0))}</span>${iu ? `<span>Imposto no pacote: ${brl(iu * (uso || 0))}</span><span>Você paga por embalagem: ${brl((v.custoCompra || 0) + (v.imposto || 0))}</span>` : ""}`;
+    },
     onSave: (v) => {
-      const novo = { nome: v.nome, unid: v.unid, pacote: v.pacote || 1, custo: v.pacote ? v.custoCompra / v.pacote : 0, ...(i?.usaPacote ? {} : { consumo: v.consumo }) };
+      const novo = { nome: v.nome, unid: v.unid, pacote: v.pacote || 1, custo: v.pacote ? v.custoCompra / v.pacote : 0, imposto: v.imposto || 0, ...(i?.usaPacote ? {} : { consumo: v.consumo }) };
       if (i) Object.assign(i, novo); else db.estoque.pacocaItens.push({ id: uid(), ...novo });
       toast("Insumo salvo · custo do pacote recalculado");
     },
@@ -1351,12 +1377,13 @@ function viewInsumosPacoca() {
   const itens = db.estoque.pacocaItens, cu = custoUnitPacoca(), preco = +db.config.precoPacoca || 0;
   return `<div class="grid g-21">
     <div class="card"><div class="card-head"><div><h3>Insumos da paçoca</h3><div class="sub">Custo unitário = custo de compra ÷ unidades por embalagem. Alterou aqui, recalcula o custo do pacote, margens, simulador, DRE e projeção.</div></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Custo de compra</th><th class="num hide-m">Embalagem</th><th class="num">Custo unitário</th><th class="num">Uso por pacote</th><th class="num">No pacote</th><th class="num hide-m">Em estoque</th><th></th></tr></thead><tbody>
-      ${itens.map((i) => `<tr><td><b>${esc(i.nome)}</b></td><td class="num">${brl((+i.custo || 0) * (+i.pacote || 1))}</td><td class="num hide-m">${fmtQtd(+i.pacote || 1)} ${esc(i.unid)}</td>
+      <div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Custo de compra</th><th class="num hide-m">Imposto NF-e</th><th class="num hide-m">Embalagem</th><th class="num">Custo unitário</th><th class="num">Uso por pacote</th><th class="num">No pacote</th><th class="num hide-m">Em estoque</th><th></th></tr></thead><tbody>
+      ${itens.map((i) => `<tr><td><b>${esc(i.nome)}</b></td><td class="num">${brl((+i.custo || 0) * (+i.pacote || 1))}</td><td class="num hide-m">${+i.imposto ? brl(+i.imposto) : "—"}</td><td class="num hide-m">${fmtQtd(+i.pacote || 1)} ${esc(i.unid)}</td>
         <td class="num">${brlU(+i.custo || 0)}<span class="hint">/${esc(i.unid)}</span></td><td class="num">${fmtQtd(consumoPacote(i))} ${esc(i.unid)}</td>
         <td class="num"><b>${brl(consumoPacote(i) * (+i.custo || 0))}</b></td><td class="num hide-m">${fmtQtd(saldoDe("pac:" + i.id).qtd)} ${esc(i.unid)}</td>
         <td>${rowActions("ins-pac", i.id)}</td></tr>`).join("")}
-      </tbody><tfoot><tr><td colspan="5" class="hide-m">Insumos por pacote</td><td class="show-m-cell" colspan="3">Insumos por pacote</td><td class="num">${brl(custoInsumosPacote())}</td><td colspan="2" class="hide-m"></td><td class="show-m-cell"></td></tr></tfoot></table></div>
+      </tbody><tfoot><tr><td colspan="6" class="hide-m">Insumos por pacote</td><td class="show-m-cell" colspan="3">Insumos por pacote</td><td class="num">${brl(custoInsumosPacote())}</td><td colspan="2" class="hide-m"></td><td class="show-m-cell"></td></tr>
+      ${impostoPacote() ? `<tr><td colspan="6" class="hide-m">Imposto NF-e por pacote (à parte no DRE)</td><td class="show-m-cell" colspan="3">Imposto NF-e por pacote</td><td class="num">${brl(impostoPacote())}</td><td colspan="2" class="hide-m"></td><td class="show-m-cell"></td></tr>` : ""}</tfoot></table></div>
     </div>
     <div class="card"><div class="card-head"><div><h3>Ficha do pacote</h3><div class="sub">Pacote com ${fmtQtd(+db.pacocaSim.porPacote || 1)} paçoquitas</div></div></div>
       ${fichaPacoteHtml()}
@@ -1385,6 +1412,7 @@ function viewDrePacoca() {
     { t: "   Não recebido (fiado / no-show) · informativo", f: (r) => sum(r.pac, naoRecPac), info: true },
     { t: "(−) DESPESAS VARIÁVEIS", f: (r) => -r.custos, cls: "total" },
     { t: "   Insumos (paçoquita, saquinho, papel)", f: (r) => -r.insumos },
+    { t: `   Imposto NF-e na compra da paçoquita (${brl(impostoPacote())}/pacote)`, f: (r) => -r.impostos },
     { t: "   Gasolina", f: (r) => -r.gasolina },
     { t: "   Mão de obra", f: (r) => -r.comissoes },
     ...cats.map((cat) => ({ t: "   " + cat + " (lançado)", f: (r) => -sum(r.cvs.filter((c) => c.categoria === cat), (c) => +c.valor || 0) })),
@@ -1478,7 +1506,7 @@ function pacUnitHtml() {
     <div class="stat"><small>Não recebido (${pct(nr)})</small><strong class="neg">${brl((preco * nr) / 100)}</strong></div>
     <div class="stat"><small>Lucro / pacote</small><strong class="${lucro >= 0 ? "pos" : "neg"}">${brl(lucro)}</strong></div>
     <div class="stat"><small>Margem</small><strong class="${m >= 0 ? "pos" : "neg"}">${pct(m)}</strong></div></div>
-    <div class="hint" style="margin-top:8px">Preço ${brl(preco)} − ${pct(nr)} de não recebimento (pix confiança) − custo ${brl(cu)}. O % é ajustado no Simulador do mês (Personalizar custos).</div>`;
+    <div class="hint" style="margin-top:8px">Preço ${brl(preco)} − ${pct(nr)} de não recebimento (pix confiança) − custo ${brl(cu)}${impostoPacote() ? ` (insumos ${brl(custoInsumosPacote())} + imposto NF-e ${brl(impostoPacote())} + mão de obra e outros)` : ""}. O % é ajustado no Simulador do mês (Personalizar custos).</div>`;
 }
 const compraFields = [
   { key: "nome", label: "Item", required: true, full: true },
@@ -1753,9 +1781,10 @@ function lancarDia(area) {
     const qtd = sum(pend, (r) => r.itens.U || 0);
     const mo = +(db.pacocaCusto.find((c) => /m[ãa]o/i.test(c.nome))?.valor) || 0;
     let reg = db.pacoca.find((p) => p.data === ui.vendData);
-    if (!reg) { reg = { id: uid(), data: ui.vendData, qtd: 0, pix: 0, especie: 0, insumos: 0, gasolina: +db.pacocaSim.gasolinaDia || 0, maoObra: 0 }; db.pacoca.push(reg); }
+    if (!reg) { reg = { id: uid(), data: ui.vendData, qtd: 0, pix: 0, especie: 0, insumos: 0, imposto: 0, gasolina: +db.pacocaSim.gasolinaDia || 0, maoObra: 0 }; db.pacoca.push(reg); }
     reg.qtd += qtd; reg.pix += porPag("pix"); reg.especie += porPag("especie");
-    reg.insumos += qtd * (custoUnitPacoca() - mo); reg.maoObra += qtd * mo;
+    if (!("imposto" in reg)) Object.assign(reg, { insumos: insumosReg(reg), imposto: impostoReg(reg) });
+    reg.insumos += qtd * custoInsumosPacote(); reg.imposto += qtd * impostoPacote(); reg.maoObra += qtd * mo;
   } else {
     let reg = db.vendas.find((v) => v.canal === "Outbound" && v.inicio <= ui.vendData && v.fim >= ui.vendData);
     if (!reg) { reg = { id: uid(), canal: "Outbound", ...semanaDe(ui.vendData), qtd: 0, cartao: 0, pix: 0, especie: 0, insumos: 0, gasolina: 0, comissoes: 0, perdas: 0, outros: 0 }; db.vendas.push(reg); }
@@ -1878,7 +1907,8 @@ function contasAutomaticas() {
     const venc = addDias(p.data, 1), dia = ddmm(p.data), q = int(p.qtd);
     push(`pac:${p.id}:mo`, "pacoca", "Mão de obra", `Mão de obra paçoca · ${dia} (${q} pacotes)`, +p.maoObra || 0, venc);
     push(`pac:${p.id}:gas`, "pacoca", "Gasolina", `Gasolina paçoca · ${dia}`, +p.gasolina || 0, venc);
-    push(`pac:${p.id}:ins`, "pacoca", "Insumos", `Insumos paçoca · ${dia} (${q} pacotes)`, +p.insumos || 0, venc);
+    push(`pac:${p.id}:ins`, "pacoca", "Insumos", `Insumos paçoca · ${dia} (${q} pacotes)`, insumosReg(p), venc);
+    push(`pac:${p.id}:nfe`, "pacoca", "Notas fiscais (NF-e)", `Imposto NF-e paçoquita · ${dia} (${q} pacotes)`, impostoReg(p), venc);
   });
   db.vendas.filter((w) => w.fim >= desde).forEach((w) => {
     const venc = addDias(w.fim, 1), per = `${ddmm(w.inicio)} a ${ddmm(w.fim)}`, canal = w.canal === "Outbound" ? "" : ` · ${w.canal}`;
@@ -2254,7 +2284,7 @@ function linhaCompra(x, periodos) {
   const fonte = tipo === "ins" ? db.insumos.find((i) => i.id === id) : tipo === "mat" ? db.materiais.find((i) => i.id === id) : db.estoque.pacocaItens.find((i) => i.id === id);
   const est = saldoDe(x.ref).qtd, falta = Math.max(0, x.qtd - est);
   const pacote = tipo === "pac" ? (+fonte?.pacote || 1) : (+fonte?.rend || 1);
-  const precoPacote = tipo === "pac" ? pacote * (+fonte?.custo || 0) : +fonte?.custo || 0;
+  const precoPacote = tipo === "pac" ? pacote * (+fonte?.custo || 0) + (+fonte?.imposto || 0) : +fonte?.custo || 0;
   const pacotes = falta > 0 ? Math.ceil(falta / pacote - 1e-9) : 0;
   const consumoPeriodo = x.qtd / (periodos || 1);
   return { ...x, est, falta, pacote, pacotes, custo: pacotes * precoPacote, cobertura: consumoPeriodo > 0 ? est / consumoPeriodo : null };
