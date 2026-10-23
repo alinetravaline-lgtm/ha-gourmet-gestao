@@ -257,7 +257,7 @@ const custoInsumosPacote = () => sum(db.estoque?.pacocaItens || [], (i) => consu
 const impostoUnitItem = (i) => (+i.imposto || 0) / (+i.pacote || 1);
 const impostoPacote = () => sum(db.estoque?.pacocaItens || [], (i) => consumoPacote(i) * impostoUnitItem(i));
 // Impostos e contabilidade "derretidos" no pacote: carga % sobre o que de fato é recebido (preço − não recebido)
-const impostoVendaPacote = () => (+db.config.precoPacoca || 0) * (1 - naoRecPctPacoca() / 100) * cargaImpostosPct() / 100;
+const impostoVendaPacote = () => (+db.config.precoPacoca || 0) * (1 - naoRecPctPacoca() / 100) * cargaImpostosPct("pacoca") / 100;
 const custoUnitPacoca = () => custoInsumosPacote() + impostoPacote() + impostoVendaPacote() + sum(db.pacocaCusto, (c) => +c.valor || 0);
 const areaCV = (c) => c.area || "doces";
 // Pix confiança: parte do valor entregue não é paga; a margem da paçoca já desconta esse percentual
@@ -350,44 +350,55 @@ function fonteItem(it) {
 }
 const custoBase = (p) => (p.itens ? sum(p.itens, (it) => (+it.qtd || 0) * valorItem(it)) : +p.custoFixo || 0);
 const taxaCanal = (canal) => sum(db.canais[canal]?.taxas || [], (t) => +t.pct || 0);
-const custoProd = (p) => custoBase(p) + (p.preco * (taxaCanal(p.canal) + cargaImpostosPct())) / 100;
+const custoProd = (p) => custoBase(p) + (p.preco * (taxaCanal(p.canal) + cargaImpostosPct("doces"))) / 100;
 const lucroProd = (p) => p.preco - custoProd(p);
 const margemProd = (p) => (p.preco ? (lucroProd(p) / p.preco) * 100 : 0);
-const precoAlvo = (p, alvo) => { const d = 1 - (taxaCanal(p.canal) + cargaImpostosPct()) / 100 - alvo / 100; return d > 0 ? custoBase(p) / d : null; };
+const precoAlvo = (p, alvo) => { const d = 1 - (taxaCanal(p.canal) + cargaImpostosPct("doces")) / 100 - alvo / 100; return d > 0 ? custoBase(p) / d : null; };
 /* ---------- Impostos do negócio todo (DAS, DARF, contabilidade) ---------- */
 // Calculados sobre doces + paçoca juntos. Cada área recebe a sua parte: o DAS sobre o próprio faturamento e
-// os valores fixos (DARF, contabilidade) pela participação da área no faturamento do mês.
+// os valores fixos (DARF, contabilidade) numa divisão fixa (padrão 50/50) ou pela participação no faturamento do mês.
 const impGerais = () => db.impostosGerais || { dasPct: 0, fixos: [] };
 const dasPct = () => +impGerais().dasPct || 0;
 const fixosGeraisTot = () => sum(impGerais().fixos || [], (f) => +f.valor || 0);
+const rateioPorFaturamento = () => impGerais().rateioModo === "faturamento";
+const pctFixosDoces = () => (impGerais().rateioDoces ?? 50);
+// Fração dos valores fixos que cabe à área (m = 0: ano todo)
+function shareFixos(m, area) {
+  if (!area) return 1;
+  if (!rateioPorFaturamento()) return (area === "doces" ? pctFixosDoces() : 100 - pctFixosDoces()) / 100;
+  const rT = resumo(m).receita;
+  return rT ? resumo(m, area).receita / rT : 0;
+}
 function rateioImpostos(m, area) {
   const fixos = impGerais().fixos || [];
   if (!m) {
     const partes = mesesComDados().map((x) => rateioImpostos(x, area));
     const itens = fixos.map((f, i) => ({ nome: f.nome, valor: sum(partes, (p) => p.itens[i].valor) }));
-    const rA = resumo(0, area).receita, rT = resumo(0).receita;
     const das = sum(partes, (p) => p.das), tf = sum(itens, (x) => x.valor);
-    return { das, itens, fixos: tf, total: das + tf, share: rT ? rA / rT : 0 };
+    return { das, itens, fixos: tf, total: das + tf, share: shareFixos(0, area) };
   }
   const rT = resumo(m).receita, rA = area ? resumo(m, area).receita : rT;
-  const share = area ? (rT ? rA / rT : 0) : 1;
+  const share = shareFixos(m, area);
   const itens = fixos.map((f) => ({ nome: f.nome, valor: (+f.valor || 0) * share }));
   const das = (rA * dasPct()) / 100, tf = sum(itens, (x) => x.valor);
   return { das, itens, fixos: tf, total: das + tf, share };
 }
-// Faturamento médio do negócio nos últimos 3 meses com vendas: base para "derreter" DARF e contabilidade no preço
-function faturamentoMedioMensal() {
-  const ms = mesesComDados().filter((m) => resumo(m).receita > 0).slice(-3);
-  return ms.length ? sum(ms, (m) => resumo(m).receita) / ms.length : 0;
+// Faturamento médio (da área ou do negócio) nos últimos 3 meses com vendas: base para "derreter" os fixos no preço
+function faturamentoMedioMensal(area) {
+  const ms = mesesComDados(area).filter((m) => resumo(m, area).receita > 0).slice(-3);
+  return ms.length ? sum(ms, (m) => resumo(m, area).receita) / ms.length : 0;
 }
-var cacheCarga = null;
-function resetCarga() { cacheCarga = null; }
-// % do preço de venda que vai para impostos e contabilidade: DAS + (DARF + contabilidade) ÷ faturamento médio
-function cargaImpostosPct() {
-  if (cacheCarga === null) { const fat = faturamentoMedioMensal(); cacheCarga = dasPct() + (fat ? (fixosGeraisTot() / fat) * 100 : 0); }
-  return cacheCarga;
+// Parte mensal dos fixos (DARF, contabilidade) que a área precisa cobrir
+const fixosMesArea = (area) => fixosGeraisTot() * (rateioPorFaturamento() && area ? (faturamentoMedioMensal() ? faturamentoMedioMensal(area) / faturamentoMedioMensal() : 0) : shareFixos(0, area));
+var cacheCarga = {};
+function resetCarga() { cacheCarga = {}; }
+// % do preço de venda que vai para impostos e contabilidade: DAS + parte da área nos fixos ÷ faturamento médio da área
+function cargaImpostosPct(area) {
+  const k = area || "todos";
+  if (!(k in cacheCarga)) { const fat = faturamentoMedioMensal(area); cacheCarga[k] = dasPct() + (fat ? (fixosMesArea(area) / fat) * 100 : 0); }
+  return cacheCarga[k];
 }
-const cargaFixosPct = () => cargaImpostosPct() - dasPct();
+const cargaFixosPct = (area) => cargaImpostosPct(area) - dasPct();
 function statusMargem(m, canal) {
   const c = db.canais[canal] || { alvoMin: 30 };
   if (m >= c.alvoMin) return "green";
@@ -673,7 +684,7 @@ function viewInicio() {
         <div><small>Impostos</small><strong class="neg">${brl(rat.total)}</strong></div>
         <div><small>Resultado</small><strong class="${resultado >= 0 ? "pos" : "neg"}">${brl(resultado)}</strong></div>
       </div>
-      <div class="area-foot">DAS ${pct(dasPct())} + ${esc((impGerais().fixos || []).map((f) => f.nome).join(" + "))}: ${pct(cargaImpostosPct())} do preço</div>
+      <div class="area-foot">Impostos no preço: doces ${pct(cargaImpostosPct("doces"))} · paçoca ${pct(cargaImpostosPct("pacoca"))}</div>
     </a>`;
   };
   const g = resumo(0);
@@ -924,10 +935,11 @@ function compHtml(p) {
   (db.canais[p.canal]?.taxas || []).forEach((t) => {
     linhas.push(`<li><span>${esc(t.nome)} <a class="badge b-gold" href="#personalizar" title="Altere em: Personalizar custos">taxa</a></span><span>${pct(t.pct)} de ${brl(p.preco)}</span><span>${brl((p.preco * t.pct) / 100)}</span></li>`);
   });
-  if (cargaImpostosPct()) linhas.push(`<li><span>Impostos e contabilidade <a class="badge b-gold" href="#dre-geral" title="Altere em: DRE unificado">imposto</a></span><span>${pct(cargaImpostosPct())} de ${brl(p.preco)}</span><span>${brl((p.preco * cargaImpostosPct()) / 100)}</span></li>`);
+  const carga = cargaImpostosPct("doces");
+  if (carga) linhas.push(`<li><span>Impostos e contabilidade <a class="badge b-gold" href="#dre-geral" title="Altere em: DRE unificado">imposto</a></span><span>${pct(carga)} de ${brl(p.preco)}</span><span>${brl((p.preco * carga) / 100)}</span></li>`);
   return `<ul class="recipe-ings">${linhas.join("")}</ul>
     <div class="recipe-total"><span>Custo total</span><span>${brl(custoProd(p))}</span></div>
-    ${cargaImpostosPct() ? `<div class="hint" style="margin-top:6px">Impostos: DAS ${pct(dasPct())} + DARF e contabilidade ${pct(cargaFixosPct())} (${brl(fixosGeraisTot())}/mês ÷ faturamento médio de ${brl(faturamentoMedioMensal())}).</div>` : ""}
+    ${carga ? `<div class="hint" style="margin-top:6px">Impostos: DAS ${pct(dasPct())} + DARF e contabilidade ${pct(cargaFixosPct("doces"))} (parte dos doces: ${brl(fixosMesArea("doces"))}/mês ÷ faturamento médio dos doces de ${brl(faturamentoMedioMensal("doces"))}).</div>` : ""}
     <div class="hint" style="margin-top:6px">As etiquetas mostram onde cada valor é alterado — clique nelas para ir até lá.</div>`;
 }
 const ITENS_PADRAO = [
@@ -973,7 +985,7 @@ function viewProdutos() {
       ${taxaCanal(ui.prodCanal) ? `<span class="badge b-red">Taxas: ${pct(taxaCanal(ui.prodCanal))} do preço</span>` : ""}<a class="btn btn-sm" href="#personalizar">Alterar metas e taxas</a></div></div>
   <div class="grid g-3">${lista.map((p) => { const st = statusMargem(margemProd(p), p.canal); return `
     <div class="prod" data-prod="${p.id}">
-      <div class="prod-top"><div><h4>${esc(p.nome)}</h4><div class="hint">${taxaCanal(p.canal) + cargaImpostosPct() ? `Custo ${brl(custoBase(p))} + ${pct(taxaCanal(p.canal) + cargaImpostosPct())} de taxas e impostos sobre o preço` : `Custo ${brl(custoBase(p))}`}</div></div>
+      <div class="prod-top"><div><h4>${esc(p.nome)}</h4><div class="hint">${taxaCanal(p.canal) + cargaImpostosPct("doces") ? `Custo ${brl(custoBase(p))} + ${pct(taxaCanal(p.canal) + cargaImpostosPct("doces"))} de taxas e impostos sobre o preço` : `Custo ${brl(custoBase(p))}`}</div></div>
         <span class="badge b-${st}" data-badge>${statusLabel[st]}</span></div>
       <div class="price-row"><label>Preço de venda</label><input inputmode="decimal" data-act="set-preco" data-id="${p.id}" value="${String(p.preco).replace(".", ",")}" />
         ${rowActions("prod", p.id)}</div>
@@ -1299,7 +1311,7 @@ function linhasImpostos(area) {
     { t: `(−) IMPOSTOS E CONTABILIDADE (parte ${nome})`, f: (r, c) => -c.rat.total, cls: "total" },
     { t: `   DAS ${pct(dasPct())} sobre o faturamento`, f: (r, c) => -c.rat.das },
     ...(impGerais().fixos || []).map((f, i) => ({ t: `   ${f.nome} (rateio)`, f: (r, c) => -c.rat.itens[i].valor })),
-    { t: `   Participação ${nome} no faturamento do negócio`, f: (r, c) => c.rat.share * 100, pct: true },
+    { t: `   Parte ${nome} em ${(impGerais().fixos || []).map((f) => f.nome).join(" e ") || "fixos"}`, f: (r, c) => c.rat.share * 100, pct: true },
   ];
 }
 function viewDre() {
@@ -1399,7 +1411,7 @@ function viewDreGeral() {
   const fatD = resumo(mR, "doces").receita, fatP = resumo(mR, "pacoca").receita;
   const linhaRateio = (nome, fat, r) => `<tr><td><b>${nome}</b></td><td class="num">${brl(fat)}</td><td class="num">${pct(r.share * 100)}</td><td class="num">${brl(r.das)}</td>
     ${r.itens.map((x) => `<td class="num">${brl(x.valor)}</td>`).join("")}<td class="num"><b>${brl(r.total)}</b></td><td class="num">${pct(fat ? (r.total / fat) * 100 : 0)}</td></tr>`;
-  const fat = faturamentoMedioMensal(), carga = cargaImpostosPct();
+  const regra = rateioPorFaturamento() ? "pela participação no faturamento" : `${fmtQtd(pctFixosDoces())}% doces / ${fmtQtd(100 - pctFixosDoces())}% paçoca`;
   const exProd = db.produtos.find((p) => p.canal === "Outbound" && /9un/.test(p.nome)) || db.produtos[0];
   const recPacote = (+db.config.precoPacoca || 0) * (1 - naoRecPctPacoca() / 100);
   return `
@@ -1407,8 +1419,8 @@ function viewDreGeral() {
     <div class="table-wrap"><table class="dre"><thead><tr><th>Descrição</th>${cols.map((c) => `<th class="num">${c.label}</th>`).join("")}</tr></thead>
     <tbody>${linhas.map((l) => `<tr class="${l.cls || ""}"><td>${l.t.replace(/^ +/, (s) => "&nbsp;".repeat(s.length * 2))}</td>${cols.map((c) => { const v = l.f(c); return `<td class="num ${!l.cls && !l.pct && v < 0 ? "neg" : ""}">${l.pct ? pct(v) : brl(v)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
   </div>
-  <div class="card mt"><div class="card-head"><div><h3>Divisão dos impostos entre as áreas · ${mR ? MESES_FULL[mR - 1] : "ano todo"}</h3><div class="sub">DAS sobre o faturamento de cada área; ${esc(fixos.map((f) => f.nome).join(" e ") || "valores fixos")} pela participação no faturamento. É essa parte que aparece no DRE de cada área.</div></div></div>
-    <div class="table-wrap"><table><thead><tr><th>Área</th><th class="num">Faturamento</th><th class="num">Participação</th><th class="num">DAS</th>${fixos.map((f) => `<th class="num">${esc(f.nome)}</th>`).join("")}<th class="num">Total</th><th class="num">% do faturamento</th></tr></thead>
+  <div class="card mt"><div class="card-head"><div><h3>Divisão dos impostos entre as áreas · ${mR ? MESES_FULL[mR - 1] : "ano todo"}</h3><div class="sub">DAS sobre o faturamento de cada área; ${esc(fixos.map((f) => f.nome).join(" e ") || "valores fixos")} divididos ${regra}. É essa parte que aparece no DRE de cada área.</div></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Área</th><th class="num">Faturamento</th><th class="num">Parte nos fixos</th><th class="num">DAS</th>${fixos.map((f) => `<th class="num">${esc(f.nome)}</th>`).join("")}<th class="num">Total</th><th class="num">% do faturamento</th></tr></thead>
     <tbody>${linhaRateio("Doces finos", fatD, rD)}${linhaRateio("Paçoca", fatP, rP)}</tbody>
     <tfoot>${linhaRateio("Negócio todo", fatD + fatP, rG).replace(/<\/?b>/g, "")}</tfoot></table></div>
   </div>
@@ -1420,20 +1432,20 @@ function viewDreGeral() {
         <label class="hint" style="display:flex;gap:4px;align-items:center">dia ${numIn("ig-dia", +f.dia || 10, `data-id="${f.id}"`)}</label>
         <button class="btn btn-ghost btn-sm btn-danger" data-act="ig-del" data-id="${f.id}">${icon("trash")}</button></div>`).join("")}
       <div class="recipe-total" style="padding-top:14px"><span>Fixos por mês</span><span>${brl(fixosGeraisTot())}</span></div>
+      <div class="sim-row" style="grid-template-columns:1fr 190px${rateioPorFaturamento() ? "" : " 90px"};border:0"><span>Divisão dos fixos entre as áreas</span>
+        <select class="inline" data-act="ig-modo"><option value="fixo" ${rateioPorFaturamento() ? "" : "selected"}>Percentual fixo</option><option value="faturamento" ${rateioPorFaturamento() ? "selected" : ""}>Pelo faturamento do mês</option></select>
+        ${rateioPorFaturamento() ? "" : `<label class="hint" style="display:flex;gap:4px;align-items:center">doces ${numIn("ig-pctdoces", pctFixosDoces())}%</label>`}</div>
+      ${rateioPorFaturamento() ? "" : `<div class="hint">Paçoca fica com ${fmtQtd(100 - pctFixosDoces())}%.</div>`}
       <div class="hint" style="margin-top:8px">O DAS do mês vence no dia escolhido do mês seguinte; os fixos vencem no dia escolhido do próprio mês.</div>
     </div>
     <div class="card"><div class="card-head"><div><h3>Impostos dentro do preço</h3><div class="sub">"Derretidos" no custo de cada produto e de cada pacote de paçoca</div></div></div>
+      ${["doces", "pacoca"].map((a) => `<div class="vend-sec">${a === "doces" ? "Doces finos" : "Paçoca"}</div>
       <ul class="recipe-ings">
         <li><span>DAS</span><span></span><span>${pct(dasPct())}</span></li>
-        <li><span>${esc(fixos.map((f) => f.nome).join(" + ") || "Fixos")}</span><span class="hint">${brl(fixosGeraisTot())} ÷ ${brl(fat)}/mês</span><span>${pct(cargaFixosPct())}</span></li>
-        <li><span><b>Carga sobre o preço de venda</b></span><span></span><span><b>${pct(carga)}</b></span></li>
-      </ul>
-      <div class="vend-sec">Exemplos</div>
-      <ul class="recipe-ings">
-        ${exProd ? `<li><span>${esc(exProd.nome)} (${esc(exProd.canal)})</span><span class="hint">${pct(carga)} de ${brl(exProd.preco)}</span><span>${brl((exProd.preco * carga) / 100)}</span></li>` : ""}
-        <li><span>Pacote de paçoca</span><span class="hint">${pct(carga)} de ${brl(recPacote)} recebido</span><span>${brl(impostoVendaPacote())}</span></li>
-      </ul>
-      <div class="hint" style="margin-top:8px">Faturamento médio dos últimos 3 meses com vendas (doces + paçoca). Esse percentual entra no custo em Produtos &amp; Preços, no simulador e no custo do pacote da paçoca.</div>
+        <li><span>Parte em ${esc(fixos.map((f) => f.nome).join(" + ") || "fixos")}</span><span class="hint">${brl(fixosMesArea(a))} ÷ ${brl(faturamentoMedioMensal(a))}/mês</span><span>${pct(cargaFixosPct(a))}</span></li>
+        <li><span><b>Carga sobre o preço</b></span><span class="hint">${a === "doces" ? (exProd ? `${esc(exProd.nome)}: ${brl((exProd.preco * cargaImpostosPct(a)) / 100)}` : "") : `pacote: ${brl(impostoVendaPacote())} de ${brl(recPacote)} recebido`}</span><span><b>${pct(cargaImpostosPct(a))}</b></span></li>
+      </ul>`).join("")}
+      <div class="hint" style="margin-top:8px">Faturamento médio de cada área nos últimos 3 meses com vendas. Esse percentual entra no custo em Produtos &amp; Preços, no simulador e no custo do pacote da paçoca.</div>
     </div>
   </div>`;
 }
@@ -1495,7 +1507,7 @@ function fichaPacoteHtml() {
   const itens = db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0);
   const comImposto = itens.filter((i) => impostoUnitItem(i) > 0);
   return `<ul class="recipe-ings">${itens.map((i) => `<li><span>${esc(i.nome)} <a class="badge b-gold" href="#insumos-pacoca">insumo</a></span><span>${fmtQtd(consumoPacote(i))} × ${brlU(+i.custo || 0)}</span><span>${brl(consumoPacote(i) * (+i.custo || 0))}</span></li>`).join("")}
-    ${impostoVendaPacote() ? `<li><span>Impostos e contabilidade <a class="badge b-gold" href="#dre-geral">imposto</a></span><span>${pct(cargaImpostosPct())} de ${brl((+db.config.precoPacoca || 0) * (1 - naoRecPctPacoca() / 100))} recebido</span><span>${brl(impostoVendaPacote())}</span></li>` : ""}
+    ${impostoVendaPacote() ? `<li><span>Impostos e contabilidade <a class="badge b-gold" href="#dre-geral">imposto</a></span><span>${pct(cargaImpostosPct("pacoca"))} de ${brl((+db.config.precoPacoca || 0) * (1 - naoRecPctPacoca() / 100))} recebido</span><span>${brl(impostoVendaPacote())}</span></li>` : ""}
     ${comImposto.map((i) => `<li><span>Imposto NF-e · ${esc(i.nome)} <span class="badge b-gray">imposto</span></span><span>${brl(+i.imposto)} ÷ ${fmtQtd(+i.pacote || 1)} × ${fmtQtd(consumoPacote(i))}</span><span>${brl(consumoPacote(i) * impostoUnitItem(i))}</span></li>`).join("")}</ul>
     ${db.pacocaCusto.map((c) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(c.nome)} <span class="hint">(por pacote)</span></span><input inputmode="decimal" data-act="pac-custo" data-id="${c.id}" value="${String(c.valor).replace(".", ",")}" /></div>`).join("")}`;
 }
@@ -2074,9 +2086,10 @@ function contasAutomaticas() {
     const mm = String(m).padStart(2, "0"), mes = MESES_FULL[m - 1], venc = `${ano}-${mm}-10`;
     db.fixos.forEach((f) => push(`fixo:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, venc));
     db.fixosPacoca.forEach((f) => push(`fixopac:${f.id}:${m}`, "pacoca", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, venc));
-    (impGerais().fixos || []).forEach((f) => push(`imp:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, `${ano}-${mm}-${String(Math.min(28, +f.dia || 10)).padStart(2, "0")}`));
-    const fat = resumo(m).receita, prox = m === 12 ? `${ano + 1}-01` : `${ano}-${String(m + 1).padStart(2, "0")}`;
-    push(`das:${m}`, "geral", "Impostos", `DAS ${pct(dasPct())} · faturamento de ${mes} (${brl(fat)})`, (fat * dasPct()) / 100, `${prox}-${String(Math.min(28, +impGerais().dasDia || 20)).padStart(2, "0")}`);
+    const diaVenc = (a, mes1a12, dia) => `${a}-${String(mes1a12).padStart(2, "0")}-${String(Math.min(new Date(a, mes1a12, 0).getDate(), Math.max(1, Math.round(+dia) || 10))).padStart(2, "0")}`;
+    (impGerais().fixos || []).forEach((f) => push(`imp:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, diaVenc(ano, m, f.dia)));
+    const fat = resumo(m).receita;
+    push(`das:${m}`, "geral", "Impostos", `DAS ${pct(dasPct())} · faturamento de ${mes} (${brl(fat)})`, (fat * dasPct()) / 100, m === 12 ? diaVenc(ano + 1, 1, impGerais().dasDia || 20) : diaVenc(ano, m + 1, impGerais().dasDia || 20));
   }
   return out;
 }
@@ -2861,6 +2874,8 @@ function onChange(e) {
   if (act === "set-dremespac") { ui.dreMesPac = +el.value; render(); }
   if (act === "set-pgmes") { ui.pgMes = +el.value; render(); }
   if (act === "set-dremesger") { ui.dreMesGer = +el.value; render(); }
+  if (act === "ig-modo") { impGerais().rateioModo = el.value; save(); render(); }
+  if (act === "ig-pctdoces") { impGerais().rateioDoces = Math.min(100, Math.max(0, parseNum(el.value))); save(); render(); }
   if (act === "ig-das" || act === "ig-dasdia") { impGerais()[act === "ig-das" ? "dasPct" : "dasDia"] = parseNum(el.value); save(); render(); }
   if (["ig-nome", "ig-val", "ig-dia"].includes(act)) {
     const it = (impGerais().fixos || []).find((x) => x.id === el.dataset.id);
