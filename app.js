@@ -99,16 +99,17 @@ function buildSeed() {
     pacocaCompra: s.pacocaCompra.map(([nome, qtd, valor]) => ({ id: uid(), nome, qtd, valor })),
     pacocaSim: s.pacocaSim,
     receitasVistas: true,
+    projecao: { doces: { caixasFds: 80, pctG: 70, fds: 4, mix: {} } },
     pagamentos: [],
     custosVar: [],
     estoque: {
       saldos: {},
       movs: [],
       pacocaItens: [
-        { id: uid(), nome: "Paçoquita", unid: "un", consumo: 1, custo: 1.07 },
-        { id: uid(), nome: "Saquinho", unid: "un", consumo: 1, custo: 0.05 },
-        { id: uid(), nome: "Papel", unid: "folha", consumo: 1, custo: 0.03 },
-        { id: uid(), nome: "Fita durex", unid: "rolo", consumo: 0, custo: 3.64 },
+        { id: uid(), nome: "Paçoquita", unid: "un", consumo: 1, custo: 1.07, pacote: 1 },
+        { id: uid(), nome: "Saquinho", unid: "un", consumo: 1, custo: 0.05, pacote: 1 },
+        { id: uid(), nome: "Papel", unid: "folha", consumo: 1, custo: 0.03, pacote: 1 },
+        { id: uid(), nome: "Fita durex", unid: "rolo", consumo: 0, custo: 3.64, pacote: 1 },
       ],
     },
     vendedor: {
@@ -1835,9 +1836,10 @@ function formItemPacoca(i) {
       { key: "nome", label: "Item", required: true, full: true },
       { key: "unid", label: "Unidade (un, folha, rolo...)" },
       { key: "custo", label: "Custo por unidade (R$)", type: "num" },
-      { key: "consumo", label: "Baixa automática por paçoca vendida", type: "num", full: true },
+      { key: "consumo", label: "Baixa automática por paçoca vendida", type: "num" },
+      { key: "pacote", label: "Unidades por embalagem de compra", type: "num" },
     ],
-    values: i || { unid: "un", consumo: 0 },
+    values: i ? { pacote: 1, ...i } : { unid: "un", consumo: 0, pacote: 1 },
     onSave: (v) => { if (i) Object.assign(i, v); else db.estoque.pacocaItens.push({ id: uid(), ...v }); toast("Item salvo"); },
   });
 }
@@ -1853,8 +1855,120 @@ function baixaVendas(area, pend) {
   });
 }
 
+/* ---------- Projeção de compra (estoque) ---------- */
+// Formato e unidades de cada tipo de caixa, lidos do produto ligado (ex.: "Caixa Bolinha 9un" → Bolinha, 9)
+function infoCaixa(key) {
+  const t = tiposArea("doces").find((x) => x.key === key);
+  const nome = t?.produto || "";
+  return { formato: /copinho/i.test(nome) ? "Copinho" : "Bolinha", un: +(nome.match(/(\d+)\s*un/i)?.[1] || (key === "G" ? 9 : 4)) };
+}
+function mixSabores() {
+  const p = db.projecao.doces;
+  if (!Object.keys(p.mix || {}).length) {
+    const j = db.formatos.findIndex((f) => f.nome === "Bolinha");
+    const ok = db.sabores.filter((s) => +s.rend[j] > 0 && !SEM_PISTACHE.includes(s.nome));
+    p.mix = Object.fromEntries(ok.map((s) => [s.nome, round2(100 / ok.length)]));
+  }
+  return p.mix;
+}
+function projDoces() {
+  const p = db.projecao.doces, mix = mixSabores();
+  const porFdsG = Math.round((p.caixasFds * p.pctG) / 100), porFdsP = Math.max(0, Math.round(p.caixasFds) - porFdsG);
+  const G = porFdsG * p.fds, P = porFdsP * p.fds;
+  const prontoG = Math.max(0, saldoDe("pronto:G").qtd), prontoP = Math.max(0, saldoDe("pronto:P").qtd);
+  const prodG = Math.max(0, G - prontoG), prodP = Math.max(0, P - prontoP);
+  const unidades = {};
+  [["G", prodG], ["P", prodP]].forEach(([k, n]) => { const c = infoCaixa(k); unidades[c.formato] = (unidades[c.formato] || 0) + n * c.un; });
+  const totalMix = sum(Object.values(mix), (v) => +v || 0) || 100;
+  const acc = {};
+  const add = (x) => { acc[x.ref] = acc[x.ref] || { ...x, qtd: 0 }; acc[x.ref].qtd += x.qtd; };
+  const porSabor = [];
+  Object.entries(mix).forEach(([nome, pct]) => {
+    const s = db.sabores.find((x) => x.nome === nome);
+    if (!s || !+pct) return;
+    Object.entries(unidades).forEach(([formato, u]) => {
+      const j = db.formatos.findIndex((f) => f.nome === formato), q = Math.round((u * pct) / totalMix);
+      porSabor.push({ nome, formato, q, semRend: !(+s.rend[j] > 0) });
+      consumoProducao(s, j, q).forEach(add);
+    });
+  });
+  const insumos = Object.values(acc);
+  const accM = {};
+  [...consumoMontagem("G", prodG), ...consumoMontagem("P", prodP)].forEach((x) => { accM[x.ref] = accM[x.ref] || { ...x, qtd: 0 }; accM[x.ref].qtd += x.qtd; });
+  return { porFdsG, porFdsP, G, P, prontoG, prontoP, prodG, prodP, unidades, porSabor, insumos, materiais: Object.values(accM), fds: p.fds };
+}
+// Compra sugerida: falta arredondada para embalagens inteiras de compra (rendimento do insumo)
+function linhaCompra(x, periodos) {
+  const [tipo, id] = x.ref.split(":");
+  const fonte = tipo === "ins" ? db.insumos.find((i) => i.id === id) : tipo === "mat" ? db.materiais.find((i) => i.id === id) : db.estoque.pacocaItens.find((i) => i.id === id);
+  const est = saldoDe(x.ref).qtd, falta = Math.max(0, x.qtd - est);
+  const pacote = tipo === "pac" ? (+fonte?.pacote || 1) : (+fonte?.rend || 1);
+  const precoPacote = tipo === "pac" ? pacote * (+fonte?.custo || 0) : +fonte?.custo || 0;
+  const pacotes = falta > 0 ? Math.ceil(falta / pacote - 1e-9) : 0;
+  const consumoPeriodo = x.qtd / (periodos || 1);
+  return { ...x, est, falta, pacote, pacotes, custo: pacotes * precoPacote, cobertura: consumoPeriodo > 0 ? est / consumoPeriodo : null };
+}
+function tabelaCompra(area, linhas, periodoNome) {
+  if (!linhas.length) return '<div class="empty">Nada a projetar com esses parâmetros.</div>';
+  return `<div class="table-wrap"><table><thead><tr><th>Item</th><th class="num">Necessário</th><th class="num">Em estoque</th><th class="num">Falta</th><th class="num hide-m">Comprar</th><th class="num">Custo</th><th class="num hide-m">Estoque cobre</th></tr></thead><tbody>
+    ${linhas.map((l) => `<tr><td><b>${esc(l.nome)}</b></td>
+      <td class="num">${fmtQtd(round2(l.qtd))} <span class="hint">${esc(l.unid)}</span></td>
+      <td class="num"><input class="tbl-input" inputmode="decimal" data-act="proj-est" data-area="${area}" data-ref="${l.ref}" data-nome="${esc(l.nome)}" value="${String(round2(l.est)).replace(".", ",")}" /></td>
+      <td class="num ${l.falta > 0 ? "neg" : "pos"}"><b>${l.falta > 0 ? fmtQtd(round2(l.falta)) : "OK"}</b></td>
+      <td class="num hide-m">${l.pacotes ? `${int(l.pacotes)} × ${fmtQtd(l.pacote)} ${esc(l.unid)}` : "—"}</td>
+      <td class="num">${l.custo ? brl(l.custo) : "—"}</td>
+      <td class="num hide-m">${l.cobertura === null ? "—" : `<span class="badge b-${l.cobertura >= 1 ? "green" : l.cobertura >= 0.5 ? "yellow" : "red"}">${fmtQtd(Math.round(l.cobertura * 10) / 10)} ${periodoNome}</span>`}</td></tr>`).join("")}
+    </tbody><tfoot><tr><td colspan="5" class="hide-m">Total da compra</td><td class="show-m-cell" colspan="4">Total da compra</td><td class="num">${brl(sum(linhas, (l) => l.custo))}</td><td class="hide-m"></td></tr></tfoot></table></div>`;
+}
+function viewProjecao(area) {
+  if (area === "pacoca") {
+    const s = db.pacocaSim, vendas = (+s.porDia || 0) * (+s.dias || 0);
+    const linhas = db.estoque.pacocaItens.filter((i) => +i.consumo > 0).map((i) => linhaCompra({ ref: "pac:" + i.id, nome: i.nome, unid: i.unid, qtd: i.consumo * vendas }, +s.dias || 1));
+    const total = sum(linhas, (l) => l.custo), faltando = linhas.filter((l) => l.falta > 0).length;
+    return `<div class="grid g-21">
+      <div class="card"><div class="card-head"><div><h3>Previsão de vendas</h3><div class="sub">Os mesmos números do Simulador do mês da paçoca</div></div></div>
+        <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Paçocas vendidas por dia</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="porDia" value="${s.porDia}" /></div>
+        <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>Dias de venda no período</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="dias" value="${s.dias}" /></div>
+      </div>
+      <div class="card"><div class="big-result"><small>Compra necessária no período</small><div>${brl(total)}</div><small>${int(vendas)} paçocas · ${faltando} item(ns) em falta</small></div></div>
+    </div>
+    <div class="card mt"><div class="card-head"><div><h3>Projeção de compra</h3><div class="sub">"Em estoque" é o saldo da tela Estoque — alterar aqui registra uma contagem. "Estoque cobre" = dias de venda que o estoque atual aguenta.</div></div></div>
+      ${tabelaCompra("pacoca", linhas, "dias")}
+      <div class="hint" style="margin-top:10px">Para comprar em caixas/pacotes, informe "Unidades por embalagem de compra" no lápis de cada item (aba Itens).</div></div>`;
+  }
+  const p = db.projecao.doces, r = projDoces(), mix = mixSabores();
+  const ins = r.insumos.map((x) => linhaCompra(x, r.fds)), mats = r.materiais.map((x) => linhaCompra(x, r.fds));
+  const total = sum([...ins, ...mats], (l) => l.custo), totalMix = sum(Object.values(mix), (v) => +v || 0);
+  const j = db.formatos.findIndex((f) => f.nome === "Bolinha");
+  return `<div class="grid g-21">
+    <div class="card"><div class="card-head"><div><h3>Previsão de vendas</h3><div class="sub">Média de caixas por fim de semana e divisão entre Cx G e Cx P</div></div></div>
+      <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Caixas por fim de semana</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="caixasFds" value="${p.caixasFds}" /></div>
+      <div class="sim-row" style="grid-template-columns:1fr 110px"><span>% Cx G <span class="hint">(o restante é Cx P: ${fmtQtd(100 - p.pctG)}%)</span></span><input class="tbl-input" style="width:100%" inputmode="decimal" data-act="proj-par" data-key="pctG" value="${p.pctG}" /></div>
+      <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>Fins de semana no período</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="fds" value="${p.fds}" /></div>
+      <ul class="recipe-ings mt">
+        <li><span>Por fim de semana</span><span>${int(r.porFdsG)} Cx G + ${int(r.porFdsP)} Cx P</span><span>${int(r.porFdsG * infoCaixa("G").un + r.porFdsP * infoCaixa("P").un)} doces</span></li>
+        <li><span>No período (${int(p.fds)} fds)</span><span>${int(r.G)} Cx G + ${int(r.P)} Cx P</span><span>${int(r.G * infoCaixa("G").un + r.P * infoCaixa("P").un)} doces</span></li>
+        ${r.prontoG || r.prontoP ? `<li><span>Já prontas no estoque</span><span>${int(r.prontoG)} Cx G + ${int(r.prontoP)} Cx P</span><span>descontadas</span></li>` : ""}
+        <li><span><b>A produzir</b></span><span><b>${int(r.prodG)} Cx G + ${int(r.prodP)} Cx P</b></span><span><b>${Object.entries(r.unidades).map(([f, u]) => `${int(u)} ${f.toLowerCase()}`).join(" + ") || "0"}</b></span></li>
+      </ul>
+    </div>
+    <div class="card"><div class="big-result"><small>Compra necessária no período</small><div>${brl(total)}</div><small>${ins.filter((l) => l.falta > 0).length + mats.filter((l) => l.falta > 0).length} item(ns) em falta</small></div>
+      <div class="vend-sec">Divisão dos sabores</div>
+      ${db.sabores.map((s) => { const sem = !(+s.rend[j] > 0); return `<div class="sim-row" style="grid-template-columns:1fr 70px"><span>${esc(s.nome)}${sem ? ' <span class="hint">(sem rendimento de bolinha)</span>' : ""}</span>
+        <input class="tbl-input" style="width:100%" inputmode="decimal" data-act="proj-mix" data-sabor="${esc(s.nome)}" value="${String(+mix[s.nome] || 0).replace(".", ",")}" ${sem ? "disabled" : ""} /></div>`; }).join("")}
+      <div class="hint" style="margin-top:6px">Soma: <b class="${Math.abs(totalMix - 100) < 0.5 ? "pos" : "neg"}">${fmtQtd(round2(totalMix))}%</b>${Math.abs(totalMix - 100) < 0.5 ? "" : " — a projeção redistribui proporcionalmente"}</div>
+    </div>
+  </div>
+  <div class="card mt"><div class="card-head"><div><h3>Ingredientes</h3><div class="sub">Baixa calculada pelas fichas técnicas. "Em estoque" é o saldo da tela Estoque — alterar aqui registra uma contagem.</div></div></div>
+    ${tabelaCompra("doces", ins, "fds")}</div>
+  <div class="card mt"><div class="card-head"><div><h3>Embalagens e materiais</h3><div class="sub">Baixa calculada pelos kits de embalagem de cada caixa</div></div></div>
+    ${tabelaCompra("doces", mats, "fds")}</div>`;
+}
+
 function viewEstoque(area) {
-  const abas = area === "pacoca" ? [["itens", "Itens"], ["movs", "Movimentações"]] : [["prontos", "Caixas prontas"], ["ingredientes", "Ingredientes"], ["materiais", "Embalagens & materiais"], ["movs", "Movimentações"]];
+  const abas = area === "pacoca"
+    ? [["itens", "Itens"], ["projecao", "Projeção de compra"], ["movs", "Movimentações"]]
+    : [["prontos", "Caixas prontas"], ["ingredientes", "Ingredientes"], ["materiais", "Embalagens & materiais"], ["projecao", "Projeção de compra"], ["movs", "Movimentações"]];
   if (!abas.some(([k]) => k === ui.estTab[area])) ui.estTab[area] = abas[0][0];
   const aba = ui.estTab[area];
   const todos = itensEstoque(area);
@@ -1869,9 +1983,10 @@ function viewEstoque(area) {
     ${kpi("Itens com saldo", `${int(todos.filter((i) => saldoDe(i.ref).qtd > 0).length)} / ${int(todos.length)}`, "Itens com quantidade em estoque", "pkg")}
     ${kpi("Movimentações hoje", int(movsArea.filter((m) => m.data === hojeISO()).length), `${int(movsArea.length)} no total`, "trend")}
   </div>`;
-  const head = `<div class="toolbar mt">${tabs(abas.map(([k, l]) => [k, k === "movs" ? l : `${l} <span class="badge b-gray">${todos.filter((i) => i.grupo === k).length}</span>`]), aba, "set-esttab")}
-    ${aba === "movs" ? "" : `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-act="est-filtro" ${ui.estSoAlerta ? "checked" : ""} style="width:auto" /> Só com alerta</label>
+  const head = `<div class="toolbar mt">${tabs(abas.map(([k, l]) => [k, k === "movs" || k === "projecao" ? l : `${l} <span class="badge b-gray">${todos.filter((i) => i.grupo === k).length}</span>`]), aba, "set-esttab")}
+    ${aba === "movs" || aba === "projecao" ? "" : `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-act="est-filtro" ${ui.estSoAlerta ? "checked" : ""} style="width:auto" /> Só com alerta</label>
       <div class="search">${icon("search")}<input placeholder="Buscar item..." data-act="busca" value="${esc(ui.busca)}" /></div></div>`}</div>`;
+  if (aba === "projecao") return kpis + head + viewProjecao(area);
   if (aba === "movs") {
     const lista = [...movsArea].reverse().slice(0, 300);
     return kpis + head + `<div class="card"><div class="card-head"><div><h3>Movimentações</h3><div class="sub">Excluir uma movimentação desfaz o efeito dela no saldo</div></div></div>
@@ -2113,6 +2228,14 @@ function onChange(e) {
   const el = e.target, act = el.dataset.act;
   if (act === "par-fonte") { aplicarFonte(db.params.find((x) => x.key === el.dataset.key), el.value); save(); render(); toast("Origem do custo atualizada"); }
   if (act === "bar-linha") { db.barras[ui.barra].linha = el.value; save(); render(); toast(`Barra marcada como ${el.value}`); }
+  if (act === "proj-par") { db.projecao.doces[el.dataset.key] = parseNum(el.value); save(); render(); }
+  if (act === "proj-mix") { mixSabores()[el.dataset.sabor] = parseNum(el.value); save(); render(); }
+  if (act === "projp-par") { db.pacocaSim[el.dataset.key] = parseNum(el.value); save(); render(); }
+  if (act === "proj-est") {
+    const novo = parseNum(el.value), atual = saldoDe(el.dataset.ref).qtd;
+    if (Math.abs(novo - atual) > 1e-9) { movimentar(el.dataset.area, el.dataset.ref, el.dataset.nome, novo - atual, "ajuste", "Contagem (projeção)"); save(); toast(`Estoque atualizado: ${el.dataset.nome}`); }
+    render();
+  }
   if (act === "est-min") { saldoDe(el.dataset.ref).minimo = parseNum(el.value); save(); render(); }
   if (act === "est-filtro") { ui.estSoAlerta = el.checked; render(); }
   if (act === "set-dremes") { ui.dreMes = +el.value; render(); }

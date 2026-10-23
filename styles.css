@@ -257,10 +257,11 @@ tr:hover .row-actions { opacity: 1; }
 .dre tr.result td { background: var(--choc); color: #fff; font-weight: 700; }
 
 .overlay { display: none; }
-.show-m { display: none; }
+.show-m, .show-m-cell { display: none; }
 @media (max-width: 760px) {
   .hide-m { display: none !important; }
   .show-m { display: block; margin-top: 2px; }
+  .show-m-cell { display: table-cell; }
   .card-head { flex-wrap: wrap; }
   .btn { white-space: nowrap; }
   .table-wrap .tbl-input { width: 54px; padding: 5px 6px; }
