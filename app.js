@@ -891,13 +891,13 @@ function viewPacoca() {
     ${lista.length ? '<div class="chart-box sm"><canvas id="chPac"></canvas></div>' : '<div class="empty">Sem registros</div>'}</div>
   <div class="card mt"><div class="card-head"><div><h3>Registro diário</h3><div class="sub">"Não recebido" = vendas × preço unitário − valor recebido</div></div></div>
     ${lista.length ? `<div class="table-wrap"><table>
-    <thead><tr><th>Data</th><th class="num">Vendidas</th><th class="num">Pix</th><th class="num">Espécie</th><th class="num">Recebido</th><th class="num">Não recebido</th><th class="num">Insumos</th><th class="num">Imposto NF-e</th><th class="num">Gasolina</th><th class="num">Mão de obra</th><th class="num">Lucro</th><th></th></tr></thead>
+    <thead><tr><th>Data</th><th class="num">Vendidas</th><th class="num">Pix</th><th class="num">Espécie</th><th class="num">Recebido</th><th class="num">Não recebido</th><th class="num">Insumos</th><th class="num hint">NF-e (já inclusa)</th><th class="num">Gasolina</th><th class="num">Mão de obra</th><th class="num">Lucro</th><th></th></tr></thead>
     <tbody>${lista.map((p) => { const n = naoRecPac(p); return `<tr>
       <td>${ddmm(p.data)}</td><td class="num">${int(p.qtd)}</td><td class="num">${brl(p.pix)}</td><td class="num">${brl(p.especie)}</td><td class="num"><b>${brl(recPac(p))}</b></td>
       <td class="num">${n > 0 ? `<span class="badge b-red">${brl(n)}</span>` : `<span class="badge b-green">${brl(n)}</span>`}</td>
-      <td class="num">${brl(insumosReg(p))}</td><td class="num">${brl(impostoReg(p))}</td><td class="num">${brl(p.gasolina)}</td><td class="num">${brl(p.maoObra)}</td>
+      <td class="num">${brl(insumosReg(p) + impostoReg(p))}</td><td class="num hint">${brl(impostoReg(p))}</td><td class="num">${brl(p.gasolina)}</td><td class="num">${brl(p.maoObra)}</td>
       <td class="num ${lucroPac(p) >= 0 ? "pos" : "neg"}"><b>${brl(lucroPac(p))}</b></td><td>${rowActions("pac", p.id)}</td></tr>`; }).join("")}</tbody>
-    <tfoot><tr><td>Total</td><td class="num">${int(qtd)}</td><td class="num">${brl(sum(lista, (p) => +p.pix || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.especie || 0))}</td><td class="num">${brl(rec)}</td><td class="num">${brl(nr)}</td><td class="num">${brl(sum(lista, insumosReg))}</td><td class="num">${brl(sum(lista, impostoReg))}</td><td class="num">${brl(sum(lista, (p) => +p.gasolina || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.maoObra || 0))}</td><td class="num">${brl(luc)}</td><td></td></tr></tfoot>
+    <tfoot><tr><td>Total</td><td class="num">${int(qtd)}</td><td class="num">${brl(sum(lista, (p) => +p.pix || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.especie || 0))}</td><td class="num">${brl(rec)}</td><td class="num">${brl(nr)}</td><td class="num">${brl(sum(lista, (p) => insumosReg(p) + impostoReg(p)))}</td><td class="num hint">${brl(sum(lista, impostoReg))}</td><td class="num">${brl(sum(lista, (p) => +p.gasolina || 0))}</td><td class="num">${brl(sum(lista, (p) => +p.maoObra || 0))}</td><td class="num">${brl(luc)}</td><td></td></tr></tfoot>
     </table></div>` : ""}
   </div>`;
 }
@@ -1396,6 +1396,7 @@ function viewDreGeral() {
     { t: "(−) DESPESAS VARIÁVEIS", f: (c) => -c.g.custos, cls: "total" },
     { t: "   Doces finos", f: (c) => -c.d.custos },
     { t: "   Paçoca", f: (c) => -c.p.custos },
+    { t: "      dos quais imposto NF-e da paçoquita · informativo, já incluído acima", f: (c) => c.p.impostos, info: true },
     { t: "(=) LUCRO BRUTO", f: (c) => c.g.lucro, cls: "total" },
     { t: "(−) IMPOSTOS E CONTABILIDADE", f: (c) => -c.rat.total, cls: "total" },
     { t: `   DAS ${pct(dasPct())} sobre o faturamento bruto`, f: (c) => -c.rat.das },
@@ -1417,7 +1418,7 @@ function viewDreGeral() {
   return `
   <div class="card"><div class="card-head"><div><h3>DRE unificado ${db.config.ano}${ui.dreMesGer ? " · " + MESES_FULL[ui.dreMesGer - 1] : ""}</h3><div class="sub">Doces finos + paçoca, com os impostos e a contabilidade do negócio</div></div></div>
     <div class="table-wrap"><table class="dre"><thead><tr><th>Descrição</th>${cols.map((c) => `<th class="num">${c.label}</th>`).join("")}</tr></thead>
-    <tbody>${linhas.map((l) => `<tr class="${l.cls || ""}"><td>${l.t.replace(/^ +/, (s) => "&nbsp;".repeat(s.length * 2))}</td>${cols.map((c) => { const v = l.f(c); return `<td class="num ${!l.cls && !l.pct && v < 0 ? "neg" : ""}">${l.pct ? pct(v) : brl(v)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+    <tbody>${linhas.map((l) => `<tr class="${l.cls || ""}${l.info ? " row-off" : ""}"><td>${l.t.replace(/^ +/, (s) => "&nbsp;".repeat(s.length * 2))}</td>${cols.map((c) => { const v = l.f(c); return `<td class="num ${!l.cls && !l.pct && !l.info && v < 0 ? "neg" : ""}">${l.pct ? pct(v) : brl(v)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
   </div>
   <div class="card mt"><div class="card-head"><div><h3>Divisão dos impostos entre as áreas · ${mR ? MESES_FULL[mR - 1] : "ano todo"}</h3><div class="sub">DAS sobre o faturamento de cada área; ${esc(fixos.map((f) => f.nome).join(" e ") || "valores fixos")} divididos ${regra}. É essa parte que aparece no DRE de cada área.</div></div></div>
     <div class="table-wrap"><table><thead><tr><th>Área</th><th class="num">Faturamento</th><th class="num">Parte nos fixos</th><th class="num">DAS</th>${fixos.map((f) => `<th class="num">${esc(f.nome)}</th>`).join("")}<th class="num">Total</th><th class="num">% do faturamento</th></tr></thead>
@@ -1544,8 +1545,8 @@ function viewInsumosPacoca() {
         <td class="num">${brlU(+i.custo || 0)}<span class="hint">/${esc(i.unid)}</span></td><td class="num">${fmtQtd(consumoPacote(i))} ${esc(i.unid)}</td>
         <td class="num"><b>${brl(consumoPacote(i) * (+i.custo || 0))}</b></td><td class="num hide-m">${fmtQtd(saldoDe("pac:" + i.id).qtd)} ${esc(i.unid)}</td>
         <td>${rowActions("ins-pac", i.id)}</td></tr>`).join("")}
-      </tbody><tfoot><tr><td colspan="6" class="hide-m">Insumos por pacote</td><td class="show-m-cell" colspan="3">Insumos por pacote</td><td class="num">${brl(custoInsumosPacote())}</td><td colspan="2" class="hide-m"></td><td class="show-m-cell"></td></tr>
-      ${impostoPacote() ? `<tr><td colspan="6" class="hide-m">Imposto NF-e por pacote (à parte no DRE)</td><td class="show-m-cell" colspan="3">Imposto NF-e por pacote</td><td class="num">${brl(impostoPacote())}</td><td colspan="2" class="hide-m"></td><td class="show-m-cell"></td></tr>` : ""}</tfoot></table></div>
+      </tbody><tfoot><tr><td colspan="6" class="hide-m">Insumos por pacote</td><td class="show-m-cell" colspan="3">Insumos por pacote</td><td class="num">${brl(custoInsumosPacote() + impostoPacote())}</td><td colspan="2" class="hide-m"></td><td class="show-m-cell"></td></tr>
+      ${impostoPacote() ? `<tr><td colspan="6" class="hide-m">dos quais imposto NF-e por pacote (já incluso no custo)</td><td class="show-m-cell" colspan="3">Imposto NF-e por pacote</td><td class="num">${brl(impostoPacote())}</td><td colspan="2" class="hide-m"></td><td class="show-m-cell"></td></tr>` : ""}</tfoot></table></div>
     </div>
     <div class="card"><div class="card-head"><div><h3>Ficha do pacote</h3><div class="sub">Pacote com ${fmtQtd(+db.pacocaSim.porPacote || 1)} paçoquitas</div></div></div>
       ${fichaPacoteHtml()}
@@ -1573,8 +1574,8 @@ function viewDrePacoca() {
     { t: "   Dinheiro", f: (r) => sum(r.pac, (p) => +p.especie || 0) },
     { t: "   Não recebido (fiado / no-show) · informativo", f: (r) => sum(r.pac, naoRecPac), info: true },
     { t: "(−) DESPESAS VARIÁVEIS", f: (r) => -r.custos, cls: "total" },
-    { t: "   Insumos (paçoquita, saquinho, papel)", f: (r) => -r.insumos },
-    { t: `   Imposto NF-e na compra da paçoquita (${brl(impostoPacote())}/pacote)`, f: (r) => -r.impostos },
+    { t: "   Insumos de produção (paçoquita com NF-e, saquinho, papel)", f: (r) => -(r.insumos + r.impostos) },
+    { t: `      dos quais imposto NF-e da paçoquita (${brl(impostoPacote())}/pacote) · informativo, já incluído acima`, f: (r) => r.impostos, info: true },
     { t: "   Gasolina", f: (r) => -r.gasolina },
     { t: "   Mão de obra", f: (r) => -r.comissoes },
     ...cats.map((cat) => ({ t: "   " + cat + " (lançado)", f: (r) => -sum(r.cvs.filter((c) => c.categoria === cat), (c) => +c.valor || 0) })),
