@@ -92,6 +92,8 @@ function buildSeed() {
       { id: uid(), nome: "Pró-labore", valor: 0 },
       { id: uid(), nome: "Marketing", valor: 0 },
       { id: uid(), nome: "Contabilidade", valor: 0 },
+      { id: uid(), nome: "INSS", valor: 0 },
+      { id: uid(), nome: "Emissão de NF-e", valor: 0 },
       { id: uid(), nome: "Telefonia / Internet", valor: 0 },
     ],
     sim: { canal: "Outbound", semanas: 4, qtd: qtdInicial, fixos: { Gasolina: 107.4, "Comissão vendedor": 0, "Alimentação vendedor": 0, Marketing: 0, "Pró-labore": 0 } },
@@ -108,6 +110,8 @@ function buildSeed() {
     ],
     projecao: { doces: { caixasFds: 80, pctG: 70, fds: 4, mix: {} } },
     pagamentos: [],
+    contasIgnoradas: [],
+    contasAutoV1: true,
     custosVar: [],
     estoque: {
       saldos: {},
@@ -163,6 +167,15 @@ function migrar(data) {
     });
     data.cxHistVistas = true;
   }
+  // Contas a pagar passam a ser geradas sozinhas, por lançamento: saem as contas mensais em aberto do gerador antigo
+  if (!data.contasAutoV1) {
+    data.pagamentos = (data.pagamentos || []).filter((p) => p.pago || !String(p.ref || "").startsWith("auto:"));
+    if (Array.isArray(data.fixos)) {
+      if (!data.fixos.some((f) => /inss/i.test(f.nome))) data.fixos.push({ id: uid(), nome: "INSS", valor: 0 });
+      if (!data.fixos.some((f) => /nf-?e|nota fiscal/i.test(f.nome))) data.fixos.push({ id: uid(), nome: "Emissão de NF-e", valor: 0 });
+    }
+    data.contasAutoV1 = true;
+  }
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
   (data.pagamentos || []).forEach((p) => { if (p.categoria === "Fornecedor / insumos") p.categoria = "Insumos"; });
@@ -204,7 +217,11 @@ function migrar(data) {
 const salvarLocal = () => localStorage.setItem(STORE_KEY, JSON.stringify(db));
 // Estado compartilhado na nuvem; as vendas do vendedor sincronizam uma a uma (ver Sync.putRegistro)
 const estadoSemRegistros = () => ({ ...db, vendedor: { ...db.vendedor, registros: [] } });
-function save() { salvarLocal(); if (typeof Sync !== "undefined") Sync.saveEstado(estadoSemRegistros()); }
+function save() {
+  if (typeof sincronizarContasAuto === "function") sincronizarContasAuto();
+  salvarLocal();
+  if (typeof Sync !== "undefined") Sync.saveEstado(estadoSemRegistros());
+}
 let db = load();
 
 const ui = { mes: 0, vendasCanal: "Todos", vendasMes: 0, pacMes: null, prodCanal: "Outbound", insTab: "insumos", busca: "", recTab: "doces", sabor: 0, barra: 0, dreMes: 0, pgTipo: "pagar", pgStatus: "pendente", pgMes: 0, estTab: { doces: "prontos", pacoca: "itens" }, estSoAlerta: false, dreMesPac: 0 };
@@ -1755,7 +1772,7 @@ function lancarDia(area) {
 
 /* ---------- Pagamentos ---------- */
 const CATS_PAG = {
-  pagar: ["Mão de obra", "Insumos", "Embalagens", "Gasolina", "Contador", "Impostos", "Pró-labore", "Comissão", "Aluguel / contas", "Marketing", "Outros"],
+  pagar: ["Mão de obra", "Insumos", "Embalagens", "Gasolina", "Contador", "Impostos", "Notas fiscais (NF-e)", "Pró-labore", "Comissão", "Aluguel / contas", "Marketing", "Outros"],
   receber: ["Cliente", "Revendedor", "Encomenda", "iFood", "Paçoca (fiado)", "Outros"],
 };
 const AREA_LABEL = { doces: "Doces Finos", pacoca: "Paçoca", geral: "Geral" };
@@ -1790,6 +1807,7 @@ function formPagamento(area, p) {
         descricao: v.descricao, categoria: v.categoria, valor: v.valor, vencimento: v.vencimento, pago: v.status === "Pago",
       };
       novo.dataPago = novo.pago ? (p?.dataPago || hojeISO()) : null;
+      if (p?.auto && (Math.abs(+p.valor - +novo.valor) > 0.004 || p.vencimento !== novo.vencimento || p.descricao !== novo.descricao)) novo.travado = true;
       if (p) Object.assign(p, novo); else db.pagamentos.push({ id: uid(), ...novo });
       toast("Conta salva");
     },
@@ -1808,8 +1826,11 @@ function viewPagamentos(area) {
   const pagos = noMes.filter((p) => p.pago);
   const verbo = ui.pgTipo === "pagar" ? "pagar" : "receber";
   const extras = ui.pgTipo === "pagar"
-    ? `<button class="btn btn-sm btn-primary" data-act="pg-gerar">${icon("plus")}Gerar contas do mês</button>`
+    ? `<label class="hint" style="display:flex;align-items:center;gap:6px">Contas automáticas desde <input type="date" class="inline" data-act="pg-auto-desde" value="${contasAutoDesde()}" /></label>`
     : area === "pacoca" ? `<button class="btn btn-sm" data-act="pg-fiado">Gerar a receber da paçoca não recebida</button>` : "";
+  const avisoAuto = ui.pgTipo === "pagar" ? `<div class="alert green" style="margin-bottom:14px">${icon("check")}<div><b>Contas geradas automaticamente a partir dos custos</b>
+    <span>${area === "pacoca" ? "Cada dia de venda da paçoca gera mão de obra, gasolina e insumos" : "Cada lançamento de vendas dos doces gera mão de obra (pelas caixas vendidas), gasolina, insumos e comissões"}, com vencimento no dia seguinte.
+    As despesas fixas (contabilidade, INSS, NF-e, pró-labore...) vencem todo dia 10 — valores no DRE. Editar uma conta automática trava o valor; excluir faz ela não voltar.</span></div></div>` : "";
   const cats = [...new Set(noMes.map((p) => p.categoria))].sort((a, b) => CATS_PAG[ui.pgTipo].indexOf(a) - CATS_PAG[ui.pgTipo].indexOf(b));
   const porCategoria = cats.length ? `<div class="card mt"><div class="card-head"><div><h3>Por categoria</h3><div class="sub">${ui.pgMes ? MESES_FULL[ui.pgMes - 1] : "Todos os vencimentos"}</div></div></div>
     <div class="cat-grid">${cats.map((c) => { const l = noMes.filter((p) => p.categoria === c), pe = sum(l.filter((p) => !p.pago), (p) => +p.valor || 0), pg = sum(l.filter((p) => p.pago), (p) => +p.valor || 0); return `
@@ -1825,11 +1846,11 @@ function viewPagamentos(area) {
     ${kpi(ui.pgTipo === "pagar" ? "Já pago" : "Já recebido", brl(sum(pagos, (p) => +p.valor || 0)), `${pagos.length} conta(s)`, "check", "pos")}
   </div>
   ${porCategoria}
-  <div class="card mt"><div class="card-head"><div><h3>Contas a ${verbo}</h3><div class="sub">Marque a caixa quando ${ui.pgTipo === "pagar" ? "pagar" : "receber"} — a data fica registrada</div></div>${extras}</div>
+  <div class="card mt">${avisoAuto}<div class="card-head"><div><h3>Contas a ${verbo}</h3><div class="sub">Marque a caixa quando ${ui.pgTipo === "pagar" ? "pagar" : "receber"} — a data fica registrada</div></div>${extras}</div>
     ${lista.length ? `<div class="table-wrap"><table><thead><tr><th style="width:40px"></th><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th>Área</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead><tbody>
     ${lista.map((p) => { const s = situacaoPag(p); return `<tr class="${p.pago ? "row-pago" : ""}">
       <td><input type="checkbox" class="pg-check" data-act="pg-toggle" data-id="${p.id}" ${p.pago ? "checked" : ""} title="${p.pago ? "Marcar como pendente" : "Marcar como pago"}" /></td>
-      <td>${p.vencimento ? ddmm(p.vencimento) : "—"}</td><td><b>${esc(p.descricao)}</b></td><td><span class="badge b-gray">${esc(p.categoria)}</span></td><td class="hint">${AREA_LABEL[p.area]}</td>
+      <td>${p.vencimento ? ddmm(p.vencimento) : "—"}</td><td><b>${esc(p.descricao)}</b>${p.auto ? ` <span class="badge b-gold" title="${p.travado ? "Valor travado (editado à mão)" : "Gerada a partir dos custos"}">${p.travado ? "auto · travada" : "auto"}</span>` : ""}</td><td><span class="badge b-gray">${esc(p.categoria)}</span></td><td class="hint">${AREA_LABEL[p.area]}</td>
       <td class="num"><b>${brl(p.valor)}</b></td>
       <td><span class="badge b-${s.c}">${s.t}</span>${p.pago && p.dataPago ? ` <span class="hint">em ${ddmm(p.dataPago)}</span>` : ""}</td>
       <td>${rowActions("pag", p.id)}</td></tr>`; }).join("")}
@@ -1839,57 +1860,57 @@ function viewPagamentos(area) {
 }
 function categoriaFixo(nome) {
   if (/contab|contador/i.test(nome)) return "Contador";
+  if (/nf-?e|nota fiscal|notas fiscais/i.test(nome)) return "Notas fiscais (NF-e)";
   if (/inss|imposto|simples|das\b|iss\b|mei/i.test(nome)) return "Impostos";
   if (/pr[óo]-?\s?labore/i.test(nome)) return "Pró-labore";
   if (/marketing/i.test(nome)) return "Marketing";
   if (/m[ãa]o de obra|sal[áa]rio|funcion/i.test(nome)) return "Mão de obra";
   return "Aluguel / contas";
 }
-// Contas a pagar do mês montadas a partir dos lançamentos (vendas, paçoca) e das despesas fixas do DRE
-function contasDoMes(area, m) {
-  const ano = db.config.ano, mm = String(m).padStart(2, "0");
-  const fimMes = `${ano}-${mm}-${String(new Date(ano, m, 0).getDate()).padStart(2, "0")}`;
-  const mes = MESES_FULL[m - 1], out = [];
-  const add = (ref, categoria, descricao, valor, vencimento, areaConta = area) => { if (valor > 0.004) out.push({ ref: `auto:${ref}:${m}`, categoria, descricao, valor: round2(valor), vencimento, area: areaConta }); };
-  if (area === "doces") {
-    const v = db.vendas.filter((x) => monthOf(x.inicio) === m);
-    add("doces:insumos", "Insumos", `Insumos dos doces · ${mes}`, sum(v, (x) => +x.insumos || 0), fimMes);
-    add("doces:gasolina", "Gasolina", `Gasolina (doces) · ${mes}`, sum(v, (x) => +x.gasolina || 0), fimMes);
-    add("doces:comissoes", "Comissão", `Comissões / vendedor · ${mes}`, sum(v, (x) => +x.comissoes || 0), fimMes);
-    db.fixos.filter((f) => +f.valor > 0).forEach((f) => add(`fixo:${f.id}`, categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor, `${ano}-${mm}-10`, "geral"));
-  } else {
-    const p = db.pacoca.filter((x) => monthOf(x.data) === m);
-    add("pacoca:insumos", "Insumos", `Insumos da paçoca · ${mes}`, sum(p, (x) => +x.insumos || 0), fimMes);
-    add("pacoca:gasolina", "Gasolina", `Gasolina (paçoca) · ${mes}`, sum(p, (x) => +x.gasolina || 0), fimMes);
-    add("pacoca:maoobra", "Mão de obra", `Mão de obra da paçoca · ${mes}`, sum(p, (x) => +x.maoObra || 0), fimMes);
-    db.fixosPacoca.filter((f) => +f.valor > 0).forEach((f) => add(`fixopac:${f.id}`, categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor, `${ano}-${mm}-10`, "pacoca"));
+// Contas a pagar automáticas, puxadas dos custos de cada lançamento e das despesas fixas.
+// Cada conta tem uma chave (auto) estável: se o custo muda, a conta em aberto é atualizada; se já foi paga, a diferença vira "complemento".
+const addDias = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const contasAutoDesde = () => db.config.contasAutoDesde || `${hojeISO().slice(0, 7)}-01`;
+function contasAutomaticas() {
+  const desde = contasAutoDesde(), ano = db.config.ano, out = [];
+  const push = (base, area, categoria, descricao, valor, vencimento) => { if (valor > 0.004) out.push({ base, area, categoria, descricao, valor: round2(valor), vencimento }); };
+  db.pacoca.filter((p) => p.data >= desde).forEach((p) => {
+    const venc = addDias(p.data, 1), dia = ddmm(p.data), q = int(p.qtd);
+    push(`pac:${p.id}:mo`, "pacoca", "Mão de obra", `Mão de obra paçoca · ${dia} (${q} pacotes)`, +p.maoObra || 0, venc);
+    push(`pac:${p.id}:gas`, "pacoca", "Gasolina", `Gasolina paçoca · ${dia}`, +p.gasolina || 0, venc);
+    push(`pac:${p.id}:ins`, "pacoca", "Insumos", `Insumos paçoca · ${dia} (${q} pacotes)`, +p.insumos || 0, venc);
+  });
+  db.vendas.filter((w) => w.fim >= desde).forEach((w) => {
+    const venc = addDias(w.fim, 1), per = `${ddmm(w.inicio)} a ${ddmm(w.fim)}`, canal = w.canal === "Outbound" ? "" : ` · ${w.canal}`;
+    const doces = (+w.cxP || 0) * unidadesCaixa("P") + (+w.cxG || 0) * unidadesCaixa("G");
+    push(`doc:${w.id}:mo`, "doces", "Mão de obra", `Mão de obra doces · ${per}${canal} (${int(doces)} doces)`, doces * paramVal("maoObraDoce"), venc);
+    push(`doc:${w.id}:gas`, "doces", "Gasolina", `Gasolina doces · ${per}${canal}`, +w.gasolina || 0, venc);
+    push(`doc:${w.id}:ins`, "doces", "Insumos", `Insumos doces · ${per}${canal}`, +w.insumos || 0, venc);
+    push(`doc:${w.id}:com`, "doces", "Comissão", `Comissões / vendedor · ${per}${canal}`, +w.comissoes || 0, venc);
+  });
+  const m0 = monthOf(desde), m1 = Math.max(mesAtual(), m0);
+  for (let m = m0; m <= m1; m++) {
+    const mm = String(m).padStart(2, "0"), mes = MESES_FULL[m - 1], venc = `${ano}-${mm}-10`;
+    db.fixos.forEach((f) => push(`fixo:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, venc));
+    db.fixosPacoca.forEach((f) => push(`fixopac:${f.id}:${m}`, "pacoca", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, venc));
   }
   return out;
 }
-function formGerarContas(area) {
-  const mesIni = ui.pgMes || mesAtual();
-  const situacao = (c) => { const ex = db.pagamentos.find((p) => p.ref === c.ref); return !ex ? "nova" : ex.pago ? "já paga" : Math.abs(ex.valor - c.valor) > 0.004 ? "atualiza valor" : "já existe"; };
-  openForm({
-    title: `Gerar contas a pagar · ${AREA_LABEL[area]}`,
-    fields: [{ key: "mes", label: "Mês de referência", type: "select", options: MESES_FULL, full: true }],
-    values: { mes: MESES_FULL[mesIni - 1] },
-    preview: (v) => {
-      const l = contasDoMes(area, MESES_FULL.indexOf(v.mes) + 1);
-      return l.length ? `<ul class="recipe-ings" style="width:100%">${l.map((c) => `<li><span>${esc(c.descricao)} <span class="badge b-gray">${esc(c.categoria)}</span></span><span class="hint">${situacao(c)}</span><span>${brl(c.valor)}</span></li>`).join("")}</ul>`
-        : "<span>Nenhum lançamento nesse mês. Despesas fixas (contador, impostos, pró-labore) são preenchidas no DRE.</span>";
-    },
-    saveLabel: "Gerar contas",
-    onSave: (v) => {
-      const m = MESES_FULL.indexOf(v.mes) + 1;
-      let novas = 0, atual = 0;
-      contasDoMes(area, m).forEach((c) => {
-        const ex = db.pagamentos.find((p) => p.ref === c.ref);
-        if (!ex) { db.pagamentos.push({ id: uid(), tipo: "pagar", pago: false, dataPago: null, ...c }); novas++; }
-        else if (!ex.pago && Math.abs(ex.valor - c.valor) > 0.004) { ex.valor = c.valor; atual++; }
-      });
-      ui.pgMes = m;
-      toast(novas || atual ? `${novas} conta(s) nova(s)${atual ? `, ${atual} valor(es) atualizado(s)` : ""} · ${v.mes}` : "Tudo já estava lançado");
-    },
+function sincronizarContasAuto() {
+  if (!db?.pagamentos) return;
+  const alvo = contasAutomaticas(), bases = new Set(alvo.map((a) => a.base)), ignoradas = new Set(db.contasIgnoradas || []);
+  // Conta automática em aberto cujo custo deixou de existir (lançamento excluído, valor zerado) sai da lista
+  db.pagamentos = db.pagamentos.filter((p) => !(p.auto && !p.pago && !p.travado && !bases.has(p.auto)));
+  alvo.forEach((a) => {
+    if (ignoradas.has(a.base)) return;
+    const itens = db.pagamentos.filter((p) => p.auto === a.base);
+    if (itens.some((p) => p.travado)) return;
+    const pago = sum(itens.filter((p) => p.pago), (p) => +p.valor || 0), aberto = itens.find((p) => !p.pago);
+    const falta = round2(a.valor - pago), desc = a.descricao + (pago > 0 ? " (complemento)" : "");
+    if (falta > 0.004) {
+      if (aberto) Object.assign(aberto, { valor: falta, descricao: desc, vencimento: a.vencimento, categoria: a.categoria, area: a.area });
+      else db.pagamentos.push({ id: uid(), auto: a.base, tipo: "pagar", area: a.area, categoria: a.categoria, descricao: desc, valor: falta, vencimento: a.vencimento, pago: false, dataPago: null });
+    } else if (aberto) db.pagamentos = db.pagamentos.filter((p) => p !== aberto);
   });
 }
 function gerarFiadoPacoca() {
@@ -2404,8 +2425,11 @@ function onClick(e) {
     case "set-pgstatus": ui.pgStatus = val; break;
     case "new-pag": return formPagamento(areaAtual());
     case "edit-pag": return formPagamento(areaAtual(), find(db.pagamentos));
-    case "del-pag": return confirmDel("Excluir esta conta?", () => { db.pagamentos = db.pagamentos.filter((x) => x.id !== id); });
-    case "pg-gerar": return formGerarContas(areaAtual());
+    case "del-pag": return confirmDel("Excluir esta conta?", () => {
+      const p = db.pagamentos.find((x) => x.id === id);
+      if (p?.auto) db.contasIgnoradas = [...new Set([...(db.contasIgnoradas || []), p.auto])];
+      db.pagamentos = db.pagamentos.filter((x) => x.id !== id);
+    });
     case "pg-fiado": gerarFiadoPacoca(); save(); break;
     case "new-cvar": return formCustoVar(null, val === "pacoca" ? "pacoca" : "doces");
     case "edit-cvar": return formCustoVar(find(db.custosVar));
@@ -2591,6 +2615,7 @@ function onChange(e) {
   if (act === "set-dremes") { ui.dreMes = +el.value; render(); }
   if (act === "set-dremespac") { ui.dreMesPac = +el.value; render(); }
   if (act === "set-pgmes") { ui.pgMes = +el.value; render(); }
+  if (act === "pg-auto-desde" && el.value) { db.config.contasAutoDesde = el.value; save(); render(); toast(`Contas automáticas a partir de ${ddmm(el.value)}`); }
   if (act === "pg-toggle") {
     const p = db.pagamentos.find((x) => x.id === el.dataset.id);
     p.pago = el.checked; p.dataPago = p.pago ? hojeISO() : null;
@@ -2721,4 +2746,5 @@ window.addEventListener("storage", (e) => {
 });
 if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
 
+sincronizarContasAuto(); salvarLocal();
 render();
