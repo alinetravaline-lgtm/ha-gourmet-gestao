@@ -2340,7 +2340,7 @@ function viewVendedor(area) {
       </tbody></table></div>` : '<div class="empty">Nenhuma venda registrada neste dia.</div>'}
     </div>
   </div>
-  ${APP_VENDEDOR ? `<div class="hint" style="text-align:center;margin-top:24px"><a class="link" data-act="vend-sair">Entrar no modo gestão</a></div>` : `
+  ${APP_VENDEDOR ? "" : `
 
   <details class="card mt comp-config">
     <summary><b>Configurar preços e promoções</b> <span class="hint">· preço normal, promoções e custo de cada item</span></summary>
@@ -2435,7 +2435,7 @@ function viewVendedorPacoca() {
       </tbody></table></div>` : '<div class="empty">Nenhum registro neste dia.</div>'}
     </div>
   </div>
-  ${APP_VENDEDOR ? `<div class="hint" style="text-align:center;margin-top:24px"><a class="link" data-act="vend-sair">Entrar no modo gestão</a></div>` : `
+  ${APP_VENDEDOR ? "" : `
   <details class="card mt comp-config">
     <summary><b>Configurar preço e promoções</b> <span class="hint">· lucro já descontando ${pct(meta)} de não recebimento</span></summary>
     <div class="table-wrap mt"><table><thead><tr><th>Item</th><th>Leva</th><th class="num">Preço</th><th class="num">Custo</th><th class="num">Lucro esperado</th><th></th></tr></thead><tbody>
@@ -2829,9 +2829,6 @@ function viewEquipe() {
         <div style="flex:1;min-width:200px"><p class="hint" style="margin-top:0">Use só em aparelhos de quem pode ver custos e lucros.</p>
           <button class="btn btn-sm" data-act="eq-copiar" data-val="gest">Copiar link da gestão</button></div>
       </div>
-      <div class="vend-sec">PIN da gestão</div>
-      <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(77px,140px);border:0"><span class="hint">Pedido quando alguém tenta sair do modo vendedor</span>
-        <input inputmode="numeric" data-act="eq-pin" value="${esc(db.config.pinGestao || "")}" placeholder="Sem PIN" /></div>
       <button class="btn btn-sm btn-danger mt" data-act="eq-desconectar">Desconectar este aparelho da nuvem</button>
     </div>
   </div>
@@ -3441,13 +3438,6 @@ function onClick(e) {
       localStorage.setItem("hag_vendedor_nome", n);
       break;
     }
-    case "vend-sair": {
-      const pin = db.config.pinGestao;
-      if (pin && prompt("PIN da gestão:") !== String(pin)) { toast("PIN incorreto"); return; }
-      if (!pin && !confirm("Sair do modo vendedor e abrir a gestão completa neste aparelho?")) return;
-      location.href = urlApp("gestao/") + "#inicio";
-      return;
-    }
     case "vend-lancar": {
       const area = areaAtual(), n = registrosDia(area).filter((r) => !r.lancado).length;
       if (!confirm(`Lançar ${n} venda(s) de ${ddmm(ui.vendData)} nos registros de ${area === "pacoca" ? "Vendas diárias" : "Vendas"}?`)) return;
@@ -3602,7 +3592,6 @@ function onChange(e) {
     p.pago = el.checked; p.dataPago = p.pago ? hojeISO() : null; p.atraso = false;
     save(); render(); toast(p.pago ? `${p.tipo === "pagar" ? "Pago" : "Recebido"}: ${p.descricao}` : `Voltou para pendente: ${p.descricao}`);
   }
-  if (act === "eq-pin") { db.config.pinGestao = el.value.trim(); save(); toast(db.config.pinGestao ? "PIN salvo" : "PIN removido"); }
   if (act === "vend-data") { ui.vendData = el.value || hojeISO(); render(); }
   if (act === "vend-tipo-prod") { tiposArea("doces").find((t) => t.key === el.dataset.key).produto = el.value; save(); render(); }
   if (act === "set-mes") { ui.mes = +el.value; render(); }
