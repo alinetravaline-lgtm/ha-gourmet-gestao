@@ -231,6 +231,7 @@ function migrar(data) {
     });
     data.vencImpV1 = true;
   }
+  if (!Array.isArray(data.perdas)) data.perdas = [];
   if (data.pacocaSim && !data.pacocaSim.fixos) data.pacocaSim.fixos = { "Comissão vendedor": 0, "Alimentação vendedor": 0, Marketing: 0 };
   if (data.pacocaSim?.fixos && !data.pacSimDiaV1) {
     Object.keys(data.pacocaSim.fixos).forEach((k) => { data.pacocaSim.fixos[k] = Math.round(((+data.pacocaSim.fixos[k] || 0) / 6) * 100) / 100; });
@@ -453,6 +454,7 @@ function mesesComDados(area) {
     ...(area === "pacoca" ? [] : db.vendas.map((v) => monthOf(v.inicio))),
     ...(area === "doces" ? [] : db.pacoca.map((p) => monthOf(p.data))),
     ...db.custosVar.filter((c) => !area || areaCV(c) === area).map((c) => +c.mes),
+    ...perdasDe(area).map((p) => monthOf(p.data)),
   ]);
   return [...set].sort((a, b) => a - b);
 }
@@ -468,14 +470,15 @@ function resumo(m, area) {
   const impostos = sum(pac, impostoReg);
   const gasolina = sum(vendas, (v) => +v.gasolina || 0) + sum(pac, (p) => +p.gasolina || 0);
   const comissoes = sum(vendas, (v) => +v.comissoes || 0) + sum(pac, (p) => +p.maoObra || 0);
-  const perdas = sum(vendas, (v) => (+v.perdas || 0) + (+v.outros || 0));
+  const perdasEst = sum(perdasDe(area, m), (p) => +p.valor || 0);
+  const perdas = sum(vendas, (v) => (+v.perdas || 0) + (+v.outros || 0)) + perdasEst;
   // Custos variáveis lançados no DRE (doces finos), pelo mês de referência
   const cvs = db.custosVar.filter((c) => (!m || +c.mes === m) && (!area || areaCV(c) === area));
   const custosVar = sum(cvs, (c) => +c.valor || 0);
   const custos = insumos + impostos + gasolina + comissoes + perdas + custosVar;
   const qtd = sum(vendas, (v) => +v.qtd || 0) + sum(pac, (p) => +p.qtd || 0);
   const cxP = sum(vendas, (v) => +v.cxP || 0), cxG = sum(vendas, (v) => +v.cxG || 0);
-  return { receita, custos, lucro: receita - custos, qtd, cxP, cxG, porCanal, insumos, impostos, gasolina, comissoes, perdas, custosVar, cvs, vendas, pac };
+  return { receita, custos, lucro: receita - custos, qtd, cxP, cxG, porCanal, insumos, impostos, gasolina, comissoes, perdas, perdasEst, custosVar, cvs, vendas, pac };
 }
 
 /* ---------- Gráficos ---------- */
@@ -584,6 +587,7 @@ const PAGES = [
   { id: "pacoca", area: "pacoca", label: "Vendas diárias", icon: "cal", sub: "Registro diário de vendas da paçoca" },
   { id: "simulador-pacoca", area: "pacoca", label: "Simulador", icon: "calc", sub: "Projete quanto vai gastar e lucrar por dia de venda e no mês" },
   { id: "estoque-pacoca", area: "pacoca", label: "Estoque", icon: "pkg", sub: "Saldo de paçoquitas e materiais, com baixa automática das vendas" },
+  { id: "perdas-pacoca", area: "pacoca", label: "Perdas", icon: "alert", sub: "Pacote, embalagem ou material perdido: baixa no estoque e entra no DRE" },
   { id: "insumos-pacoca", area: "pacoca", label: "Insumos", icon: "pkg", sub: "Custo de compra dos insumos e ficha do pacote", section: "Cadastros" },
   { id: "dre-pacoca", area: "pacoca", label: "DRE", icon: "pie", sub: "Demonstrativo de resultado da paçoca", section: "Financeiro" },
   { id: "pagamentos-pacoca", area: "pacoca", label: "Pagamentos", icon: "wallet", sub: "Contas a pagar e a receber: o que já foi pago e o que está pendente" },
@@ -594,6 +598,7 @@ const PAGES = [
   { id: "pedidos-doces", area: "doces", label: "Pedidos", icon: "clip", sub: "Pedido de produção para a mão de obra terceirizada" },
   { id: "vendas", area: "doces", label: "Vendas", icon: "trend", sub: "Faturamento semanal por canal de venda" },
   { id: "estoque", area: "doces", label: "Estoque", icon: "pkg", sub: "Caixas prontas, ingredientes e embalagens, com baixa automática" },
+  { id: "perdas-doces", area: "doces", label: "Perdas", icon: "alert", sub: "Caixa, embalagem ou material perdido: baixa no estoque e entra no DRE" },
   { id: "produtos", area: "doces", label: "Produtos & Preços", icon: "tag", sub: "Custo, preço e margem de cada produto por canal" },
   { id: "simulador", area: "doces", label: "Simulador", icon: "calc", sub: "Projete quanto vai lucrar no mês" },
   { id: "receitas", area: "doces", label: "Fichas Técnicas", icon: "book", sub: "Custo por receita, sabor e formato", section: "Cadastros" },
@@ -1513,6 +1518,7 @@ function viewDre() {
     { t: "   Gasolina / logística", f: (r) => -r.gasolina },
     { t: "   Comissões e mão de obra", f: (r) => -r.comissoes },
     { t: "   Perdas e outras", f: (r) => -r.perdas },
+    ...(perdasDe("doces").length ? [{ t: "      das quais perdas registradas (tela Perdas) · informativo, já incluído acima", f: (r) => r.perdasEst, info: true }] : []),
     ...catsUsadas.map((cat) => ({ t: "   " + cat + " (lançado)", f: (r) => -sum(r.cvs.filter((c) => c.categoria === cat), (c) => +c.valor || 0) })),
     { t: "(=) LUCRO BRUTO (margem de contribuição)", f: (r) => r.lucro, cls: "total" },
     { t: "   Margem de contribuição %", f: (r) => (r.receita ? (r.lucro / r.receita) * 100 : 0), pct: true },
@@ -1525,7 +1531,7 @@ function viewDre() {
   return `
   <div class="card"><div class="card-head"><div><h3>DRE ${db.config.ano}${ui.dreMes ? " · " + MESES_FULL[ui.dreMes - 1] : ""}</h3><div class="sub">Doces finos · vendas + custos variáveis lançados + despesas fixas</div></div></div>
     <div class="table-wrap"><table class="dre"><thead><tr><th>Descrição</th>${cols.map((c) => `<th class="num">${c.label}</th>`).join("")}</tr></thead>
-    <tbody>${linhas.map((l) => `<tr class="${l.cls || ""}"><td>${l.t.replace(/^ +/, (s) => "&nbsp;".repeat(s.length * 2))}</td>${cols.map((c) => { const v = l.f(c.r, c); return `<td class="num ${!l.cls && !l.pct && v < 0 ? "neg" : ""}">${l.pct ? pct(v) : brl(v)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+    <tbody>${linhas.map((l) => `<tr class="${l.cls || ""}${l.info ? " row-off" : ""}"><td>${l.t.replace(/^ +/, (s) => "&nbsp;".repeat(s.length * 2))}</td>${cols.map((c) => { const v = l.f(c.r, c); return `<td class="num ${!l.cls && !l.pct && !l.info && v < 0 ? "neg" : ""}">${l.pct ? pct(v) : brl(v)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
   </div>
   <div class="card mt"><div class="card-head"><div><h3>Custos variáveis lançados${ui.dreMes ? " · " + MESES_FULL[ui.dreMes - 1] : ""}</h3><div class="sub">Gastos que variam com as vendas e não estão nos lançamentos semanais — entram no DRE pelo mês de referência</div></div>
     <button class="btn btn-sm btn-primary" data-act="new-cvar">${icon("plus")}Adicionar</button></div>
@@ -1710,6 +1716,7 @@ function viewDreGeral() {
     { t: "   Doces finos", f: (c) => -c.d.custos },
     { t: "   Paçoca", f: (c) => -c.p.custos },
     { t: "      dos quais imposto NF-e da paçoquita · informativo, já incluído acima", f: (c) => c.p.impostos, info: true },
+    ...((db.perdas || []).length ? [{ t: "      dos quais perdas registradas (doces + paçoca) · informativo, já incluído acima", f: (c) => c.g.perdasEst, info: true }] : []),
     { t: "(=) LUCRO BRUTO", f: (c) => c.g.lucro, cls: "total" },
     { t: "(−) IMPOSTOS E CONTABILIDADE", f: (c) => -c.rat.total, cls: "total" },
     { t: `   DAS ${pct(dasPct())} sobre o faturamento bruto`, f: (c) => -c.rat.das },
@@ -1896,6 +1903,7 @@ function viewDrePacoca() {
     { t: `      dos quais imposto NF-e da paçoquita (${brl(impostoPacote())}/pacote) · informativo, já incluído acima`, f: (r) => r.impostos, info: true },
     { t: "   Gasolina", f: (r) => -r.gasolina },
     { t: "   Mão de obra", f: (r) => -r.comissoes },
+    { t: "   Perdas (produto, embalagem e materiais)", f: (r) => -r.perdas },
     ...cats.map((cat) => ({ t: "   " + cat + " (lançado)", f: (r) => -sum(r.cvs.filter((c) => c.categoria === cat), (c) => +c.valor || 0) })),
     { t: "(=) LUCRO BRUTO (margem de contribuição)", f: (r) => r.lucro, cls: "total" },
     { t: "   Margem de contribuição %", f: (r) => (r.receita ? (r.lucro / r.receita) * 100 : 0), pct: true },
@@ -2850,7 +2858,7 @@ function publicarHtml(publicado) {
 /* ---------- Estoque ---------- */
 // Saldos por referência: "ins:<id>" ingrediente, "mat:<id>" material, "pronto:<P|G>" caixa pronta, "pac:<id>" item da paçoca
 const round3 = (v) => Math.round(v * 1000) / 1000;
-const TIPOS_MOV = { entrada: ["Entrada", "green"], saida: ["Saída", "red"], ajuste: ["Contagem", "gray"], producao: ["Produção", "gold"], montagem: ["Montagem", "gold"], venda: ["Venda", "yellow"] };
+const TIPOS_MOV = { entrada: ["Entrada", "green"], saida: ["Saída", "red"], ajuste: ["Contagem", "gray"], producao: ["Produção", "gold"], montagem: ["Montagem", "gold"], venda: ["Venda", "yellow"], perda: ["Perda", "red"], estorno: ["Perda excluída", "gray"] };
 // Baixa de um item da paçoca por pacote vendido (a paçoquita acompanha "paçoquitas por pacote")
 const consumoPacote = (i) => (i.usaPacote ? +db.pacocaSim.porPacote || 1 : +i.consumo || 0);
 // Itens medidos por "uso" (ex.: gás) entram no custo, mas não são contados no estoque
@@ -2983,6 +2991,104 @@ function baixaVendas(area, pend) {
     return;
   }
   consumoVendasDoces(pend).forEach((x) => movimentar("doces", x.ref, x.nome, -x.qtd, "venda", `Vendas de ${ddmm(ui.vendData)}${x.feitas ? ` · ${int(x.feitas)} ${x.tipo} sem caixa pronta` : ""}`));
+}
+
+/* ---------- Perdas: produto completo, embalagem completa ou material isolado ---------- */
+// db.perdas: { id, area, data, tipo, descricao, motivo, obs, itens: [{ ref, nome, unid, qtd, custo }], valor }
+// O valor fica gravado com o custo do dia: mudar preços depois não altera perdas já registradas
+const MOTIVOS_PERDA = ["Quebrou / amassou", "Estragou / venceu", "Derreteu", "Caiu / sujou", "Erro de produção", "Outro"];
+const TIPOS_PERDA = { produto: "Produto completo", embalagem: "Embalagem completa", material: "Material isolado" };
+const perdasDe = (area, m) => (db.perdas || []).filter((p) => (!area || p.area === area) && (!m || monthOf(p.data) === m));
+const embalagemPacote = () => db.estoque.pacocaItens.filter((i) => !i.usaPacote && consumoPacote(i) > 0 && estocavel(i));
+function opcoesPerda(area, tipo) {
+  if (tipo === "produto") return area === "pacoca"
+    ? [{ nome: `Pacote de paçoca (${fmtQtd(+db.pacocaSim.porPacote || 1)} paçoquitas)`, key: "pac" }]
+    : tiposArea("doces").map((t) => ({ nome: `${t.nome} (${t.desc})`, key: t.key }));
+  if (tipo === "embalagem") return area === "pacoca"
+    ? (embalagemPacote().length ? [{ nome: `Embalagem de 1 pacote (${embalagemPacote().map((i) => i.nome.toLowerCase()).join(", ")})`, key: "pac" }] : [])
+    : db.embalagens.map((e) => ({ nome: e.nome, key: e.id }));
+  return itensEstoque(area).filter((i) => !i.ref.startsWith("pronto:")).map((i) => ({ nome: `${i.nome} (${i.unid})`, key: i.ref }));
+}
+// Produto completo sai primeiro do estoque pronto; sem estoque pronto, baixa ingredientes e embalagens (como nas vendas)
+function itensPerda(area, tipo, key, n) {
+  const mapa = Object.fromEntries(itensEstoque(area).map((i) => [i.ref, i])), out = {};
+  const add = (ref, nome, qtd) => { if (!(qtd > 0)) return; const it = mapa[ref]; out[ref] = out[ref] || { ref, nome: it?.nome || nome, unid: it?.unid || "", qtd: 0, custo: it?.custo || 0 }; out[ref].qtd += qtd; };
+  if (tipo === "produto") (area === "pacoca" ? consumoVendasPacoca([{ itens: { U: n } }]) : consumoVendasDoces([{ itens: { [key]: n } }])).forEach((x) => add(x.ref, x.nome, x.qtd));
+  else if (tipo === "embalagem" && area === "pacoca") embalagemPacote().forEach((i) => add("pac:" + i.id, i.nome, n * consumoPacote(i)));
+  else if (tipo === "embalagem") (db.embalagens.find((e) => e.id === key)?.itens || []).forEach((ki) => { const m = db.materiais.find((x) => x.nome === ki.material); if (m) add("mat:" + m.id, m.nome, (+ki.qtd || 0) * n); });
+  else add(key, "", n);
+  return Object.values(out).map((x) => ({ ...x, qtd: round3(x.qtd) }));
+}
+// Produto completo vale o custo cheio do produto pronto (insumos, embalagem e mão de obra); o resto, o custo dos itens baixados
+function valorPerda(area, tipo, key, n, itens) {
+  if (tipo === "produto") return n * (itensEstoque(area).find((i) => i.ref === (area === "pacoca" ? "pronto:pac" : "pronto:" + key))?.custo || 0);
+  return sum(itens, (x) => x.qtd * x.custo);
+}
+function formPerda(area, tipo) {
+  const ops = opcoesPerda(area, tipo);
+  if (!ops.length) { toast(tipo === "embalagem" ? "Cadastre as embalagens primeiro" : "Nenhum item no estoque para registrar perda"); return; }
+  const rotulo = { produto: area === "pacoca" ? "Quantidade de pacotes" : "Quantidade de caixas", embalagem: "Quantidade de embalagens", material: "Quantidade perdida (na unidade do item)" }[tipo];
+  openForm({
+    title: `Registrar perda · ${TIPOS_PERDA[tipo]}`,
+    fields: [
+      { key: "escolha", label: { produto: "Produto", embalagem: "Embalagem", material: "Material" }[tipo], type: "select", options: ops.map((o) => o.nome), full: true },
+      { key: "qtd", label: rotulo, type: "num", required: true },
+      { key: "data", label: "Data da perda", type: "date" },
+      { key: "motivo", label: "Motivo", type: "select", options: MOTIVOS_PERDA },
+      { key: "obs", label: "Observação (opcional)" },
+    ],
+    values: { data: hojeISO(), motivo: MOTIVOS_PERDA[0], qtd: tipo === "material" ? "" : 1 },
+    preview: (v) => {
+      const o = ops.find((x) => x.nome === v.escolha);
+      if (!o || !(v.qtd > 0)) return "<span>Informe a quantidade para ver a baixa no estoque e o valor da perda</span>";
+      const its = itensPerda(area, tipo, o.key, v.qtd);
+      return `<div style="width:100%">${listaConsumo(its)}<div style="margin-top:8px;text-align:right">Valor da perda (entra no DRE): <strong class="neg">${brl(valorPerda(area, tipo, o.key, v.qtd, its))}</strong></div></div>`;
+    },
+    onSave: (v) => {
+      const o = ops.find((x) => x.nome === v.escolha);
+      if (!o || !(v.qtd > 0)) { toast("Informe a quantidade perdida"); return; }
+      const itens = itensPerda(area, tipo, o.key, v.qtd), valor = round2(valorPerda(area, tipo, o.key, v.qtd, itens));
+      const descricao = `${fmtQtd(v.qtd)} × ${o.nome}`;
+      itens.forEach((x) => movimentar(area, x.ref, x.nome, -x.qtd, "perda", `Perda: ${descricao} · ${v.motivo}`));
+      db.perdas = db.perdas || [];
+      db.perdas.push({ id: uid(), area, data: v.data || hojeISO(), tipo, descricao, motivo: v.motivo, obs: v.obs, itens, valor });
+      toast(`Perda registrada: ${descricao} · ${brl(valor)}`);
+    },
+  });
+}
+function viewPerdas(area) {
+  setActions(`<button class="btn btn-primary" data-act="perda-nova" data-val="produto" data-area="${area}">${icon("plus")}Registrar perda</button>`);
+  const meses = [...new Set(perdasDe(area).map((p) => monthOf(p.data)))].sort((a, b) => a - b);
+  const m = ui.perdasMes || 0, lista = perdasDe(area, m).sort((a, b) => String(b.data).localeCompare(String(a.data)));
+  const tot = sum(lista, (p) => +p.valor || 0), rec = resumo(m, area).receita;
+  const porMotivo = Object.entries(lista.reduce((acc, p) => ({ ...acc, [p.motivo]: (acc[p.motivo] || 0) + (+p.valor || 0) }), {})).sort((a, b) => b[1] - a[1]);
+  const nomeArea = area === "pacoca" ? "da paçoca" : "dos doces";
+  const tipos = [
+    ["produto", area === "pacoca" ? "Pacote completo" : "Caixa completa", area === "pacoca" ? "Pacote pronto que se perdeu. Sai dos pacotes prontos; sem estoque pronto, baixa paçoquitas e embalagem." : "Caixa pronta que se perdeu. Sai das caixas prontas; sem estoque pronto, baixa ingredientes e embalagem."],
+    ["embalagem", "Embalagem completa", area === "pacoca" ? `Embalagem inteira de um pacote: ${embalagemPacote().map((i) => i.nome.toLowerCase()).join(", ") || "cadastre em Insumos"}.` : "Kit de embalagem inteiro (caixa, forminhas, fita, adesivo...), conforme a tela Embalagens."],
+    ["material", "Material isolado", area === "pacoca" ? "Um item avulso do estoque: paçoquitas, saquinhos, papel, fita..." : "Um item avulso do estoque: ingrediente ou material de embalagem."],
+  ];
+  return `
+  <div class="toolbar"><span class="hint">Cada perda dá baixa no estoque na hora e entra no DRE ${nomeArea} em Despesas variáveis › Perdas, no mês da data.</span>
+    <select class="inline" data-act="set-perdames"><option value="0">Todos os meses</option>${meses.map((x) => `<option value="${x}" ${m === x ? "selected" : ""}>${MESES_FULL[x - 1]}</option>`).join("")}</select></div>
+  <div class="grid g-4">
+    ${kpi("Perdas", brl(tot), m ? MESES_FULL[m - 1] : "Todos os meses", "alert", tot ? "neg" : "")}
+    ${kpi("Registros", int(lista.length), `${int(lista.filter((p) => p.tipo === "produto").length)} produto(s) · ${int(lista.filter((p) => p.tipo !== "produto").length)} embalagem/material`, "clip")}
+    ${kpi("% do faturamento", rec ? pct((tot / rec) * 100) : "—", `Faturamento ${brl(rec)}`, "pie")}
+    ${kpi("Maior motivo", porMotivo[0] ? esc(porMotivo[0][0]) : "—", porMotivo[0] ? brl(porMotivo[0][1]) : "Nenhuma perda", "trend")}
+  </div>
+  <div class="card mt"><div class="card-head"><div><h3>Registrar perda</h3><div class="sub">Escolha o que foi perdido</div></div></div>
+    <div class="grid g-3">${tipos.map(([t, nome, desc]) => `<button class="stat perda-tipo" data-act="perda-nova" data-val="${t}" data-area="${area}"><b>${icon("plus")} ${nome}</b><span class="hint">${desc}</span></button>`).join("")}</div>
+  </div>
+  <div class="card mt"><div class="card-head"><div><h3>Perdas registradas</h3><div class="sub">Excluir uma perda devolve os itens ao estoque e tira o valor do DRE</div></div></div>
+    ${lista.length ? `<div class="table-wrap"><table><thead><tr><th>Data</th><th>Tipo</th><th>O que se perdeu</th><th>Motivo</th><th class="hide-m">Baixa no estoque</th><th class="num">Valor</th><th></th></tr></thead><tbody>
+    ${lista.map((p) => `<tr><td>${ddmm(p.data)}</td><td><span class="badge b-${p.tipo === "produto" ? "red" : p.tipo === "embalagem" ? "gold" : "gray"}">${TIPOS_PERDA[p.tipo] || p.tipo}</span></td>
+      <td><b>${esc(p.descricao)}</b>${p.obs ? `<div class="hint">${esc(p.obs)}</div>` : ""}</td><td>${esc(p.motivo || "")}</td>
+      <td class="hint hide-m" title="${esc((p.itens || []).map((x) => `${x.nome}: −${fmtQtd(x.qtd)} ${x.unid}`).join("\n"))}">${(p.itens || []).slice(0, 3).map((x) => `${esc(x.nome)}: −${fmtQtd(x.qtd)} ${esc(x.unid)}`).join("<br>") || "—"}${(p.itens || []).length > 3 ? `<br>+ ${(p.itens || []).length - 3} item(ns)` : ""}</td>
+      <td class="num neg"><b>${brl(p.valor)}</b></td><td><button class="btn btn-ghost btn-sm btn-danger" data-act="perda-del" data-id="${p.id}" title="Excluir e devolver ao estoque">${icon("trash")}</button></td></tr>`).join("")}
+    </tbody><tfoot><tr><td colspan="5">Total</td><td class="num">${brl(tot)}</td><td></td></tr></tfoot></table></div>`
+    : `<div class="empty">Nenhuma perda registrada${m ? " em " + MESES_FULL[m - 1] : ""}.</div>`}
+  </div>`;
 }
 
 /* ---------- Projeção de compra (estoque) ---------- */
@@ -3258,7 +3364,7 @@ function viewEstoque(area) {
 }
 
 /* =================== Roteamento & eventos =================== */
-const VIEWS = { "pedidos-doces": () => viewPedidos("doces"), "pedidos-pacoca": () => viewPedidos("pacoca"), "simulador-geral": viewSimGeral, "pagamentos-geral": () => viewPagamentos("geral"), "simulador-pacoca": viewSimPacoca, "painel-geral": viewPainelGeral, "dre-geral": viewDreGeral, "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
+const VIEWS = { "perdas-doces": () => viewPerdas("doces"), "perdas-pacoca": () => viewPerdas("pacoca"), "pedidos-doces": () => viewPedidos("doces"), "pedidos-pacoca": () => viewPedidos("pacoca"), "simulador-geral": viewSimGeral, "pagamentos-geral": () => viewPagamentos("geral"), "simulador-pacoca": viewSimPacoca, "painel-geral": viewPainelGeral, "dre-geral": viewDreGeral, "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
 const AFTER = { "painel-geral": afterPainelGeral, "dre-pacoca": afterDrePacoca, "pacoca-painel": afterPacPainel, painel: afterPainel, pacoca: afterPacoca, dre: afterDre };
 let currentPage = null;
 const areaAtual = () => PAGES.find((p) => p.id === currentPage)?.area;
@@ -3331,6 +3437,15 @@ function onClick(e) {
     case "set-esttab": ui.estTab[areaAtual()] = val; ui.busca = ""; break;
     case "est-mov": return formMovimento(areaAtual(), el.dataset.ref, val);
     case "est-producao": return formProducao();
+    case "perda-nova": return formPerda(el.dataset.area || areaAtual(), val || "produto");
+    case "perda-del": {
+      const p = find(db.perdas || []);
+      if (!p) return;
+      return confirmDel(`Excluir a perda "${p.descricao}" (${brl(p.valor)})? Os itens voltam para o estoque e o valor sai do DRE.`, () => {
+        (p.itens || []).forEach((x) => movimentar(p.area, x.ref, x.nome, x.qtd, "estorno", `Perda excluída: ${p.descricao}`));
+        db.perdas = db.perdas.filter((x) => x.id !== p.id);
+      });
+    }
     case "est-montagem": return formMontagem();
     case "est-novo-pac": case "ins-pac-novo": return formItemPacocaInsumo();
     case "est-edit-pac": case "edit-ins-pac": return formItemPacocaInsumo(db.estoque.pacocaItens.find((x) => x.id === id));
@@ -3554,6 +3669,7 @@ function onChange(e) {
   if (act === "set-dremes") { ui.dreMes = +el.value; render(); }
   if (act === "set-dremespac") { ui.dreMesPac = +el.value; render(); }
   if (act === "set-pgmes") { ui.pgMes = +el.value; render(); }
+  if (act === "set-perdames") { ui.perdasMes = +el.value; render(); }
   if (act === "ped-qtd") {
     const d = pedidosDe(el.dataset.area).dias, dia = el.dataset.dia;
     d[dia] = { ...(d[dia] || {}), [el.dataset.key]: Math.max(0, Math.round(parseNum(el.value))) };

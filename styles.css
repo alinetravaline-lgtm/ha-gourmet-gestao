@@ -529,5 +529,9 @@ body.ped-print .main { margin-left: 0 !important; }
 }
 .hist-grid { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
 
+button.stat.perda-tipo { text-align: left; cursor: pointer; border: 1px solid var(--line); font: inherit; color: inherit; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+button.stat.perda-tipo b { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+button.stat.perda-tipo svg { width: 15px; height: 15px; }
+button.stat.perda-tipo:hover { border-color: var(--gold, #c8963e); background: #fff; }
 button.stat.ped-media { text-align: left; cursor: pointer; border: 1px solid transparent; font: inherit; }
 button.stat.ped-media:hover { border-color: var(--gold, #c8963e); }
