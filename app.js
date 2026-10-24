@@ -3704,6 +3704,12 @@ Sync.onStatus((s) => {
   el.onclick = () => { if (!APP_VENDEDOR) location.hash = areaAtual() === "pacoca" ? "equipe-pacoca" : "equipe"; };
 });
 
+// Link do vendedor por área: .../vendedor/?area=pacoca (ou doces) já abre na área certa e fica lembrado no aparelho
+(() => {
+  const a = new URLSearchParams(location.search).get("area");
+  if (APP_VENDEDOR && ["doces", "pacoca"].includes(a)) localStorage.setItem("hag_vend_area", a);
+})();
+
 // Link de convite: .../vendedor.html#conectar=CODIGO (ou .../#conectar=CODIGO na gestão) conecta o aparelho à equipe
 (() => {
   const m = location.hash.match(/conectar=([^&]+)/);
