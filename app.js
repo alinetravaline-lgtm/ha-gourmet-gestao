@@ -114,7 +114,8 @@ function buildSeed() {
     impostoPacV1: true,
     impGeraisV1: true,
     dupImpV1: true,
-    impostosGerais: { dasPct: 4.5, dasDia: 20, fixos: [{ id: uid(), nome: "DARF", valor: 178.3, dia: 20, mesSeguinte: true }, { id: uid(), nome: "Contabilidade", valor: 350, dia: 10 }] },
+    vencImpV1: true,
+    impostosGerais: { dasPct: 4.5, dasDia: 20, fixos: [{ id: uid(), nome: "DARF", valor: 178.3, dia: 20, mesSeguinte: true }, { id: uid(), nome: "Contabilidade", valor: 350, dia: 30 }] },
     darfMesSeguinteV1: true,
     custosVar: [],
     estoque: {
@@ -221,6 +222,13 @@ function migrar(data) {
       if (impostoPorPacote > 0) { pq.imposto = round2((impostoPorPacote * (+pq.pacote || 1)) / usoPq); data.estoque.pacocaItens = itens.filter((i) => i !== taxa); }
     }
     data.nfeItemV1 = true;
+  }
+  if (!data.vencImpV1 && data.impostosGerais?.fixos) {
+    data.impostosGerais.fixos.forEach((f) => {
+      if (/darf/i.test(f.nome)) Object.assign(f, { dia: 20, mesSeguinte: true });
+      if (/contab|contador/i.test(f.nome)) Object.assign(f, { dia: 30, mesSeguinte: false });
+    });
+    data.vencImpV1 = true;
   }
   if (data.pacocaSim && !data.pacocaSim.fixos) data.pacocaSim.fixos = { "Comissão vendedor": 0, "Alimentação vendedor": 0, Marketing: 0 };
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
@@ -2409,7 +2417,9 @@ function viewPagamentos(area) {
     : area === "pacoca" ? `<button class="btn btn-sm" data-act="pg-fiado">Gerar a receber da paçoca não recebida</button>` : "";
   const avisoAuto = ui.pgTipo === "pagar" ? `<div class="alert green" style="margin-bottom:14px">${icon("check")}<div><b>${separando ? "Aqui você só separa o dinheiro — o pagamento é feito no Negócio todo" : "Aqui é onde as contas são pagas"}</b>
     <span>${separando ? `Marque a caixa quando separar o valor de cada conta ${area === "pacoca" ? "da paçoca" : "dos doces"}. No fim do mês, as contas são pagas em Negócio todo › Pagamentos, usando o relatório do DRE unificado. Se o valor de uma conta automática crescer depois de separada, ela volta a pedir a diferença.` : "Todas as contas: doces, paçoca e os impostos do negócio (DAS, DARF, contabilidade — os de outubro vencem em 20/11). A coluna \"Separado\" mostra se a área já reservou o dinheiro. Paga depois do vencimento fica como \"Pago em atraso\"."}
-    Mão de obra, gasolina, insumos, NF-e e comissões ficam acumulados num pagamento único por mês e por área (vencimento no último dia do mês). Editar uma conta automática trava o valor; excluir faz ela não voltar.</span></div></div>` : "";
+    Editar uma conta automática trava o valor; excluir faz ela não voltar.</span></div></div>
+    <div class="alert yellow" style="margin-bottom:14px">${icon("cal")}<div><b>Vencimentos</b>
+    <span>• <b>Mão de obra dos doces:</b> semanal, vence na terça-feira que fecha a semana (quarta a terça).<br>• <b>Mão de obra da paçoca, gasolina, insumos, NF-e e comissões:</b> acumulados no mês, vencem no último dia do mês.<br>• <b>Impostos e contabilidade:</b> ${(impGerais().fixos || []).map((f) => `${esc(f.nome)} dia ${+f.dia || 10} ${f.mesSeguinte ? "do mês seguinte (referente ao mês anterior)" : "do próprio mês"}`).join("; ")}; DAS dia ${+impGerais().dasDia || 20} do mês seguinte.<br>O dia de cada imposto se muda em <a class="link" href="#dre-geral">Negócio todo › DRE unificado › Impostos e contabilidade</a>. Para mudar uma conta específica, use o lápis (editar) na linha dela.</span></div></div>` : "";
   const cats = [...new Set(noMes.map((p) => p.categoria))].sort((a, b) => CATS_PAG[ui.pgTipo].indexOf(a) - CATS_PAG[ui.pgTipo].indexOf(b));
   const porCategoria = cats.length ? `<div class="card mt"><div class="card-head"><div><h3>Por categoria</h3><div class="sub">${ui.pgMes ? MESES_FULL[ui.pgMes - 1] : "Todos os vencimentos"}</div></div></div>
     <div class="cat-grid">${cats.map((c) => {
@@ -2487,7 +2497,7 @@ function contasAutomaticas() {
   });
   db.vendas.filter((w) => w.fim >= desde).forEach((w) => {
     const m = monthOf(w.fim), doces = (+w.cxP || 0) * unidadesCaixa("P") + (+w.cxG || 0) * unidadesCaixa("G");
-    acumula("Mão de obra", "doces", m, doces * paramVal("maoObraDoce"), `doc:${w.id}:mo`);
+    push(`semana:doces:mo:${w.id}`, "doces", "Mão de obra", `Mão de obra doces · semana ${ddmm(w.inicio)} a ${ddmm(w.fim)}${w.canal === "Outbound" ? "" : " · " + w.canal} (${int(doces)} doces)`, doces * paramVal("maoObraDoce"), w.fim, [`doc:${w.id}:mo`]);
     acumula("Gasolina", "doces", m, w.gasolina, `doc:${w.id}:gas`);
     acumula("Insumos", "doces", m, w.insumos, `doc:${w.id}:ins`);
     acumula("Comissão", "doces", m, w.comissoes, `doc:${w.id}:com`);
@@ -2502,9 +2512,12 @@ function contasAutomaticas() {
     db.fixos.forEach((f) => push(`fixo:${f.id}:${m}`, "doces", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, venc));
     db.fixosPacoca.forEach((f) => push(`fixopac:${f.id}:${m}`, "pacoca", categoriaFixo(f.nome), `${f.nome} · ${mes}`, +f.valor || 0, venc));
     // Impostos do mês anterior (DARF, DAS) vencem no mês seguinte ao de competência
-    (impGerais().fixos || []).forEach((f) => push(`imp:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · referente a ${mes}`, +f.valor || 0, f.mesSeguinte ? mesSeguinte(m, f.dia) : diaVenc(ano, m, f.dia)));
-    const fat = resumo(m).receita;
-    push(`das:${m}`, "geral", "Impostos", `DAS ${pct(dasPct())} · referente a ${mes} (faturamento ${brl(fat)})`, (fat * dasPct()) / 100, mesSeguinte(m, impGerais().dasDia || 20));
+    (impGerais().fixos || []).forEach((f) => {
+      const venc = f.mesSeguinte ? mesSeguinte(m, f.dia) : diaVenc(ano, m, f.dia);
+      push(`imp:${f.id}:${m}`, "geral", categoriaFixo(f.nome), `${f.nome} · referente a ${mes.toLowerCase()}${f.mesSeguinte ? " (mês anterior)" : " (próprio mês)"} · vence ${ddmm(venc)}`, +f.valor || 0, venc);
+    });
+    const fat = resumo(m).receita, vencDas = mesSeguinte(m, impGerais().dasDia || 20);
+    push(`das:${m}`, "geral", "Impostos", `DAS ${pct(dasPct())} · referente a ${mes.toLowerCase()} (mês anterior) · vence ${ddmm(vencDas)} · faturamento ${brl(fat)}`, (fat * dasPct()) / 100, vencDas);
   }
   return out;
 }
