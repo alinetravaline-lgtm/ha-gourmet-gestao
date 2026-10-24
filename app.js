@@ -1211,7 +1211,7 @@ function viewReceitas() {
           <td class="num">${numIn("bar-qtd", it.qtd, `data-i="${i}"`)} <span class="hint">${esc(unidItem(it))}</span></td>
           <td class="num">${brlU(custoUnitItem(it))}<span class="hint">/${esc(unidItem(it))}</span></td>
           <td class="num" data-rc="b${i}">${brl(it.qtd * custoUnitItem(it))}</td>
-          <td><button class="btn btn-ghost btn-sm btn-danger" data-act="del-ing" data-val="barra" data-i="${i}">${icon("trash")}</button></td></tr>`).join("")}</tbody>
+          <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" title="Trocar ingrediente / marca" data-act="trocar-ing" data-val="barra" data-i="${i}">⇄</button><button class="btn btn-ghost btn-sm btn-danger" data-act="del-ing" data-val="barra" data-i="${i}">${icon("trash")}</button></td></tr>`).join("")}</tbody>
         <tfoot><tr><td colspan="3">Custo da massa da barra</td><td class="num" data-rc="bt">${brl(custoBarra(b))}</td><td></td></tr></tfoot></table></div>
       </div>
       <div class="card"><div class="card-head"><div><h3>Todas as barras</h3><div class="sub">Clique para editar</div></div></div>
@@ -1232,14 +1232,14 @@ function viewReceitas() {
       <tbody>${s.lote.map((it, i) => `<tr><td>${esc(nomeItem(it))}<div class="hint">${brlU(custoUnitItem(it))}/${esc(unidItem(it))}</div></td>
         <td class="num">${numIn("rec-lote", it.qtd, `data-i="${i}"`)} <span class="hint">${esc(unidItem(it))}</span></td>
         <td class="num" data-rc="l${i}">${brl(it.qtd * custoUnitItem(it))}</td>
-        <td><button class="btn btn-ghost btn-sm btn-danger" data-act="del-ing" data-val="lote" data-i="${i}">${icon("trash")}</button></td></tr>`).join("")}</tbody>
+        <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" title="Trocar ingrediente / marca" data-act="trocar-ing" data-val="lote" data-i="${i}">⇄</button><button class="btn btn-ghost btn-sm btn-danger" data-act="del-ing" data-val="lote" data-i="${i}">${icon("trash")}</button></td></tr>`).join("")}</tbody>
       <tfoot><tr><td colspan="2">Custo do lote</td><td class="num" data-rc="lt">${brl(custoLote(s))}</td><td></td></tr></tfoot></table></div>
     </div>
     <div class="card"><div class="card-head"><div><h3>Rendimento e gasto por unidade</h3><div class="sub">Por formato: unidades por lote e gramas de cobertura/recheio em cada doce</div></div></div>
       <div class="table-wrap"><table class="compact"><thead><tr><th></th>${db.formatos.map((f) => `<th class="num">${f.nome}</th>`).join("")}</tr></thead>
       <tbody>
         <tr><td><b>Rende (un)</b></td>${db.formatos.map((f, j) => `<td class="num">${numIn("rec-rend", s.rend[j], `data-j="${j}"`)}</td>`).join("")}</tr>
-        ${s.porUn.map((it, i) => `<tr><td>${esc(nomeItem(it))} <span class="hint">(${esc(unidItem(it))}/un)</span></td>${db.formatos.map((f, j) => `<td class="num">${numIn("rec-porun", it.qtd[j], `data-i="${i}" data-j="${j}"`)}</td>`).join("")}</tr>`).join("")}
+        ${s.porUn.map((it, i) => `<tr><td>${esc(nomeItem(it))} <span class="hint">(${esc(unidItem(it))}/un)</span> <button class="btn btn-ghost btn-sm" title="Trocar ingrediente / marca" data-act="trocar-ing" data-val="porun" data-i="${i}">⇄</button></td>${db.formatos.map((f, j) => `<td class="num">${numIn("rec-porun", it.qtd[j], `data-i="${i}" data-j="${j}"`)}</td>`).join("")}</tr>`).join("")}
       </tbody>
       <tfoot><tr><td>Custo por unidade</td>${db.formatos.map((f, j) => `<td class="num" data-rc="f${j}">${custoSaborTxt(s, j)}</td>`).join("")}</tr></tfoot></table></div>
       <div class="hint" style="margin-top:8px">Formato com rendimento 0 fica sem custo ("—") e não entra no cálculo das massas dos produtos.</div>
@@ -1260,6 +1260,64 @@ function refreshReceita() {
   set("lt", brl(custoLote(s)));
   db.formatos.forEach((f, j) => set("f" + j, custoSaborTxt(s, j)));
   $("#recMatrix").innerHTML = matrizSabores();
+}
+// Troca o ingrediente de uma receita (marca, outro insumo) sem precisar excluir e incluir de novo
+function itemReceita(destino, i) {
+  if (destino === "barra") return db.barras[ui.barra].itens[i];
+  if (destino === "porun") return db.sabores[ui.sabor].porUn[i];
+  return db.sabores[ui.sabor].lote[i];
+}
+function todosItensReceitas() {
+  return [...db.sabores.flatMap((s) => [...s.lote, ...s.porUn]), ...db.barras.flatMap((b) => b.itens)];
+}
+function formTrocarIngrediente(destino, i) {
+  const it = itemReceita(destino, i), atual = insById(it.insumoId);
+  if (!atual) { toast("Ingrediente sem insumo ligado"); return; }
+  const usos = todosItensReceitas().filter((x) => x.insumoId === atual.id).length;
+  const MANTER = `Manter "${atual.nome}" e só mudar nome/preço`, NOVA = "+ Cadastrar nova marca a partir deste";
+  const palavras = (n) => n.toLowerCase().split(/\s+/).filter((w) => w.length > 2);
+  const parecido = (x) => palavras(x.nome).filter((w) => palavras(atual.nome).includes(w)).length;
+  const outros = db.insumos.filter((x) => x.id !== atual.id).sort((a, b) => parecido(b) - parecido(a) || (b.unid === atual.unid) - (a.unid === atual.unid) || a.nome.localeCompare(b.nome));
+  const ONDE = ["Só nesta receita", `Em todas as receitas (${usos} uso${usos > 1 ? "s" : ""})`];
+  openForm({
+    title: `Trocar ingrediente · ${atual.nome}`,
+    fields: [
+      { key: "para", label: "Trocar por", type: "select", options: [...outros.map((x) => x.nome), NOVA, MANTER], full: true },
+      { key: "onde", label: "Onde trocar", type: "select", options: ONDE, full: true },
+      { key: "nome", label: "Nome / marca (para nova marca ou para mudar este)", full: true },
+      { key: "custo", label: "Custo de compra (R$ por embalagem)", type: "num" },
+      { key: "rend", label: `Quantidade na embalagem (${atual.unid})`, type: "num" },
+    ],
+    values: { para: (outros.find((x) => parecido(x) > 0 && x.unid === atual.unid) || outros.find((x) => x.unid === atual.unid))?.nome || NOVA, onde: ONDE[0], nome: atual.nome, custo: atual.custo, rend: atual.rend },
+    saveLabel: "Trocar",
+    preview: (v) => {
+      const unit = (x) => (x.rend ? x.custo / x.rend : 0);
+      if (v.para === MANTER) return `<span>"${esc(atual.nome)}" passa a se chamar <b>${esc(v.nome || atual.nome)}</b>, a ${brlU(v.rend ? v.custo / v.rend : 0)}/${esc(atual.unid)}, em todas as ${usos} receita(s).</span>`;
+      if (v.para === NOVA) return `<span>Cria <b>${esc(v.nome || "")}</b> (${brlU(v.rend ? v.custo / v.rend : 0)}/${esc(atual.unid)}) em Insumos e usa ${v.onde === ONDE[0] ? "nesta receita" : "em todas as receitas"}. "${esc(atual.nome)}" continua cadastrado.</span>`;
+      const novo = db.insumos.find((x) => x.nome === v.para);
+      if (!novo) return "";
+      const aviso = novo.unid !== atual.unid ? `<span class="neg">Atenção: unidade diferente (${esc(atual.unid)} → ${esc(novo.unid)}). Confira a quantidade depois.</span>` : "";
+      return `<span>${brlU(unit(atual))}/${esc(atual.unid)} → <b>${brlU(unit(novo))}/${esc(novo.unid)}</b></span>${aviso}`;
+    },
+    onSave: (v) => {
+      if (v.para === MANTER) {
+        Object.assign(atual, { nome: (v.nome || atual.nome).trim(), custo: v.custo, rend: v.rend || atual.rend });
+        toast(`Insumo atualizado em ${usos} receita(s)`);
+        return;
+      }
+      let novo = db.insumos.find((x) => x.nome === v.para);
+      if (v.para === NOVA) {
+        const nome = (v.nome || "").trim();
+        if (!nome || nome === atual.nome) { toast("Digite o nome da nova marca"); return; }
+        novo = db.insumos.find((x) => x.nome.toLowerCase() === nome.toLowerCase());
+        if (!novo) { novo = { ...atual, id: uid(), nome, custo: v.custo, rend: v.rend || atual.rend }; db.insumos.push(novo); }
+      }
+      if (!novo) return;
+      const alvos = v.onde === ONDE[0] ? [it] : todosItensReceitas().filter((x) => x.insumoId === atual.id);
+      alvos.forEach((x) => { x.insumoId = novo.id; });
+      toast(`${atual.nome} → ${novo.nome} · ${alvos.length} receita(s) recalculada(s)`);
+    },
+  });
 }
 function formIngrediente(destino) {
   openForm({
@@ -3100,6 +3158,7 @@ function onClick(e) {
       onSave: (v) => { db.canais[val].taxas = db.canais[val].taxas || []; db.canais[val].taxas.push(v); toast("Taxa adicionada"); },
     });
     case "del-taxa": return confirmDel("Remover esta taxa?", () => db.canais[val].taxas.splice(+el.dataset.i, 1));
+    case "trocar-ing": return formTrocarIngrediente(val, +el.dataset.i);
     case "del-ing": {
       const alvo = val === "barra" ? db.barras[ui.barra].itens : db.sabores[ui.sabor].lote;
       return confirmDel(`Remover "${nomeItem(alvo[+el.dataset.i])}" da receita?`, () => alvo.splice(+el.dataset.i, 1));
