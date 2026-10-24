@@ -2029,7 +2029,7 @@ function viewPedidos(area) {
     setActions(`<button class="btn" data-act="ped-print">Voltar</button><button class="btn btn-primary" data-act="ped-copiar" data-val="${area}">Copiar texto</button>`);
     return `<div class="pp-solo">${painelPedidoHtml(area, dias)}</div>`;
   }
-  setActions(`<button class="btn" data-act="ped-copiar" data-val="${area}">Copiar texto (WhatsApp)</button><button class="btn btn-primary" data-act="ped-print">Tela para print</button>`);
+  setActions(`<button class="btn" data-act="ped-copiar" data-val="${area}">Copiar texto (WhatsApp)</button><button class="btn" data-act="ped-print">Tela para print</button><button class="btn btn-primary" data-act="ped-enviar" data-val="${area}">${icon("check")}Enviar pedido</button>`);
   const campo = (d, k) => `<input class="tbl-input" style="width:72px" inputmode="numeric" data-act="ped-qtd" data-area="${area}" data-dia="${d.data}" data-key="${k}" value="${d[k] || ""}" placeholder="0" />`;
   return `<div class="grid g-21">
     <div class="card"><div class="card-head"><div><h3>Quantidades por dia</h3><div class="sub">${doces ? "Caixas a produzir em cada dia — os docinhos por sabor saem da composição de cada caixa" : "Pacotes a produzir em cada dia"}</div></div>
@@ -2040,9 +2040,78 @@ function viewPedidos(area) {
       <label class="hint" style="display:block;margin-top:12px">Observações para a produção<textarea data-act="ped-obs" data-area="${area}" rows="3" style="width:100%;margin-top:4px">${esc(ped.obs || "")}</textarea></label>
       <div class="hint" style="margin-top:8px">Mão de obra: ${doces ? `${brl(paramVal("maoObraDoce"))} por doce (Personalizar custos)` : `${brl(moPorPacote())} por pacote (Paçoca › Personalizar custos)`}. As quantidades ficam salvas e sincronizadas.</div>
     </div>
-    <div class="card"><div class="card-head"><div><h3>Painel para enviar</h3><div class="sub">Use "Tela para print" e tire o print para mandar à produção</div></div></div>
+    <div class="card"><div class="card-head"><div><h3>Painel para enviar</h3><div class="sub">Tire o print ("Tela para print") e clique em "Enviar pedido": gera as contas de mão de obra e insumos e baixa o material do estoque</div></div></div>
       ${painelPedidoHtml(area, dias)}</div>
-  </div>`;
+  </div>
+  ${pedidosEnviadosHtml(area)}`;
+}
+
+// Pedido enviado à produção: gera a conta de mão de obra (terça de fechamento da semana seguinte), a conta de insumos
+// e baixa do estoque o material usado, somando as caixas/pacotes prontos
+const pedidosEnviados = () => (db.pedidosEnviados = db.pedidosEnviados || []);
+function resumoPedido(area, dias) {
+  const ativos = dias.filter((d) => (area === "pacoca" ? d.U : d.G + d.P));
+  if (!ativos.length) return null;
+  const ini = ativos[0].data, fim = ativos[ativos.length - 1].data, venc = addDias(semanaDe(fim).fim, 7);
+  if (area === "pacoca") {
+    const U = sum(ativos, (d) => d.U);
+    const consumo = db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).map((i) => ({ ref: "pac:" + i.id, nome: i.nome, unid: i.unid, qtd: U * consumoPacote(i) }));
+    return { area, ini, fim, venc, dias: ativos.map((d) => ({ data: d.data, U: d.U })), U, mo: U * moPorPacote(), insumos: U * custoInsumosPacote(), nfe: U * impostoPacote(), consumo };
+  }
+  const G = sum(ativos, (d) => d.G), P = sum(ativos, (d) => d.P), cc = consumoCaixas(G, P);
+  const custoRef = Object.fromEntries(itensEstoque("doces").map((i) => [i.ref, i.custo]));
+  const consumo = [...cc.insumos, ...cc.materiais].filter((x) => x.qtd > 0);
+  return { area, ini, fim, venc, dias: ativos.map((d) => ({ data: d.data, G: d.G, P: d.P })), G, P, doces: sum(ativos, (d) => d.doces), mo: sum(ativos, (d) => d.mo), insumos: sum(consumo, (x) => x.qtd * (custoRef[x.ref] || 0)), nfe: 0, consumo };
+}
+function enviarPedido(area) {
+  const r = resumoPedido(area, diasPedido(area));
+  if (!r) { toast("Preencha as quantidades antes de enviar"); return; }
+  const qtdTxt = area === "pacoca" ? `${int(r.U)} pacotes` : `${int(r.G)} Cx G + ${int(r.P)} Cx P (${int(r.doces)} doces)`;
+  if (!confirm(`Enviar o pedido de ${ddmm(r.ini)} a ${ddmm(r.fim)}?\n\n${qtdTxt}\n\n• Conta de mão de obra: ${brl(r.mo)} (vence ${ddmm(r.venc)})\n• Conta de insumos: ${brl(r.insumos + r.nfe)}\n• O material sai do estoque e ${area === "pacoca" ? "os pacotes entram como prontos" : "as caixas entram como prontas"}.`)) return;
+  const id = uid(), obs = `Pedido ${ddmm(r.ini)} a ${ddmm(r.fim)}`, movs = [];
+  const mov = (ref, nome, delta) => { movimentar(area, ref, nome, delta, "producao", obs); movs.push({ ref, nome, delta }); };
+  r.consumo.forEach((x) => mov(x.ref, x.nome, -x.qtd));
+  if (area === "pacoca") mov("pronto:pac", "Pacotes prontos", r.U);
+  else tiposArea("doces").filter((t) => r[t.key]).forEach((t) => mov("pronto:" + t.key, `${t.nome} (${t.desc})`, r[t.key]));
+  const { consumo, ...dados } = r;
+  pedidosEnviados().push({ id, ...dados, obs: pedidosDe(area).obs || "", enviadoEm: hojeISO(), movs });
+  const plan = pedidosDe(area);
+  r.dias.forEach((d) => delete plan.dias[d.data]);
+  plan.obs = "";
+  const desdeAreas = (db.config.pedidosDesde = typeof db.config.pedidosDesde === "object" && db.config.pedidosDesde ? db.config.pedidosDesde : {});
+  if (!desdeAreas[area] || r.ini < desdeAreas[area]) desdeAreas[area] = r.ini;
+  save(); render();
+  toast(`Pedido enviado · mão de obra ${brl(r.mo)} vence ${ddmm(r.venc)}`);
+}
+function cancelarPedido(id) {
+  const p = pedidosEnviados().find((x) => x.id === id);
+  if (!p || !confirm(`Cancelar o pedido de ${ddmm(p.ini)} a ${ddmm(p.fim)}? O material volta ao estoque e as contas ainda não pagas saem de Pagamentos.`)) return;
+  (p.movs || []).forEach((m) => movimentar(p.area, m.ref, m.nome, -m.delta, "ajuste", `Cancelamento do pedido ${ddmm(p.ini)} a ${ddmm(p.fim)}`));
+  db.pedidosEnviados = pedidosEnviados().filter((x) => x.id !== id);
+  save(); render(); toast("Pedido cancelado");
+}
+function pedidosEnviadosHtml(area) {
+  const lista = pedidosEnviados().filter((p) => p.area === area).sort((a, b) => b.ini.localeCompare(a.ini));
+  if (!lista.length) return "";
+  const conta = (p, tipo) => db.pagamentos.find((x) => x.auto === `ped:${p.id}:${tipo}`);
+  const sit = (c) => (!c ? '<span class="hint">—</span>' : c.pago ? `<span class="badge b-green">${pagoEmAtraso(c) ? "Pago em atraso" : "Pago"}</span>` : totalmenteSeparado(c) ? '<span class="badge b-green">Separado</span>' : '<span class="badge b-yellow">A separar</span>');
+  return `<div class="card mt"><div class="card-head"><div><h3>Pedidos enviados</h3><div class="sub">Cada pedido gerou a conta de mão de obra e a de insumos em Pagamentos (área e Negócio todo) e baixou o material do estoque</div></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Produção</th><th class="num">Quantidade</th><th class="num">Mão de obra</th><th class="num">Insumos</th><th>Vence</th><th>Mão de obra</th><th>Insumos</th><th></th></tr></thead><tbody>
+    ${lista.map((p) => `<tr><td><b>${ddmm(p.ini)} a ${ddmm(p.fim)}</b><div class="hint">enviado em ${ddmm(p.enviadoEm)}</div></td>
+      <td class="num">${area === "pacoca" ? `${int(p.U)} pacotes` : `${int(p.G)} G + ${int(p.P)} P<div class="hint">${int(p.doces)} doces</div>`}</td>
+      <td class="num"><b>${brl(p.mo)}</b></td><td class="num">${brl(p.insumos + (p.nfe || 0))}</td><td>${ddmm(p.venc)}</td>
+      <td>${sit(conta(p, "mo"))}</td><td>${sit(conta(p, "ins"))}</td>
+      <td><button class="btn btn-ghost btn-sm btn-danger" data-act="ped-cancelar" data-id="${p.id}" title="Cancelar pedido">${icon("trash")}</button></td></tr>`).join("")}
+    </tbody></table></div></div>`;
+}
+// Paçoca: vendas saem primeiro dos pacotes prontos (produzidos pelos pedidos); o excedente baixa os itens
+function consumoVendasPacoca(regs) {
+  const q = sum(regs, (r) => +r.itens?.U || 0), out = [];
+  if (!q) return out;
+  const dePronto = Math.min(q, Math.max(0, saldoDe("pronto:pac").qtd)), feitos = q - dePronto;
+  if (dePronto) out.push({ ref: "pronto:pac", nome: "Pacotes prontos", qtd: dePronto });
+  if (feitos) db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => out.push({ ref: "pac:" + i.id, nome: i.nome, qtd: feitos * consumoPacote(i), feitos }));
+  return out;
 }
 
 /* ---------- Paçoca · Custos & Compras ---------- */
@@ -2582,18 +2651,25 @@ function contasAutomaticas() {
       : { area, cat, venc: r.freq === "seguinte" ? mesSeguinte(m, r.dia) : diaVenc(ano, m, r.dia), desc: `${nome} · ${MESES_FULL[m - 1]} · ${quem}`, valor: 0, doces: 0, legado: [] };
     grupos[k].valor += +valor || 0; grupos[k].doces += doces; grupos[k].legado.push(...legado);
   };
+  // A partir do primeiro pedido enviado, mão de obra e insumos vêm dos pedidos de produção (não das vendas)
+  const porPedido = (area, data) => { const d = db.config.pedidosDesde?.[area]; return !!d && data >= d; };
   db.pacoca.filter((p) => p.data >= desde).forEach((p) => {
     const sem = semanaDe(p.data), legado = (c) => [`pac:${p.id}:${c}`, `sem:pacoca:${c}:${sem.inicio}`];
-    lanca("pacoca", "Mão de obra", p.data, sem, p.maoObra, legado("mo"));
+    if (!porPedido("pacoca", p.data)) lanca("pacoca", "Mão de obra", p.data, sem, p.maoObra, legado("mo"));
     lanca("pacoca", "Gasolina", p.data, sem, p.gasolina, legado("gas"));
-    lanca("pacoca", "Insumos", p.data, sem, insumosReg(p), legado("ins"));
-    lanca("pacoca", "Notas fiscais (NF-e)", p.data, sem, impostoReg(p), legado("nfe"));
+    if (!porPedido("pacoca", p.data)) { lanca("pacoca", "Insumos", p.data, sem, insumosReg(p), legado("ins")); lanca("pacoca", "Notas fiscais (NF-e)", p.data, sem, impostoReg(p), legado("nfe")); }
+  });
+  pedidosEnviados().forEach((p) => {
+    const per = `pedido ${ddmm(p.ini)} a ${ddmm(p.fim)}`, qtd = p.area === "pacoca" ? `${int(p.U)} pacotes` : `${int(p.doces)} doces`;
+    push(`ped:${p.id}:mo`, p.area, "Mão de obra", `Mão de obra · ${per} (${qtd})`, p.mo, p.venc);
+    push(`ped:${p.id}:ins`, p.area, "Insumos", `Insumos · ${per} (${qtd})`, p.insumos, p.venc);
+    if (p.nfe) push(`ped:${p.id}:nfe`, p.area, "Notas fiscais (NF-e)", `Imposto NF-e paçoquita · ${per}`, p.nfe, p.venc);
   });
   db.vendas.filter((w) => w.fim >= desde).forEach((w) => {
     const sem = { inicio: w.inicio, fim: w.fim }, doces = (+w.cxP || 0) * unidadesCaixa("P") + (+w.cxG || 0) * unidadesCaixa("G");
-    lanca("doces", "Mão de obra", w.fim, sem, doces * paramVal("maoObraDoce"), [`doc:${w.id}:mo`, `semana:doces:mo:${w.id}`], doces);
+    if (!porPedido("doces", w.inicio)) lanca("doces", "Mão de obra", w.fim, sem, doces * paramVal("maoObraDoce"), [`doc:${w.id}:mo`, `semana:doces:mo:${w.id}`], doces);
     lanca("doces", "Gasolina", w.fim, sem, w.gasolina, [`doc:${w.id}:gas`]);
-    lanca("doces", "Insumos", w.fim, sem, w.insumos, [`doc:${w.id}:ins`]);
+    if (!porPedido("doces", w.inicio)) lanca("doces", "Insumos", w.fim, sem, w.insumos, [`doc:${w.id}:ins`]);
     lanca("doces", "Comissão", w.fim, sem, w.comissoes, [`doc:${w.id}:com`]);
   });
   Object.entries(grupos).forEach(([k, g]) => push(k, g.area, g.cat, g.desc + (g.doces ? ` (${int(g.doces)} doces)` : ""), g.valor, g.venc, [...new Set(g.legado)]));
@@ -2743,7 +2819,10 @@ function movimentar(area, ref, nome, delta, tipo, obs = "") {
   db.estoque.movs.push({ id: uid(), area, ref, nome, delta: round3(delta), tipo, data: hojeISO(), hora: new Date().toTimeString().slice(0, 5), obs, saldoApos: s.qtd });
 }
 function itensEstoque(area) {
-  if (area === "pacoca") return db.estoque.pacocaItens.map((i) => ({ ref: "pac:" + i.id, nome: i.nome, unid: i.unid, grupo: "itens", custo: +i.custo || 0, item: i }));
+  if (area === "pacoca") return [
+    { ref: "pronto:pac", nome: "Pacotes prontos", unid: "pct", grupo: "itens", custo: custoInsumosPacote() + impostoPacote() + moPorPacote(), item: null },
+    ...db.estoque.pacocaItens.map((i) => ({ ref: "pac:" + i.id, nome: i.nome, unid: i.unid, grupo: "itens", custo: +i.custo || 0, item: i })),
+  ];
   const unit = (i) => (i.rend ? i.custo / i.rend : 0);
   return [
     ...tiposArea("doces").map((t) => ({ ref: "pronto:" + t.key, nome: `${t.nome} (${t.desc})`, unid: "cx", grupo: "prontos", custo: custoTipo("doces", t.key) })),
@@ -2856,8 +2935,7 @@ function formMontagem() {
 }
 function baixaVendas(area, pend) {
   if (area === "pacoca") {
-    const qtd = sum(pend, (r) => r.itens.U || 0);
-    db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => movimentar("pacoca", "pac:" + i.id, i.nome, -qtd * consumoPacote(i), "venda", `Vendas de ${ddmm(ui.vendData)}`));
+    consumoVendasPacoca(pend).forEach((x) => movimentar("pacoca", x.ref, x.nome, -x.qtd, "venda", `Vendas de ${ddmm(ui.vendData)}${x.feitos ? ` · ${int(x.feitos)} pacote(s) sem estoque pronto` : ""}`));
     return;
   }
   consumoVendasDoces(pend).forEach((x) => movimentar("doces", x.ref, x.nome, -x.qtd, "venda", `Vendas de ${ddmm(ui.vendData)}${x.feitas ? ` · ${int(x.feitas)} ${x.tipo} sem caixa pronta` : ""}`));
@@ -2950,8 +3028,7 @@ function consumoVendasDoces(regs) {
 function pendenteEstoque(area) {
   const regs = db.vendedor.registros.filter((r) => r.area === area && !r.lancado), m = {};
   if (area === "pacoca") {
-    const q = sum(regs, (r) => +r.itens?.U || 0);
-    if (q) db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => { m["pac:" + i.id] = q * consumoPacote(i); });
+    consumoVendasPacoca(regs).forEach((x) => { m[x.ref] = (m[x.ref] || 0) + x.qtd; });
   } else consumoVendasDoces(regs).forEach((x) => { m[x.ref] = (m[x.ref] || 0) + x.qtd; });
   return m;
 }
@@ -2970,12 +3047,15 @@ function pedidoBase() {
 // (padrão: 80 pacotes por dia × 7 dias × 2 semanas)
 function coberturaPacoca() {
   const cfg = db.estoque.coberturaPac || {}, porDia = Math.max(1, Math.round(+cfg.porDia || 80)), semanas = Math.max(1, +cfg.semanas || 2), dias = Math.round(semanas * 7);
-  const pend = pendenteEstoque("pacoca"), nec = {};
-  db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => { nec["pac:" + i.id] = porDia * dias * consumoPacote(i); });
+  const pend = pendenteEstoque("pacoca"), nec = {}, porPac = {};
   const disp = (ref) => saldoDe(ref).qtd - (pend[ref] || 0);
-  const refs = Object.keys(nec), faltam = refs.filter((r) => disp(r) < nec[r] - 1e-9);
-  const diasCobre = refs.length ? Math.min(...refs.map((r) => Math.max(0, disp(r)) / (nec[r] / dias))) : 0;
-  return { area: "pacoca", porDia, semanas, dias, nec, faltam, disp, diasCobre, capacidade: Math.floor(diasCobre * porDia + 1e-9) };
+  // Pacotes já prontos contam para a cobertura; o material precisa cobrir só o restante
+  const prontos = Math.max(0, disp("pronto:pac")), falta = Math.max(0, porDia * dias - prontos);
+  db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => { porPac["pac:" + i.id] = consumoPacote(i); nec["pac:" + i.id] = falta * consumoPacote(i); });
+  const refs = Object.keys(porPac), faltam = refs.filter((r) => nec[r] > 0 && disp(r) < nec[r] - 1e-9);
+  const pacotesMaterial = refs.length ? Math.min(...refs.map((r) => Math.max(0, disp(r)) / porPac[r])) : 0;
+  const capacidade = Math.floor(prontos + pacotesMaterial + 1e-9);
+  return { area: "pacoca", porDia, semanas, dias, nec, faltam, disp, prontos, diasCobre: capacidade / porDia, capacidade };
 }
 // Compra sugerida: falta arredondada para embalagens inteiras de compra (rendimento do insumo)
 function linhaCompra(x, periodos) {
@@ -3122,13 +3202,13 @@ function viewEstoque(area) {
       <td class="num"><b class="${d < 0 || st.t === "Comprar" ? "neg" : ""}">${fmtQtd(d)}</b> <span class="hint">${esc(i.unid)}</span>${pend ? `<div class="hint">−${fmtQtd(round3(pend))} em vendas abertas</div>` : ""}<div class="show-m"><span class="badge b-${st.c}">${st.t}</span></div></td>
       ${comPedido ? `<td class="num">${nec ? `${fmtQtd(round2(nec))} <span class="hint">${esc(i.unid)}</span>${d < nec ? `<div class="neg"><b>falta ${fmtQtd(round2(nec - Math.max(0, d)))}</b></div>` : ""}` : '<span class="hint">—</span>'}</td>` : ""}
       <td class="num hide-m">${numIn("est-min", s.minimo, `data-ref="${i.ref}"`)}</td>
-      ${area === "pacoca" ? `<td class="num hide-m">${fmtQtd(consumoPacote(i.item))} <span class="hint">${esc(i.unid)}</span></td>` : ""}
+      ${area === "pacoca" ? `<td class="num hide-m">${i.item ? `${fmtQtd(consumoPacote(i.item))} <span class="hint">${esc(i.unid)}</span>` : `1 <span class="hint">pct</span>`}</td>` : ""}
       <td class="num hide-m">${brl(Math.max(0, d) * i.custo)}</td><td class="hide-m"><span class="badge b-${st.c}">${st.t}</span></td>
       <td class="num" style="white-space:nowrap">
         <button class="btn btn-sm" title="Entrada" data-act="est-mov" data-val="entrada" data-ref="${i.ref}">+<span class="hide-m"> Entrada</span></button>
         <button class="btn btn-sm" title="Saída / perda" data-act="est-mov" data-val="saida" data-ref="${i.ref}">−<span class="hide-m"> Saída</span></button>
         <button class="btn btn-sm" title="Contagem" data-act="est-mov" data-val="ajuste" data-ref="${i.ref}">Contar</button>
-        ${area === "pacoca" ? `<button class="btn btn-ghost btn-sm" title="Editar item" data-act="est-edit-pac" data-id="${i.item.id}">${icon("edit")}</button>` : ""}</td></tr>`; }).join("")}
+        ${area === "pacoca" && i.item ? `<button class="btn btn-ghost btn-sm" title="Editar item" data-act="est-edit-pac" data-id="${i.item.id}">${icon("edit")}</button>` : ""}</td></tr>`; }).join("")}
     </tbody></table></div>` : `<div class="empty">${ui.estSoAlerta ? "Nenhum item com alerta." : "Nenhum item encontrado."}</div>`}
   </div>`;
 }
@@ -3355,6 +3435,8 @@ function onClick(e) {
     case "set-simcanal": db.sim.canal = val; save(); break;
     case "sim-zerar": db.sim.qtd = {}; save(); break;
     case "ped-print": ui.pedPrint = !ui.pedPrint; window.scrollTo(0, 0); break;
+    case "ped-enviar": return enviarPedido(val);
+    case "ped-cancelar": return cancelarPedido(id);
     case "ped-copiar": {
       const txt = textoPedido(val, diasPedido(val));
       (navigator.clipboard?.writeText(txt) || Promise.reject()).then(() => toast("Pedido copiado — cole no WhatsApp")).catch(() => { prompt("Copie o pedido:", txt); });
