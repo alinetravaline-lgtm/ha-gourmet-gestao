@@ -3499,10 +3499,14 @@ Sync.start({
   estadoLocal: estadoSemRegistros,
   registrosLocais: () => db.vendedor.registros,
   onEstado: (remoto) => {
-    const regs = db.vendedor.registros;
+    const regs = db.vendedor.registros, bruto = JSON.stringify(remoto);
     db = migrar(remoto);
     db.vendedor.registros = regs;
-    salvarLocal(); renderSeguro();
+    // Dados vindos de uma versão anterior do app: recalcula as contas pelas regras atuais e devolve à nuvem,
+    // para todos os aparelhos e telas mostrarem as mesmas contas e datas
+    resetCarga(); sincronizarContasAuto();
+    if (JSON.stringify(estadoSemRegistros()) !== bruto) save(); else salvarLocal();
+    renderSeguro();
   },
   onRegistros: (lista) => {
     db.vendedor.registros = lista.sort((a, b) => (a.ts || 0) - (b.ts || 0));
