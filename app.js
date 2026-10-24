@@ -2475,7 +2475,7 @@ function viewEquipe() {
   const cfg = Sync.getCfg();
   const publicado = location.protocol === "https:";
   const st = { local: "Só neste aparelho", conectando: "Conectando…", online: "Sincronizado", offline: "Offline (envia quando a internet voltar)", erro: "Erro de sincronização — confira a configuração" }[Sync.status];
-  const status = `<div class="card"><div class="card-head"><div><h3>Situação da sincronização</h3><div class="sub">${cfg ? `Equipe <b>${esc(cfg.equipe)}</b> · projeto ${esc(cfg.firebase.projectId)}` : "Sem nuvem: os dados ficam só neste aparelho"}</div></div>
+  const status = `<div class="card"><div class="card-head"><div><h3>Situação da sincronização</h3><div class="sub">${cfg ? `Equipe <b>${esc(cfg.equipe)}</b> · ${cfg.supabase ? `Supabase (${esc(cfg.supabase.url.replace(/^https:\/\//, "").split(".")[0])})` : `Firebase (${esc(cfg.firebase?.projectId || "")})`}` : "Sem nuvem: os dados ficam só neste aparelho"}</div></div>
     <span class="sync-pill b-${{ online: "green", erro: "red", local: "gray" }[Sync.status] || "yellow"}">● ${st}</span></div>
     ${Sync.ultimoSync ? `<div class="hint">Última sincronização: ${Sync.ultimoSync.toLocaleTimeString("pt-BR")}</div>` : ""}</div>`;
   if (!cfg) {
