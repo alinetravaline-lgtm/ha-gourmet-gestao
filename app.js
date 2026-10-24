@@ -2419,7 +2419,7 @@ function viewPagamentos(area) {
     <span>${separando ? `Marque a caixa quando separar o valor de cada conta ${area === "pacoca" ? "da paçoca" : "dos doces"}. No fim do mês, as contas são pagas em Negócio todo › Pagamentos, usando o relatório do DRE unificado. Se o valor de uma conta automática crescer depois de separada, ela volta a pedir a diferença.` : "Todas as contas: doces, paçoca e os impostos do negócio (DAS, DARF, contabilidade — os de outubro vencem em 20/11). A coluna \"Separado\" mostra se a área já reservou o dinheiro. Paga depois do vencimento fica como \"Pago em atraso\"."}
     Editar uma conta automática trava o valor; excluir faz ela não voltar.</span></div></div>
     <div class="alert yellow" style="margin-bottom:14px">${icon("cal")}<div><b>Vencimentos</b>
-    <span>• <strong>Mão de obra dos doces:</strong> semanal, vence na terça-feira que fecha a semana (quarta a terça).<br>• <strong>Mão de obra da paçoca, gasolina, insumos, NF-e e comissões:</strong> acumulados no mês, vencem no último dia do mês.<br>• <strong>Impostos e contabilidade:</strong> ${(impGerais().fixos || []).map((f) => `${esc(f.nome)} dia ${+f.dia || 10} ${f.mesSeguinte ? "do mês seguinte (referente ao mês anterior)" : "do próprio mês"}`).join("; ")}; DAS dia ${+impGerais().dasDia || 20} do mês seguinte.<br>O dia de cada imposto se muda em <a class="link" href="#dre-geral">Negócio todo › DRE unificado › Impostos e contabilidade</a>. Para mudar uma conta específica, use o lápis (editar) na linha dela.</span></div></div>` : "";
+    <span>${(area === "geral" ? ["doces", "pacoca"] : [area]).map((a) => CONTAS_AUTO[a].map((cat) => `• <strong>${NOME_CONTA[cat] || cat}${area === "geral" ? ` (${a === "pacoca" ? "paçoca" : "doces"})` : ""}:</strong> ${textoRegra(regraVenc(a, cat))}`).join("<br>")).join("<br>")}<br>• <strong>Impostos e contabilidade:</strong> ${(impGerais().fixos || []).map((f) => `${esc(f.nome)} dia ${+f.dia || 10} ${f.mesSeguinte ? "do mês seguinte (referente ao mês anterior)" : "do próprio mês"}`).join("; ")}; DAS dia ${+impGerais().dasDia || 20} do mês seguinte.<br>${area === "geral" ? "Mude os vencimentos no cartão <b style=\"display:inline\">Vencimentos das contas</b>, logo abaixo." : `Mude os vencimentos em <a class="link" href="#pagamentos-geral">Negócio todo › Pagamentos › Vencimentos das contas</a>.`} Para mudar só uma conta, use o lápis (editar) na linha dela.</span></div></div>` : "";
   const cats = [...new Set(noMes.map((p) => p.categoria))].sort((a, b) => CATS_PAG[ui.pgTipo].indexOf(a) - CATS_PAG[ui.pgTipo].indexOf(b));
   const porCategoria = cats.length ? `<div class="card mt"><div class="card-head"><div><h3>Por categoria</h3><div class="sub">${ui.pgMes ? MESES_FULL[ui.pgMes - 1] : "Todos os vencimentos"}</div></div></div>
     <div class="cat-grid">${cats.map((c) => {
@@ -2438,6 +2438,17 @@ function viewPagamentos(area) {
     ${kpi("Vencido", brl(sum(venc, (p) => +p.valor || 0)), `${venc.length} conta(s) atrasada(s)`, "alert", venc.length ? "neg" : "")}
     ${kpi("Vence em 7 dias", brl(sum(em7, (p) => +p.valor || 0)), `${em7.length} conta(s)`, "cal")}
     ${kpi(ui.pgTipo === "pagar" ? "Já pago" : "Já recebido", brl(sum(pagos, (p) => +p.valor || 0)), ui.pgTipo === "pagar" && atrasados.length ? `${pagos.length} conta(s) · ${atrasados.length} em atraso` : `${pagos.length} conta(s)`, "check", "pos")}`;
+  const opcoesFreq = [["semanal", "Semanal (fechamento na terça)"], ["mensal", "Mensal (dia do mês)"], ["seguinte", "Mês seguinte (dia)"]];
+  const configVenc = area === "geral" && ui.pgTipo === "pagar" ? `<details class="card mt comp-config" ${ui.vencAberto ? "open" : ""}><summary><b>Vencimentos das contas</b> <span class="hint">· escolha quando vence cada conta automática</span></summary>
+    <div class="table-wrap mt"><table><thead><tr><th>Área</th><th>Conta</th><th>Vence</th><th class="num">Dia</th><th class="hide-m">Como fica</th></tr></thead><tbody>
+    ${["doces", "pacoca"].map((a) => CONTAS_AUTO[a].map((cat) => { const r = regraVenc(a, cat); return `<tr><td>${AREA_LABEL[a]}</td><td><b>${esc(NOME_CONTA[cat] || cat)}</b></td>
+      <td><select class="inline" data-act="venc-freq" data-area="${a}" data-cat="${esc(cat)}">${opcoesFreq.map(([v, l]) => `<option value="${v}" ${r.freq === v ? "selected" : ""}>${l}</option>`).join("")}</select></td>
+      <td class="num">${numIn("venc-dia", r.dia, `data-area="${a}" data-cat="${esc(cat)}" style="width:60px"`)}</td><td class="hint hide-m">${textoRegra(r)}</td></tr>`; }).join("")).join("")}
+    ${(impGerais().fixos || []).map((f) => `<tr><td>Negócio todo</td><td><b>${esc(f.nome)}</b></td><td><select class="inline" data-act="ig-seguinte-sel" data-id="${f.id}"><option value="0" ${f.mesSeguinte ? "" : "selected"}>Mensal (dia do mês)</option><option value="1" ${f.mesSeguinte ? "selected" : ""}>Mês seguinte (dia)</option></select></td>
+      <td class="num">${numIn("ig-dia", +f.dia || 10, `data-id="${f.id}" style="width:60px"`)}</td><td class="hint hide-m">${f.mesSeguinte ? `dia ${+f.dia || 10} do mês seguinte (referente ao mês anterior)` : `dia ${+f.dia || 10} do próprio mês`}</td></tr>`).join("")}
+    <tr><td>Negócio todo</td><td><b>DAS</b></td><td class="hint">Mês seguinte (dia)</td><td class="num">${numIn("ig-dasdia", +impGerais().dasDia || 20, `style="width:60px"`)}</td><td class="hint hide-m">dia ${+impGerais().dasDia || 20} do mês seguinte (referente ao mês anterior)</td></tr>
+    </tbody></table></div>
+    <div class="hint" style="margin-top:8px">Semanal: o "Dia" é quantos dias depois da terça de fechamento (0 = na própria terça). Mensal: dia do próprio mês (31 = último dia). Mês seguinte: dia do mês seguinte. Contas já pagas não mudam.</div></details>` : "";
   const relatorio = area === "geral" && ui.pgTipo === "pagar" ? `<div class="card mt"><div class="card-head"><div><h3>Relatório para pagamento · ${ui.pgMes ? MESES_FULL[ui.pgMes - 1] : "todos os vencimentos"}</h3><div class="sub">O que cada área já separou, o que foi pago e o que falta pagar</div></div><a class="btn btn-sm" href="#dre-geral">Ver DRE unificado</a></div>${relatorioPagamentosHtml(ui.pgMes)}</div>` : "";
   const sepBadge = (p) => (p.pago ? '<span class="hint">—</span>' : totalmenteSeparado(p) ? '<span class="badge b-green">Separado</span>' : separadoConta(p) > 0 ? `<span class="badge b-yellow">Falta ${brl(faltaSeparar(p))}</span>` : '<span class="badge b-gray">Não</span>');
   return `
@@ -2446,6 +2457,7 @@ function viewPagamentos(area) {
       <select class="inline" data-act="set-pgmes"><option value="0">Todos os vencimentos</option>${mesesPg.map((m) => `<option value="${m}" ${ui.pgMes === m ? "selected" : ""}>${MESES_FULL[m - 1]}</option>`).join("")}</select></div></div>
   <div class="grid g-4">${kpis}</div>
   ${relatorio}
+  ${configVenc}
   ${porCategoria}
   <div class="card mt">${avisoAuto}<div class="card-head"><div><h3>Contas a ${verbo}</h3><div class="sub">${separando ? "Marque a caixa quando separar o dinheiro — a data fica registrada" : `Marque a caixa quando ${ui.pgTipo === "pagar" ? "pagar" : "receber"} — a data fica registrada`}</div></div>${extras}</div>
     ${lista.length ? `<div class="table-wrap"><table><thead><tr><th style="width:40px"></th><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th>Área</th><th class="num">Valor</th>${area === "geral" && ui.pgTipo === "pagar" ? "<th>Separado</th>" : ""}<th>Situação</th><th></th></tr></thead><tbody>
@@ -2475,37 +2487,43 @@ function categoriaFixo(nome) {
 // Cada conta tem uma chave (auto) estável: se o custo muda, a conta em aberto é atualizada; se já foi paga, a diferença vira "complemento".
 const addDias = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 const contasAutoDesde = () => db.config.contasAutoDesde || `${hojeISO().slice(0, 7)}-01`;
+// Vencimento de cada conta automática, por área: semanal (dias após o fechamento da semana, de quarta a terça),
+// mensal (dia do próprio mês; 31 = último dia) ou mês seguinte (dia do mês seguinte)
+const CONTAS_AUTO = { doces: ["Mão de obra", "Gasolina", "Insumos", "Comissão"], pacoca: ["Mão de obra", "Gasolina", "Insumos", "Notas fiscais (NF-e)"] };
+const NOME_CONTA = { "Notas fiscais (NF-e)": "Imposto NF-e da paçoquita", Comissão: "Comissões / vendedor" };
+const regraVenc = (area, cat) => ({ ...(area === "doces" && cat === "Mão de obra" ? { freq: "semanal", dia: 0 } : { freq: "mensal", dia: 31 }), ...(db.vencRegras?.[area]?.[cat] || {}) });
+const textoRegra = (r) => (r.freq === "semanal" ? (+r.dia ? `semanal, ${+r.dia} dia(s) após a terça do fechamento` : "semanal, na terça do fechamento da semana") : r.freq === "seguinte" ? `dia ${+r.dia} do mês seguinte` : +r.dia >= 31 ? "último dia do mês" : `dia ${+r.dia} do mês`);
 function contasAutomaticas() {
   const desde = contasAutoDesde(), ano = db.config.ano, out = [];
   const push = (base, area, categoria, descricao, valor, vencimento, legado) => { if (valor > 0.004) out.push({ base, area, categoria, descricao, valor: round2(valor), vencimento, legado }); };
   const diaVenc = (a, mes1a12, dia) => `${a}-${String(mes1a12).padStart(2, "0")}-${String(Math.min(new Date(a, mes1a12, 0).getDate(), Math.max(1, Math.round(+dia) || 10))).padStart(2, "0")}`;
   const mesSeguinte = (m, dia) => (m === 12 ? diaVenc(ano + 1, 1, dia) : diaVenc(ano, m + 1, dia));
-  // Custos dos lançamentos acumulados por tipo e mês (doces + paçoca), num pagamento único no último dia do mês.
-  // "legado" = contas diárias/semanais antigas daquele mês: o que já foi pago nelas é descontado do total.
-  const mensal = {};
-  const acumula = (cat, area, m, valor, legado) => {
-    const k = `${area}|${cat}|${m}`;
-    mensal[k] = mensal[k] || { cat, m, area, valor: 0, legado: [] };
-    mensal[k].valor += +valor || 0; mensal[k].legado.push(legado);
+  // Custos dos lançamentos agrupados conforme o vencimento escolhido para cada conta (semanal, mensal ou mês seguinte).
+  // "legado" = contas antigas do mesmo custo: o que já foi pago nelas é descontado do total.
+  const grupos = {};
+  const lanca = (area, cat, dataRef, semana, valor, legado, doces = 0) => {
+    const r = regraVenc(area, cat), m = monthOf(dataRef), nome = `${NOME_CONTA[cat] || cat}`, quem = area === "pacoca" ? "paçoca" : "doces";
+    const k = r.freq === "semanal" ? `sem:${area}:${cat}:${semana.inicio}` : `mes:${area}:${cat}:${m}`;
+    if (!grupos[k]) grupos[k] = r.freq === "semanal"
+      ? { area, cat, venc: addDias(semana.fim, +r.dia || 0), desc: `${nome} ${quem} · semana ${ddmm(semana.inicio)} a ${ddmm(semana.fim)}`, valor: 0, doces: 0, legado: [] }
+      : { area, cat, venc: r.freq === "seguinte" ? mesSeguinte(m, r.dia) : diaVenc(ano, m, r.dia), desc: `${nome} · ${MESES_FULL[m - 1]} · ${quem}`, valor: 0, doces: 0, legado: [] };
+    grupos[k].valor += +valor || 0; grupos[k].doces += doces; grupos[k].legado.push(...legado);
   };
   db.pacoca.filter((p) => p.data >= desde).forEach((p) => {
-    const m = monthOf(p.data);
-    acumula("Mão de obra", "pacoca", m, p.maoObra, `pac:${p.id}:mo`);
-    acumula("Gasolina", "pacoca", m, p.gasolina, `pac:${p.id}:gas`);
-    acumula("Insumos", "pacoca", m, insumosReg(p), `pac:${p.id}:ins`);
-    acumula("Notas fiscais (NF-e)", "pacoca", m, impostoReg(p), `pac:${p.id}:nfe`);
+    const sem = semanaDe(p.data), legado = (c) => [`pac:${p.id}:${c}`, `sem:pacoca:${c}:${sem.inicio}`];
+    lanca("pacoca", "Mão de obra", p.data, sem, p.maoObra, legado("mo"));
+    lanca("pacoca", "Gasolina", p.data, sem, p.gasolina, legado("gas"));
+    lanca("pacoca", "Insumos", p.data, sem, insumosReg(p), legado("ins"));
+    lanca("pacoca", "Notas fiscais (NF-e)", p.data, sem, impostoReg(p), legado("nfe"));
   });
   db.vendas.filter((w) => w.fim >= desde).forEach((w) => {
-    const m = monthOf(w.fim), doces = (+w.cxP || 0) * unidadesCaixa("P") + (+w.cxG || 0) * unidadesCaixa("G");
-    push(`semana:doces:mo:${w.id}`, "doces", "Mão de obra", `Mão de obra doces · semana ${ddmm(w.inicio)} a ${ddmm(w.fim)}${w.canal === "Outbound" ? "" : " · " + w.canal} (${int(doces)} doces)`, doces * paramVal("maoObraDoce"), w.fim, [`doc:${w.id}:mo`]);
-    acumula("Gasolina", "doces", m, w.gasolina, `doc:${w.id}:gas`);
-    acumula("Insumos", "doces", m, w.insumos, `doc:${w.id}:ins`);
-    acumula("Comissão", "doces", m, w.comissoes, `doc:${w.id}:com`);
+    const sem = { inicio: w.inicio, fim: w.fim }, doces = (+w.cxP || 0) * unidadesCaixa("P") + (+w.cxG || 0) * unidadesCaixa("G");
+    lanca("doces", "Mão de obra", w.fim, sem, doces * paramVal("maoObraDoce"), [`doc:${w.id}:mo`, `semana:doces:mo:${w.id}`], doces);
+    lanca("doces", "Gasolina", w.fim, sem, w.gasolina, [`doc:${w.id}:gas`]);
+    lanca("doces", "Insumos", w.fim, sem, w.insumos, [`doc:${w.id}:ins`]);
+    lanca("doces", "Comissão", w.fim, sem, w.comissoes, [`doc:${w.id}:com`]);
   });
-  const nomeCat = { "Notas fiscais (NF-e)": "Imposto NF-e da paçoquita", Comissão: "Comissões / vendedor" };
-  Object.values(mensal).forEach(({ cat, m, area, valor, legado }) => {
-    push(`mes:${area}:${cat}:${m}`, area, cat, `${nomeCat[cat] || cat} · ${MESES_FULL[m - 1]} · ${area === "pacoca" ? "paçoca" : "doces"}`, valor, diaVenc(ano, m, 31), legado);
-  });
+  Object.entries(grupos).forEach(([k, g]) => push(k, g.area, g.cat, g.desc + (g.doces ? ` (${int(g.doces)} doces)` : ""), g.valor, g.venc, [...new Set(g.legado)]));
   const m0 = monthOf(desde), m1 = Math.max(mesAtual(), m0);
   for (let m = m0; m <= m1; m++) {
     const mes = MESES_FULL[m - 1], venc = diaVenc(ano, m, 10);
@@ -3313,6 +3331,7 @@ function onClick(e) {
 }
 function onChange(e) {
   const el = e.target, act = el.dataset.act;
+  if (/^venc-|^ig-dia|^ig-dasdia|^ig-seguinte-sel/.test(act || "")) ui.vencAberto = true;
   if (act === "par-fonte") { aplicarFonte(db.params.find((x) => x.key === el.dataset.key), el.value); save(); render(); toast("Origem do custo atualizada"); }
   if (act === "bar-linha") { db.barras[ui.barra].linha = el.value; save(); render(); toast(`Barra marcada como ${el.value}`); }
   if (act === "cx-qtd") { const c = caixaDe(el.dataset.key), q = parseNum(el.value); if (q) c.itens[el.dataset.sabor] = q; else delete c.itens[el.dataset.sabor]; save(); render(); }
@@ -3334,6 +3353,15 @@ function onChange(e) {
   if (act === "set-dremespac") { ui.dreMesPac = +el.value; render(); }
   if (act === "set-pgmes") { ui.pgMes = +el.value; render(); }
   if (act === "set-dremesger") { ui.dreMesGer = +el.value; render(); }
+  if (act === "venc-freq" || act === "venc-dia") {
+    const a = el.dataset.area, cat = el.dataset.cat, r = regraVenc(a, cat);
+    db.vencRegras = db.vencRegras || {}; db.vencRegras[a] = db.vencRegras[a] || {};
+    if (act === "venc-freq") { r.freq = el.value; r.dia = el.value === "semanal" ? 0 : el.value === "seguinte" ? 10 : 31; }
+    else r.dia = Math.max(0, Math.min(31, Math.round(parseNum(el.value))));
+    db.vencRegras[a][cat] = { freq: r.freq, dia: r.dia };
+    save(); render(); toast(`${NOME_CONTA[cat] || cat} (${AREA_LABEL[a]}): ${textoRegra(r)}`);
+  }
+  if (act === "ig-seguinte-sel") { const it = (impGerais().fixos || []).find((x) => x.id === el.dataset.id); if (it) { it.mesSeguinte = el.value === "1"; save(); render(); } }
   if (act === "ig-seguinte") { const it = (impGerais().fixos || []).find((x) => x.id === el.dataset.id); if (it) { it.mesSeguinte = el.checked; save(); render(); } }
   if (act === "ig-modo") { impGerais().rateioModo = el.value; save(); render(); }
   if (act === "ig-pctdoces") { impGerais().rateioDoces = Math.min(100, Math.max(0, parseNum(el.value))); save(); render(); }
