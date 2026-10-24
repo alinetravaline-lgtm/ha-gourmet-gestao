@@ -2035,7 +2035,8 @@ const nomeVendedor = () => localStorage.getItem("hag_vendedor_nome") || "";
 // O modo vem só da página aberta (vendedor.html ou index.html), nunca de algo gravado no aparelho
 localStorage.removeItem("hag_modo");
 const APP_VENDEDOR = window.HAG_MODO === "vendedor";
-const urlApp = (pagina = "") => new URL("./" + pagina, location.href).href.split("#")[0];
+// Gestão e vendedor são dois aplicativos em pastas separadas (gestao/ e vendedor/), com escopos que não se cruzam
+const urlApp = (pagina = "") => new URL((window.HAG_BASE || "./") + pagina, location.href).href.split("#")[0];
 function novoRegistro(area, dados) {
   const r = { id: uid(), area, data: ui.vendData, hora: new Date().toTimeString().slice(0, 5), ts: Date.now(), device: Sync.client, vendedor: nomeVendedor() || "Gestão", lancado: false, ...dados };
   db.vendedor.registros.push(r);
@@ -2057,7 +2058,7 @@ function viewVendedor(area) {
   const porVendedor = {};
   regs.forEach((r) => { const v = r.vendedor || "Gestão"; porVendedor[v] = porVendedor[v] || { n: 0, total: 0 }; porVendedor[v].n++; porVendedor[v].total += r.valor; });
   if (APP_VENDEDOR) {
-    setActions(`<div class="tabs">${Object.entries(AREAS).map(([k, a]) => `<button class="${k === area ? "active" : ""}" data-act="vend-area" data-val="${k}">${a.nome}</button>`).join("")}</div>
+    setActions(`<div class="tabs">${Object.entries(AREAS).filter(([k]) => k !== "geral").map(([k, a]) => `<button class="${k === area ? "active" : ""}" data-act="vend-area" data-val="${k}">${a.nome}</button>`).join("")}</div>
       <button class="btn btn-sm" data-act="vend-nome">${icon("edit")}${esc(nomeVendedor() || "Seu nome")}</button>`);
   } else {
     setActions(`<label class="hint" style="display:flex;align-items:center;gap:8px">Dia <input type="date" class="inline" data-act="vend-data" value="${ui.vendData}" /></label>
@@ -2163,7 +2164,7 @@ function viewVendedorPacoca() {
   const porVendedor = {};
   regs.forEach((r) => { const v = r.vendedor || "Gestão"; porVendedor[v] = porVendedor[v] || []; porVendedor[v].push(r); });
   if (APP_VENDEDOR) {
-    setActions(`<div class="tabs">${Object.entries(AREAS).map(([k, a]) => `<button class="${k === area ? "active" : ""}" data-act="vend-area" data-val="${k}">${a.nome}</button>`).join("")}</div>
+    setActions(`<div class="tabs">${Object.entries(AREAS).filter(([k]) => k !== "geral").map(([k, a]) => `<button class="${k === area ? "active" : ""}" data-act="vend-area" data-val="${k}">${a.nome}</button>`).join("")}</div>
       <button class="btn btn-sm" data-act="vend-nome">${icon("edit")}${esc(nomeVendedor() || "Seu nome")}</button>`);
     if (!nomeVendedor()) return `<div class="card" style="max-width:460px;margin:20px auto;text-align:center">
       <h3 style="margin-top:0">Bem-vindo(a)!</h3><p class="hint">Digite seu nome para identificar suas vendas.</p>
@@ -2500,8 +2501,8 @@ function viewEquipe() {
     </div>
     ${publicarHtml(publicado)}`;
   }
-  const linkVend = `${urlApp("vendedor.html")}#conectar=${codigoConexao(cfg)}`;
-  const linkGest = `${urlApp()}#conectar=${codigoConexao(cfg)}`;
+  const linkVend = `${urlApp("vendedor/")}#conectar=${codigoConexao(cfg)}`;
+  const linkGest = `${urlApp("gestao/")}#conectar=${codigoConexao(cfg)}`;
   const qr = (l) => `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data=${encodeURIComponent(l)}`;
   return status + `
   ${publicado ? "" : `<div class="alert yellow mt">${icon("alert")}<div><b>Publique o app antes de chamar a equipe</b><span>Este endereço (${esc(location.host || "arquivo local")}) só abre neste computador. Siga "Publicar o app" abaixo e conecte de novo no endereço publicado.</span></div></div>`}
@@ -3049,7 +3050,7 @@ function onClick(e) {
     case "del-cvar": return confirmDel("Excluir este custo variável?", () => { db.custosVar = db.custosVar.filter((x) => x.id !== id); });
     case "eq-copiar": {
       const cfg = Sync.getCfg();
-      const txt = val === "regras" ? REGRAS_FIRESTORE : `${urlApp(val === "vend" ? "vendedor.html" : "")}#conectar=${codigoConexao(cfg)}`;
+      const txt = val === "regras" ? REGRAS_FIRESTORE : `${urlApp(val === "vend" ? "vendedor/" : "gestao/")}#conectar=${codigoConexao(cfg)}`;
       navigator.clipboard?.writeText(txt).then(() => toast("Copiado"), () => prompt("Copie:", txt));
       return;
     }
@@ -3132,7 +3133,7 @@ function onClick(e) {
       const pin = db.config.pinGestao;
       if (pin && prompt("PIN da gestão:") !== String(pin)) { toast("PIN incorreto"); return; }
       if (!pin && !confirm("Sair do modo vendedor e abrir a gestão completa neste aparelho?")) return;
-      location.href = urlApp() + "#inicio";
+      location.href = urlApp("gestao/") + "#inicio";
       return;
     }
     case "vend-lancar": {
@@ -3381,7 +3382,7 @@ Sync.start({
 window.addEventListener("storage", (e) => {
   if (e.key === STORE_KEY && e.newValue && !Sync.ativo) { db = migrar(JSON.parse(e.newValue)); renderSeguro(); }
 });
-if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
+if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register((window.HAG_BASE || "") + "sw.js", { scope: "./" }).catch(() => {});
 
 sincronizarContasAuto(); salvarLocal();
 render();
