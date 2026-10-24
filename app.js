@@ -113,6 +113,7 @@ function buildSeed() {
     contasAutoV1: true,
     impostoPacV1: true,
     impGeraisV1: true,
+    dupImpV1: true,
     impostosGerais: { dasPct: 4.5, dasDia: 20, fixos: [{ id: uid(), nome: "DARF", valor: 178.3, dia: 20, mesSeguinte: true }, { id: uid(), nome: "Contabilidade", valor: 350, dia: 10 }] },
     darfMesSeguinteV1: true,
     custosVar: [],
@@ -202,6 +203,25 @@ function migrar(data) {
     data.darfMesSeguinteV1 = true;
   }
   if (data.estoque?.coberturaPac && !("semanas" in data.estoque.coberturaPac)) { delete data.estoque.coberturaPac.dias; data.estoque.coberturaPac.semanas = 2; }
+  // DARF, DAS e contabilidade são do negócio todo: saem das despesas fixas das áreas para não contar duas vezes
+  if (!data.dupImpV1 && data.impostosGerais) {
+    const repetido = (f) => /darf|contab|contador|^\s*das\b/i.test(f.nome);
+    const removidos = [...(data.fixos || []), ...(data.fixosPacoca || [])].filter(repetido).map((f) => f.id);
+    data.fixos = (data.fixos || []).filter((f) => !repetido(f));
+    data.fixosPacoca = (data.fixosPacoca || []).filter((f) => !repetido(f));
+    data.pagamentos = (data.pagamentos || []).filter((p) => p.pago || !removidos.some((id) => String(p.auto || "").startsWith(`fixo:${id}:`) || String(p.auto || "").startsWith(`fixopac:${id}:`)));
+    data.dupImpV1 = true;
+  }
+  // "Taxa NF-e" cadastrada como insumo à parte vira o imposto da paçoquita (mesmo custo por pacote, mas aparece como imposto)
+  if (!data.nfeItemV1 && data.estoque?.pacocaItens) {
+    const itens = data.estoque.pacocaItens, pq = itens.find((i) => i.usaPacote), taxa = itens.find((i) => !i.usaPacote && /nf-?e|nota fiscal/i.test(i.nome));
+    if (pq && taxa && !+pq.imposto) {
+      const porPac = +data.pacocaSim?.porPacote || 1, usoTaxa = taxa.usaPacote ? porPac : +taxa.consumo || 0, usoPq = porPac;
+      const impostoPorPacote = usoTaxa * (+taxa.custo || 0);
+      if (impostoPorPacote > 0) { pq.imposto = round2((impostoPorPacote * (+pq.pacote || 1)) / usoPq); data.estoque.pacocaItens = itens.filter((i) => i !== taxa); }
+    }
+    data.nfeItemV1 = true;
+  }
   if (data.pacocaSim && !data.pacocaSim.fixos) data.pacocaSim.fixos = { "Comissão vendedor": 0, "Alimentação vendedor": 0, Marketing: 0 };
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
@@ -2292,8 +2312,21 @@ const CATS_PAG = {
 const AREA_LABEL = { doces: "Doces Finos", pacoca: "Paçoca", geral: "Negócio todo" };
 // Nas áreas (doces, paçoca) o dinheiro só é SEPARADO; o pagamento é feito no Negócio todo (Pagamentos e DRE unificado)
 const pagoEmAtraso = (p) => p.pago && (p.atraso || (p.dataPago && p.vencimento && p.dataPago > p.vencimento));
-const faltaSeparar = (p) => (p.pago ? 0 : Math.max(0, round2((+p.valor || 0) - (p.separado ? +p.valorSeparado || 0 : 0))));
-const totalmenteSeparado = (p) => p.pago || (p.separado && faltaSeparar(p) <= 0.004);
+// Contas do negócio (DAS, DARF, contabilidade) têm uma parte de cada área: o DAS pelo faturamento, os fixos pela divisão escolhida
+function fracArea(p, area) {
+  if (p.area === area) return 1;
+  if (p.area !== "geral" || !area) return 0;
+  const auto = String(p.auto || ""), m = +(auto.match(/:(\d+)$/)?.[1]) || (p.vencimento ? monthOf(p.vencimento) : mesAtual());
+  if (auto.startsWith("das:")) { const rT = resumo(m).receita; return rT ? resumo(m, area).receita / rT : 0.5; }
+  return shareFixos(m, area);
+}
+const parteConta = (p, area) => round2((+p.valor || 0) * fracArea(p, area));
+const valorVisto = (p, area) => (area && area !== "geral" && p.area === "geral" ? parteConta(p, area) : +p.valor || 0);
+const separadoConta = (p, area) => (p.area === "geral"
+  ? (area && area !== "geral" ? +(p.sepArea?.[area]?.valor || 0) : sum(Object.values(p.sepArea || {}), (s) => +s?.valor || 0))
+  : (p.separado ? +p.valorSeparado || 0 : 0));
+const faltaSeparar = (p, area) => (p.pago ? 0 : Math.max(0, round2(valorVisto(p, area) - separadoConta(p, area))));
+const totalmenteSeparado = (p, area) => p.pago || faltaSeparar(p, area) <= 0.004;
 const situacaoPag = (p) => {
   if (p.pago) return p.tipo === "receber" ? { t: "Recebido", c: "green" } : pagoEmAtraso(p) ? { t: "Pago em atraso", c: "gold" } : { t: "Pago", c: "green" };
   const hoje = hojeISO();
@@ -2301,17 +2334,17 @@ const situacaoPag = (p) => {
   if (p.vencimento === hoje) return { t: "Vence hoje", c: "yellow" };
   return { t: "Pendente", c: "yellow" };
 };
-const situacaoSeparar = (p) => {
+const situacaoSeparar = (p, area) => {
   if (p.pago) return pagoEmAtraso(p) ? { t: "Pago em atraso", c: "gold" } : { t: "Pago", c: "green" };
-  if (totalmenteSeparado(p)) return { t: "Separado", c: "green" };
-  if (p.separado) return { t: `Separar + ${brl(faltaSeparar(p))}`, c: "yellow" };
+  if (totalmenteSeparado(p, area)) return { t: "Separado", c: "green" };
+  if (separadoConta(p, area) > 0) return { t: `Separar + ${brl(faltaSeparar(p, area))}`, c: "yellow" };
   if (p.vencimento && p.vencimento < hojeISO()) return { t: "Vencido · a separar", c: "red" };
   return { t: "A separar", c: "yellow" };
 };
 function formPagamento(area, p) {
   const tipoLabel = { pagar: "A pagar", receber: "A receber" };
   const tipoIni = p?.tipo || ui.pgTipo;
-  const separando = area !== "geral" && tipoIni === "pagar";
+  const separando = area !== "geral" && tipoIni === "pagar" && p?.area !== "geral";
   const opcoes = tipoIni === "receber" ? ["Pendente", "Recebido"] : separando ? ["A separar", "Separado", ...(p?.pago ? [pagoEmAtraso(p) ? "Pago em atraso" : "Pago"] : [])] : ["Pendente", "Pago", "Pago em atraso"];
   const atual = !p ? opcoes[0] : p.tipo === "receber" ? (p.pago ? "Recebido" : "Pendente") : p.pago ? (pagoEmAtraso(p) ? "Pago em atraso" : "Pago") : separando ? (totalmenteSeparado(p) ? "Separado" : "A separar") : "Pendente";
   openForm({
@@ -2349,7 +2382,7 @@ function relatorioPagamentosHtml(m) {
   const contas = db.pagamentos.filter((p) => p.tipo === "pagar" && (!m || (p.vencimento && monthOf(p.vencimento) === m)));
   const linha = (nome, l) => {
     const tot = sum(l, (p) => +p.valor || 0), pago = sum(l.filter((p) => p.pago && !pagoEmAtraso(p)), (p) => +p.valor || 0), atraso = sum(l.filter(pagoEmAtraso), (p) => +p.valor || 0);
-    const abertas = l.filter((p) => !p.pago), separado = sum(abertas, (p) => (+p.valor || 0) - faltaSeparar(p)), aSeparar = sum(abertas, faltaSeparar);
+    const abertas = l.filter((p) => !p.pago), separado = sum(abertas, (p) => (+p.valor || 0) - faltaSeparar(p)), aSeparar = sum(abertas, (p) => faltaSeparar(p));
     return `<tr><td><b>${nome}</b></td><td class="num">${brl(tot)}</td><td class="num pos">${brl(separado)}</td><td class="num ${aSeparar ? "neg" : ""}">${brl(aSeparar)}</td><td class="num">${brl(pago)}</td><td class="num">${brl(atraso)}</td><td class="num ${abertas.length ? "neg" : "pos"}"><b>${brl(sum(abertas, (p) => +p.valor || 0))}</b></td></tr>`;
   };
   return `<div class="table-wrap"><table><thead><tr><th>Área</th><th class="num">Total de contas</th><th class="num">Separado</th><th class="num">A separar</th><th class="num">Pago</th><th class="num">Pago em atraso</th><th class="num">Falta pagar</th></tr></thead>
@@ -2359,11 +2392,12 @@ function relatorioPagamentosHtml(m) {
 function viewPagamentos(area) {
   setActions(`<button class="btn btn-primary" data-act="new-pag">${icon("plus")}Nova conta</button>`);
   const separando = area !== "geral" && ui.pgTipo === "pagar";
-  const daArea = area === "geral" ? db.pagamentos : db.pagamentos.filter((p) => p.area === area);
+  const daArea = area === "geral" ? db.pagamentos : db.pagamentos.filter((p) => p.area === area || (p.area === "geral" && p.tipo === "pagar" && parteConta(p, area) > 0.004));
   const doTipo = daArea.filter((p) => p.tipo === ui.pgTipo);
+  const vv = (p) => valorVisto(p, area), fs = (p) => faltaSeparar(p, separando ? area : undefined), ts = (p) => totalmenteSeparado(p, separando ? area : undefined);
   const mesesPg = [...new Set(doTipo.filter((p) => p.vencimento).map((p) => monthOf(p.vencimento)))].sort((a, b) => a - b);
   const noMes = doTipo.filter((p) => !ui.pgMes || (p.vencimento && monthOf(p.vencimento) === ui.pgMes));
-  const concluida = (p) => (separando ? totalmenteSeparado(p) : p.pago);
+  const concluida = (p) => (separando ? ts(p) : p.pago);
   const lista = noMes.filter((p) => ui.pgStatus === "todos" || (ui.pgStatus === "pago" ? concluida(p) : !concluida(p)))
     .sort((a, b) => (concluida(a) - concluida(b)) || String(a.vencimento).localeCompare(String(b.vencimento)));
   const pend = noMes.filter((p) => !p.pago), venc = pend.filter((p) => p.vencimento && p.vencimento < hojeISO());
@@ -2380,22 +2414,22 @@ function viewPagamentos(area) {
   const porCategoria = cats.length ? `<div class="card mt"><div class="card-head"><div><h3>Por categoria</h3><div class="sub">${ui.pgMes ? MESES_FULL[ui.pgMes - 1] : "Todos os vencimentos"}</div></div></div>
     <div class="cat-grid">${cats.map((c) => {
       const l = noMes.filter((p) => p.categoria === c);
-      if (separando) { const fs = sum(l, faltaSeparar), sp = sum(l.filter((p) => !p.pago), (p) => (+p.valor || 0) - faltaSeparar(p));
-        return `<div class="stat"><small>${esc(c)}</small><strong class="${fs ? "neg" : "pos"}">${fs ? brl(fs) + " a separar" : "Tudo separado"}</strong><div class="hint">${brl(sp)} separado · ${l.length} conta(s)</div></div>`; }
+      if (separando) { const falta = sum(l, fs), sp = sum(l.filter((p) => !p.pago), (p) => vv(p) - fs(p));
+        return `<div class="stat"><small>${esc(c)}</small><strong class="${falta ? "neg" : "pos"}">${falta ? brl(falta) + " a separar" : "Tudo separado"}</strong><div class="hint">${brl(sp)} separado · ${l.length} conta(s)</div></div>`; }
       const pe = sum(l.filter((p) => !p.pago), (p) => +p.valor || 0), pg = sum(l.filter((p) => p.pago), (p) => +p.valor || 0);
       return `<div class="stat"><small>${esc(c)}</small><strong class="${pe ? "neg" : "pos"}">${pe ? brl(pe) + " pendente" : "Em dia"}</strong><div class="hint">${brl(pg)} ${ui.pgTipo === "pagar" ? "pago" : "recebido"} · ${l.length} conta(s)</div></div>`;
     }).join("")}</div></div>` : "";
   const kpis = separando ? `
-    ${kpi("A separar", brl(sum(noMes, faltaSeparar)), `${noMes.filter((p) => !totalmenteSeparado(p)).length} conta(s)`, "wallet", sum(noMes, faltaSeparar) ? "neg" : "")}
-    ${kpi("Separado", brl(sum(pend, (p) => (+p.valor || 0) - faltaSeparar(p))), "Reservado para pagar no fim do mês", "check", "pos")}
-    ${kpi("Vence em 7 dias", brl(sum(em7, faltaSeparar)), `${em7.filter((p) => !totalmenteSeparado(p)).length} conta(s) ainda a separar`, "cal")}
-    ${kpi("Já pago", brl(sum(pagos, (p) => +p.valor || 0)), "Pago em Negócio todo", "check")}` : `
+    ${kpi("A separar", brl(sum(noMes, fs)), `${noMes.filter((p) => !ts(p)).length} conta(s)`, "wallet", sum(noMes, fs) ? "neg" : "")}
+    ${kpi("Separado", brl(sum(pend, (p) => vv(p) - fs(p))), "Reservado para pagar no fim do mês", "check", "pos")}
+    ${kpi("Vence em 7 dias", brl(sum(em7, fs)), `${em7.filter((p) => !ts(p)).length} conta(s) ainda a separar`, "cal")}
+    ${kpi("Já pago", brl(sum(pagos, vv)), "Pago em Negócio todo", "check")}` : `
     ${kpi(`Pendente a ${verbo}`, brl(sum(pend, (p) => +p.valor || 0)), `${pend.length} conta(s)`, "wallet")}
     ${kpi("Vencido", brl(sum(venc, (p) => +p.valor || 0)), `${venc.length} conta(s) atrasada(s)`, "alert", venc.length ? "neg" : "")}
     ${kpi("Vence em 7 dias", brl(sum(em7, (p) => +p.valor || 0)), `${em7.length} conta(s)`, "cal")}
     ${kpi(ui.pgTipo === "pagar" ? "Já pago" : "Já recebido", brl(sum(pagos, (p) => +p.valor || 0)), ui.pgTipo === "pagar" && atrasados.length ? `${pagos.length} conta(s) · ${atrasados.length} em atraso` : `${pagos.length} conta(s)`, "check", "pos")}`;
   const relatorio = area === "geral" && ui.pgTipo === "pagar" ? `<div class="card mt"><div class="card-head"><div><h3>Relatório para pagamento · ${ui.pgMes ? MESES_FULL[ui.pgMes - 1] : "todos os vencimentos"}</h3><div class="sub">O que cada área já separou, o que foi pago e o que falta pagar</div></div><a class="btn btn-sm" href="#dre-geral">Ver DRE unificado</a></div>${relatorioPagamentosHtml(ui.pgMes)}</div>` : "";
-  const sepBadge = (p) => (p.pago ? '<span class="hint">—</span>' : totalmenteSeparado(p) ? '<span class="badge b-green">Separado</span>' : p.separado ? `<span class="badge b-yellow">Falta ${brl(faltaSeparar(p))}</span>` : '<span class="badge b-gray">Não</span>');
+  const sepBadge = (p) => (p.pago ? '<span class="hint">—</span>' : totalmenteSeparado(p) ? '<span class="badge b-green">Separado</span>' : separadoConta(p) > 0 ? `<span class="badge b-yellow">Falta ${brl(faltaSeparar(p))}</span>` : '<span class="badge b-gray">Não</span>');
   return `
   <div class="toolbar">${tabs([["pagar", "A pagar"], ["receber", "A receber"]], ui.pgTipo, "set-pgtipo")}
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">${tabs(separando ? [["pendente", "A separar"], ["pago", "Separados"], ["todos", "Todos"]] : [["pendente", "Pendentes"], ["pago", ui.pgTipo === "pagar" ? "Pagos" : "Recebidos"], ["todos", "Todos"]], ui.pgStatus, "set-pgstatus")}
@@ -2405,16 +2439,16 @@ function viewPagamentos(area) {
   ${porCategoria}
   <div class="card mt">${avisoAuto}<div class="card-head"><div><h3>Contas a ${verbo}</h3><div class="sub">${separando ? "Marque a caixa quando separar o dinheiro — a data fica registrada" : `Marque a caixa quando ${ui.pgTipo === "pagar" ? "pagar" : "receber"} — a data fica registrada`}</div></div>${extras}</div>
     ${lista.length ? `<div class="table-wrap"><table><thead><tr><th style="width:40px"></th><th>Vencimento</th><th>Descrição</th><th>Categoria</th><th>Área</th><th class="num">Valor</th>${area === "geral" && ui.pgTipo === "pagar" ? "<th>Separado</th>" : ""}<th>Situação</th><th></th></tr></thead><tbody>
-    ${lista.map((p) => { const s = separando ? situacaoSeparar(p) : situacaoPag(p); const feito = separando ? totalmenteSeparado(p) : p.pago; return `<tr class="${p.pago ? "row-pago" : ""}">
+    ${lista.map((p) => { const s = separando ? situacaoSeparar(p, area) : situacaoPag(p); const feito = separando ? ts(p) : p.pago; const parte = separando && p.area === "geral"; return `<tr class="${p.pago ? "row-pago" : ""}">
       <td>${separando
-        ? `<input type="checkbox" class="pg-check" data-act="pg-separar" data-id="${p.id}" ${feito ? "checked" : ""} ${p.pago ? "disabled" : ""} title="${p.pago ? "Já pago em Negócio todo" : feito ? "Desmarcar separação" : "Marcar como separado"}" />`
+        ? `<input type="checkbox" class="pg-check" data-act="pg-separar" data-id="${p.id}" ${parte ? `data-area="${area}"` : ""} ${feito ? "checked" : ""} ${p.pago ? "disabled" : ""} title="${p.pago ? "Já pago em Negócio todo" : feito ? "Desmarcar separação" : "Marcar como separado"}" />`
         : `<input type="checkbox" class="pg-check" data-act="pg-toggle" data-id="${p.id}" ${p.pago ? "checked" : ""} title="${p.pago ? "Marcar como pendente" : "Marcar como pago"}" />`}</td>
       <td>${p.vencimento ? ddmm(p.vencimento) : "—"}</td><td><b>${esc(p.descricao)}</b>${p.auto ? ` <span class="badge b-gold" title="${p.travado ? "Valor travado (editado à mão)" : "Gerada a partir dos custos"}">${p.travado ? "auto · travada" : "auto"}</span>` : ""}</td><td><span class="badge b-gray">${esc(p.categoria)}</span></td><td class="hint">${AREA_LABEL[p.area] || ""}</td>
-      <td class="num"><b>${brl(p.valor)}</b></td>
+      <td class="num"><b>${brl(vv(p))}</b>${parte ? `<div class="hint">parte ${area === "pacoca" ? "da paçoca" : "dos doces"} (${pct(fracArea(p, area) * 100)}) de ${brl(p.valor)}</div>` : ""}</td>
       ${area === "geral" && ui.pgTipo === "pagar" ? `<td>${sepBadge(p)}</td>` : ""}
-      <td><span class="badge b-${s.c}">${s.t}</span>${p.pago && p.dataPago ? ` <span class="hint">em ${ddmm(p.dataPago)}</span>` : separando && p.separado && p.dataSeparado ? ` <span class="hint">em ${ddmm(p.dataSeparado)}</span>` : ""}</td>
+      <td><span class="badge b-${s.c}">${s.t}</span>${p.pago && p.dataPago ? ` <span class="hint">em ${ddmm(p.dataPago)}</span>` : separando && (parte ? p.sepArea?.[area]?.data : p.separado && p.dataSeparado) ? ` <span class="hint">em ${ddmm(parte ? p.sepArea[area].data : p.dataSeparado)}</span>` : ""}</td>
       <td>${rowActions("pag", p.id)}</td></tr>`; }).join("")}
-    </tbody><tfoot><tr><td colspan="5">Total</td><td class="num">${brl(sum(lista, (p) => +p.valor || 0))}</td><td colspan="${area === "geral" && ui.pgTipo === "pagar" ? 3 : 2}"></td></tr></tfoot></table></div>`
+    </tbody><tfoot><tr><td colspan="5">Total</td><td class="num">${brl(sum(lista, vv))}</td><td colspan="${area === "geral" && ui.pgTipo === "pagar" ? 3 : 2}"></td></tr></tfoot></table></div>`
     : `<div class="empty">Nenhuma conta ${ui.pgStatus === "pendente" ? (separando ? "a separar" : "pendente") : ""} aqui.<br/><br/><button class="btn btn-primary" data-act="new-pag">${icon("plus")}Adicionar conta</button></div>`}
   </div>`;
 }
@@ -2451,8 +2485,8 @@ function contasAutomaticas() {
     acumula("Insumos", "pacoca", m, insumosReg(p), `pac:${p.id}:ins`);
     acumula("Notas fiscais (NF-e)", "pacoca", m, impostoReg(p), `pac:${p.id}:nfe`);
   });
-  db.vendas.filter((w) => w.inicio >= desde).forEach((w) => {
-    const m = monthOf(w.inicio), doces = (+w.cxP || 0) * unidadesCaixa("P") + (+w.cxG || 0) * unidadesCaixa("G");
+  db.vendas.filter((w) => w.fim >= desde).forEach((w) => {
+    const m = monthOf(w.fim), doces = (+w.cxP || 0) * unidadesCaixa("P") + (+w.cxG || 0) * unidadesCaixa("G");
     acumula("Mão de obra", "doces", m, doces * paramVal("maoObraDoce"), `doc:${w.id}:mo`);
     acumula("Gasolina", "doces", m, w.gasolina, `doc:${w.id}:gas`);
     acumula("Insumos", "doces", m, w.insumos, `doc:${w.id}:ins`);
@@ -3297,9 +3331,12 @@ function onChange(e) {
   }
   if (act === "pg-auto-desde" && el.value) { db.config.contasAutoDesde = el.value; save(); render(); toast(`Contas automáticas a partir de ${ddmm(el.value)}`); }
   if (act === "pg-separar") {
-    const p = db.pagamentos.find((x) => x.id === el.dataset.id);
-    Object.assign(p, el.checked ? { separado: true, valorSeparado: +p.valor || 0, dataSeparado: hojeISO() } : { separado: false, valorSeparado: 0, dataSeparado: null });
-    save(); render(); toast(el.checked ? `Separado: ${brl(p.valor)} · ${p.descricao}` : `Voltou para "a separar": ${p.descricao}`);
+    const p = db.pagamentos.find((x) => x.id === el.dataset.id), ar = el.dataset.area;
+    if (ar) {
+      p.sepArea = { ...(p.sepArea || {}) };
+      if (el.checked) p.sepArea[ar] = { valor: parteConta(p, ar), data: hojeISO() }; else delete p.sepArea[ar];
+    } else Object.assign(p, el.checked ? { separado: true, valorSeparado: +p.valor || 0, dataSeparado: hojeISO() } : { separado: false, valorSeparado: 0, dataSeparado: null });
+    save(); render(); toast(el.checked ? `Separado: ${brl(ar ? parteConta(p, ar) : p.valor)} · ${p.descricao}` : `Voltou para "a separar": ${p.descricao}`);
   }
   if (act === "pg-toggle") {
     const p = db.pagamentos.find((x) => x.id === el.dataset.id);
