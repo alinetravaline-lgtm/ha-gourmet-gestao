@@ -2023,6 +2023,48 @@ function painelPedidoHtml(area, dias) {
     ${ped.obs ? `<div class="pp-obs"><b>Observações:</b> ${esc(ped.obs)}</div>` : ""}
   </div>`;
 }
+// Doces: média histórica de caixas por semana e preenchimento automático do fim de semana
+// (total de caixas → % Cx G / Cx P → % sábado / domingo; vendas só no sábado e no domingo)
+const autoPedido = () => { const p = pedidosDe("doces"); return (p.auto = { total: 0, pctG: 70, pctSab: 40, ...(p.auto || {}) }); };
+function fimDeSemanaPedido(dias) {
+  const iSab = dias.findIndex((d) => new Date(d.data + "T12:00:00").getDay() === 6);
+  const sab = iSab >= 0 ? dias[iSab].data : null;
+  const dom = sab && iSab + 1 < dias.length ? dias[iSab + 1].data : dias.find((d) => new Date(d.data + "T12:00:00").getDay() === 0)?.data || null;
+  return { sab, dom };
+}
+function divisaoAuto(total, pctG, pctSab) {
+  const sabT = Math.round((total * pctSab) / 100), domT = total - sabT;
+  const g = (t) => Math.round((t * pctG) / 100);
+  return { sab: { G: g(sabT), P: sabT - g(sabT) }, dom: { G: g(domT), P: domT - g(domT) } };
+}
+function preencherFimDeSemana(total) {
+  const a = autoPedido(), dias = diasPedido("doces"), { sab, dom } = fimDeSemanaPedido(dias);
+  if (!sab || !dom) { toast("Não há sábado e domingo nesses 7 dias"); return; }
+  a.total = Math.max(0, Math.round(total));
+  const div = divisaoAuto(a.total, +a.pctG, +a.pctSab), plan = pedidosDe("doces").dias;
+  plan[sab] = div.sab; plan[dom] = div.dom;
+  save(); render();
+  toast(`Preenchido: sábado ${div.sab.G + div.sab.P} cx · domingo ${div.dom.G + div.dom.P} cx`);
+}
+function historicoPedidoHtml(dias) {
+  const { semanas, geral } = mediaHistoricaSemanas(), a = autoPedido(), { sab, dom } = fimDeSemanaPedido(dias);
+  const tot = (x) => Math.round(x.P + x.G), sugestao = a.total || tot(geral);
+  const div = divisaoAuto(sugestao, +a.pctG, +a.pctSab);
+  return `<div class="card mt"><div class="card-head"><div><h3>Média histórica e preenchimento automático</h3><div class="sub">Caixas vendidas por semana (Outbound) · ${geral.n} fins de semana registrados</div></div></div>
+    ${geral.n ? `<div class="hist-grid" style="grid-template-columns:repeat(auto-fill,minmax(104px,1fr))">${[{ rot: "Média geral", x: geral, val: 0 }, ...semanas.map((s) => ({ rot: `${s.sem}ª semana${s.semDados ? " (sem dados)" : ""}`, x: s, val: s.sem }))].map((o) => `
+      <button class="stat ped-media" data-act="ped-media" data-val="${tot(o.x)}" title="Usar ${tot(o.x)} caixas"><small>${o.rot}</small><strong>${int(tot(o.x))} caixas</strong><div class="hint">${int(Math.round(o.x.G))} G · ${int(Math.round(o.x.P))} P</div></button>`).join("")}</div>
+      <div class="hint" style="margin:6px 0 12px">Clique numa média para usar como total.</div>` : '<div class="hint">Ainda não há histórico de caixas por semana.</div>'}
+    <div class="sim-row" style="grid-template-columns:1fr 110px"><span><b>Total de caixas do fim de semana</b></span>${numIn("ped-auto", sugestao, 'data-key="total"')}</div>
+    <div class="sim-row" style="grid-template-columns:1fr 110px"><span>% Cx G <span class="hint">(o resto é Cx P)</span></span>${numIn("ped-auto", a.pctG, 'data-key="pctG"')}</div>
+    <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>% no sábado <span class="hint">(domingo: ${fmtQtd(100 - a.pctSab)}%)</span></span>${numIn("ped-auto", a.pctSab, 'data-key="pctSab"')}</div>
+    <ul class="recipe-ings mt">
+      <li><span>Sábado ${sab ? ddmm(sab) : "—"}</span><span>${int(div.sab.G)} Cx G + ${int(div.sab.P)} Cx P</span><span><b>${int(div.sab.G + div.sab.P)} cx</b></span></li>
+      <li><span>Domingo ${dom ? ddmm(dom) : "—"}</span><span>${int(div.dom.G)} Cx G + ${int(div.dom.P)} Cx P</span><span><b>${int(div.dom.G + div.dom.P)} cx</b></span></li>
+    </ul>
+    <button class="btn btn-primary mt" data-act="ped-auto-preencher" style="width:100%">Preencher sábado e domingo</button>
+    <div class="hint" style="margin-top:8px">Preenche só o sábado e o domingo dos dias mostrados (substitui o que estiver neles). Depois você pode ajustar qualquer dia à mão na tabela.</div>
+  </div>`;
+}
 function viewPedidos(area) {
   const dias = diasPedido(area), ped = pedidosDe(area), doces = area !== "pacoca";
   if (ui.pedPrint) {
@@ -2040,8 +2082,9 @@ function viewPedidos(area) {
       <label class="hint" style="display:block;margin-top:12px">Observações para a produção<textarea data-act="ped-obs" data-area="${area}" rows="3" style="width:100%;margin-top:4px">${esc(ped.obs || "")}</textarea></label>
       <div class="hint" style="margin-top:8px">Mão de obra: ${doces ? `${brl(paramVal("maoObraDoce"))} por doce (Personalizar custos)` : `${brl(moPorPacote())} por pacote (Paçoca › Personalizar custos)`}. As quantidades ficam salvas e sincronizadas.</div>
     </div>
-    <div class="card"><div class="card-head"><div><h3>Painel para enviar</h3><div class="sub">Tire o print ("Tela para print") e clique em "Enviar pedido": gera as contas de mão de obra e insumos e baixa o material do estoque</div></div></div>
+    <div><div class="card"><div class="card-head"><div><h3>Painel para enviar</h3><div class="sub">Tire o print ("Tela para print") e clique em "Enviar pedido": gera as contas de mão de obra e insumos e baixa o material do estoque</div></div></div>
       ${painelPedidoHtml(area, dias)}</div>
+      ${doces ? historicoPedidoHtml(dias) : ""}</div>
   </div>
   ${pedidosEnviadosHtml(area)}`;
 }
@@ -3436,6 +3479,8 @@ function onClick(e) {
     case "sim-zerar": db.sim.qtd = {}; save(); break;
     case "ped-print": ui.pedPrint = !ui.pedPrint; window.scrollTo(0, 0); break;
     case "ped-enviar": return enviarPedido(val);
+    case "ped-media": { autoPedido().total = +val || 0; save(); break; }
+    case "ped-auto-preencher": return preencherFimDeSemana(autoPedido().total || Math.round(mediaHistoricaSemanas().geral.P + mediaHistoricaSemanas().geral.G));
     case "ped-cancelar": return cancelarPedido(id);
     case "ped-copiar": {
       const txt = textoPedido(val, diasPedido(val));
@@ -3521,6 +3566,7 @@ function onChange(e) {
     if (!Object.values(d[dia]).some((v) => +v)) delete d[dia];
     save(); render();
   }
+  if (act === "ped-auto") { const a = autoPedido(), k = el.dataset.key; a[k] = Math.max(0, k === "total" ? Math.round(parseNum(el.value)) : Math.min(100, parseNum(el.value))); save(); render(); }
   if (act === "ped-ini") { ui.pedIni = ui.pedIni || {}; ui.pedIni[el.dataset.area] = el.value || hojeISO(); render(); }
   if (act === "ped-obs") { pedidosDe(el.dataset.area).obs = el.value.trim(); save(); render(); }
   if (act === "set-dremesger") { ui.dreMesGer = +el.value; render(); }

@@ -494,3 +494,5 @@ body.ped-print .main { margin-left: 0 !important; }
   .pp-tab th, .pp-tab td { padding: 6px 4px; font-size: 11.5px; letter-spacing: 0; }
   .pp-tab th { font-size: 9.5px; }
 }
+button.stat.ped-media { text-align: left; cursor: pointer; border: 1px solid transparent; font: inherit; }
+button.stat.ped-media:hover { border-color: var(--gold, #c8963e); }
