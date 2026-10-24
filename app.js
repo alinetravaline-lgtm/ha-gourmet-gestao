@@ -670,10 +670,10 @@ function viewPersonalizar() {
     <div class="grid g-3">${Object.entries(db.canais).map(([k, c]) => `
       <div class="prod">
         <h4>${k}</h4>
-        <div class="sim-row" style="grid-template-columns:1fr 90px"><span>Meta mínima de margem (%)</span>${numIn("can-min", c.alvoMin, `data-canal="${k}"`)}</div>
-        <div class="sim-row" style="grid-template-columns:1fr 90px"><span>Meta máxima de margem (%)</span>${numIn("can-max", c.alvoMax, `data-canal="${k}"`)}</div>
+        <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(50px,90px)"><span>Meta mínima de margem (%)</span>${numIn("can-min", c.alvoMin, `data-canal="${k}"`)}</div>
+        <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(50px,90px)"><span>Meta máxima de margem (%)</span>${numIn("can-max", c.alvoMax, `data-canal="${k}"`)}</div>
         <div class="hint" style="margin-top:4px"><b>Taxas sobre o preço</b></div>
-        ${(c.taxas || []).map((t, i) => `<div class="sim-row" style="grid-template-columns:1fr 80px 34px">
+        ${(c.taxas || []).map((t, i) => `<div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(44px,80px) 34px">
           <input data-act="tx-nome" data-canal="${k}" data-i="${i}" value="${esc(t.nome)}" style="text-align:left" />${numIn("tx-pct", t.pct, `data-canal="${k}" data-i="${i}"`)}
           <button class="btn btn-ghost btn-sm btn-danger" data-act="del-taxa" data-val="${k}" data-i="${i}">${icon("trash")}</button></div>`).join("") || '<div class="hint">Nenhuma taxa neste canal.</div>'}
         <button class="btn btn-sm" data-act="add-taxa" data-val="${k}">${icon("plus")}Adicionar taxa</button>
@@ -1165,8 +1165,8 @@ function viewSimulador() {
         <input inputmode="numeric" data-act="sim-qtd" data-id="${p.id}" value="${q || ""}" placeholder="0" />
         <span class="num" data-simrec="${p.id}">${brl(rec)}</span><span class="num" data-simluc="${p.id}">${brl(l)}</span></div>`).join("")}
       <h3 style="font-size:14px;margin:22px 0 8px">Despesas fixas por semana</h3>
-      ${Object.entries(s.fixos).map(([k, v]) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(k)}</span><input inputmode="decimal" data-act="sim-fixo" data-key="${esc(k)}" value="${String(v || "").replace(".", ",")}" placeholder="0" /></div>`).join("")}
-      <div class="sim-row" style="grid-template-columns:1fr 140px;border:0"><span><b>Semanas de venda no mês</b></span><input inputmode="numeric" data-act="sim-semanas" value="${s.semanas}" /></div>
+      ${Object.entries(s.fixos).map(([k, v]) => `<div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(77px,140px)"><span>${esc(k)}</span><input inputmode="decimal" data-act="sim-fixo" data-key="${esc(k)}" value="${String(v || "").replace(".", ",")}" placeholder="0" /></div>`).join("")}
+      <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(77px,140px);border:0"><span><b>Semanas de venda no mês</b></span><input inputmode="numeric" data-act="sim-semanas" value="${s.semanas}" /></div>
     </div>
     <div class="card" id="simResult">${simResultHtml()}</div>
   </div>
@@ -1533,7 +1533,7 @@ function viewDre() {
   </div>
   <div class="grid g-2 mt">
     <div class="card"><div class="card-head"><div><h3>Despesas fixas mensais</h3><div class="sub">Entram no DRE em todos os meses com movimento</div></div><button class="btn btn-sm" data-act="new-fixo">${icon("plus")}Adicionar</button></div>
-      ${db.fixos.map((f) => `<div class="sim-row" style="grid-template-columns:1fr 140px 34px"><span>${esc(f.nome)}</span><input inputmode="decimal" data-act="set-fixo" data-id="${f.id}" value="${String(f.valor || "").replace(".", ",")}" placeholder="0,00" />
+      ${db.fixos.map((f) => `<div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(77px,140px) 34px"><span>${esc(f.nome)}</span><input inputmode="decimal" data-act="set-fixo" data-id="${f.id}" value="${String(f.valor || "").replace(".", ",")}" placeholder="0,00" />
         <button class="btn btn-ghost btn-sm btn-danger" data-act="del-fixo" data-id="${f.id}">${icon("trash")}</button></div>`).join("")}
       <div class="recipe-total" style="padding-top:14px"><span>Total por mês</span><span>${brl(totalFixos)}</span></div>
     </div>
@@ -1739,8 +1739,8 @@ function viewDreGeral() {
   </div>
   <div class="grid g-2 mt">
     <div class="card"><div class="card-head"><div><h3>Impostos e contabilidade</h3><div class="sub">Valores do negócio todo · geram as contas a pagar automaticamente</div></div><button class="btn btn-sm" data-act="ig-add">${icon("plus")}Adicionar</button></div>
-      <div class="sim-row" style="grid-template-columns:1fr 90px auto"><span><b>DAS</b> <span class="hint">% sobre o faturamento bruto</span></span>${numIn("ig-das", dasPct())}<label class="hint" style="display:flex;gap:4px;align-items:center;white-space:nowrap">dia ${numIn("ig-dasdia", +impGerais().dasDia || 20, `style="width:56px"`)}</label></div>
-      ${fixos.map((f) => `<div class="sim-row" style="grid-template-columns:minmax(0,1fr) 100px auto 34px">
+      <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(50px,90px) auto"><span><b>DAS</b> <span class="hint">% sobre o faturamento bruto</span></span>${numIn("ig-das", dasPct())}<label class="hint" style="display:flex;gap:4px;align-items:center;white-space:nowrap">dia ${numIn("ig-dasdia", +impGerais().dasDia || 20, `style="width:56px"`)}</label></div>
+      ${fixos.map((f) => `<div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(55px,100px) auto 34px">
         <input data-act="ig-nome" data-id="${f.id}" value="${esc(f.nome)}" style="text-align:left" />${numIn("ig-val", f.valor, `data-id="${f.id}"`)}
         <label class="hint" style="display:flex;gap:4px;align-items:center;white-space:nowrap">dia ${numIn("ig-dia", +f.dia || 10, `data-id="${f.id}" style="width:56px"`)}</label>
         <button class="btn btn-ghost btn-sm btn-danger" data-act="ig-del" data-id="${f.id}">${icon("trash")}</button></div>
@@ -1825,7 +1825,7 @@ function fichaPacoteHtml() {
   return `<ul class="recipe-ings">${itens.map((i) => `<li><span>${esc(i.nome)} <a class="badge b-gold" href="#insumos-pacoca">insumo</a></span><span>${fmtQtd(consumoPacote(i))} × ${brlU(+i.custo || 0)}</span><span>${brl(consumoPacote(i) * (+i.custo || 0))}</span></li>`).join("")}
     ${impostoVendaPacote() ? `<li><span>Impostos e contabilidade <a class="badge b-gold" href="#dre-geral">imposto</a></span><span>${pct(cargaImpostosPct("pacoca"))} de ${brl((+db.config.precoPacoca || 0) * (1 - naoRecPctPacoca() / 100))} recebido</span><span>${brl(impostoVendaPacote())}</span></li>` : ""}
     ${comImposto.map((i) => `<li><span>Imposto NF-e · ${esc(i.nome)} <span class="badge b-gray">imposto</span></span><span>${brl(+i.imposto)} ÷ ${fmtQtd(+i.pacote || 1)} × ${fmtQtd(consumoPacote(i))}</span><span>${brl(consumoPacote(i) * impostoUnitItem(i))}</span></li>`).join("")}</ul>
-    ${db.pacocaCusto.map((c) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(c.nome)} <span class="hint">(por pacote)</span></span><input inputmode="decimal" data-act="pac-custo" data-id="${c.id}" value="${String(c.valor).replace(".", ",")}" /></div>`).join("")}`;
+    ${db.pacocaCusto.map((c) => `<div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(77px,140px)"><span>${esc(c.nome)} <span class="hint">(por pacote)</span></span><input inputmode="decimal" data-act="pac-custo" data-id="${c.id}" value="${String(c.valor).replace(".", ",")}" /></div>`).join("")}`;
 }
 function formItemPacocaInsumo(i) {
   openForm({
@@ -1916,7 +1916,7 @@ function viewDrePacoca() {
   </div>
   <div class="grid g-2 mt">
     <div class="card"><div class="card-head"><div><h3>Despesas fixas da paçoca</h3><div class="sub">Entram no DRE da paçoca em todos os meses com movimento</div></div><button class="btn btn-sm" data-act="new-fixo" data-val="pacoca">${icon("plus")}Adicionar</button></div>
-      ${db.fixosPacoca.map((f) => `<div class="sim-row" style="grid-template-columns:1fr 140px 34px"><span>${esc(f.nome)}</span><input inputmode="decimal" data-act="set-fixo" data-area="pacoca" data-id="${f.id}" value="${String(f.valor || "").replace(".", ",")}" placeholder="0,00" />
+      ${db.fixosPacoca.map((f) => `<div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(77px,140px) 34px"><span>${esc(f.nome)}</span><input inputmode="decimal" data-act="set-fixo" data-area="pacoca" data-id="${f.id}" value="${String(f.valor || "").replace(".", ",")}" placeholder="0,00" />
         <button class="btn btn-ghost btn-sm btn-danger" data-act="del-fixo" data-val="pacoca" data-id="${f.id}">${icon("trash")}</button></div>`).join("")}
       <div class="recipe-total" style="padding-top:14px"><span>Total por mês</span><span>${brl(tf)}</span></div>
       <div class="hint" style="margin-top:8px">Contador, impostos e pró-labore do negócio todo ficam no DRE dos Doces Finos (despesas gerais).</div>
@@ -1966,7 +1966,7 @@ function viewSimPacoca() {
       ${linha(`% não recebido · pix confiança <span class="hint">(histórico: ${pct(h.nr)})</span>`, "naoRecPct", s.naoRecPct)}
       ${linha("Gasolina por dia (R$)", "gasolinaDia", s.gasolinaDia, "decimal", false)}
       <h3 style="font-size:14px;margin:22px 0 8px">Outras despesas por semana</h3>
-      ${Object.entries(s.fixos || {}).map(([k, v]) => `<div class="sim-row" style="grid-template-columns:1fr 140px"><span>${esc(k)}</span><input inputmode="decimal" data-act="pacsim-fixo" data-key="${esc(k)}" value="${String(v || "").replace(".", ",")}" placeholder="0" /></div>`).join("")}
+      ${Object.entries(s.fixos || {}).map(([k, v]) => `<div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(77px,140px)"><span>${esc(k)}</span><input inputmode="decimal" data-act="pacsim-fixo" data-key="${esc(k)}" value="${String(v || "").replace(".", ",")}" placeholder="0" /></div>`).join("")}
       <div class="hint" style="margin-top:8px">Semana = 6 dias de venda. Mão de obra, insumos e NF-e entram por pacote; impostos (DAS, DARF, contabilidade) entram com os valores reais.</div>
     </div>
     <div class="card" id="pacSim">${pacSimHtml()}</div>
@@ -2054,9 +2054,9 @@ function historicoPedidoHtml(dias) {
     ${geral.n ? `<div class="hist-grid" style="grid-template-columns:repeat(auto-fill,minmax(104px,1fr))">${[{ rot: "Média geral", x: geral, val: 0 }, ...semanas.map((s) => ({ rot: `${s.sem}ª semana${s.semDados ? " (sem dados)" : ""}`, x: s, val: s.sem }))].map((o) => `
       <button class="stat ped-media" data-act="ped-media" data-val="${tot(o.x)}" title="Usar ${tot(o.x)} caixas"><small>${o.rot}</small><strong>${int(tot(o.x))} caixas</strong><div class="hint">${int(Math.round(o.x.G))} G · ${int(Math.round(o.x.P))} P</div></button>`).join("")}</div>
       <div class="hint" style="margin:6px 0 12px">Clique numa média para usar como total.</div>` : '<div class="hint">Ainda não há histórico de caixas por semana.</div>'}
-    <div class="sim-row" style="grid-template-columns:1fr 110px"><span><b>Total de caixas do fim de semana</b></span>${numIn("ped-auto", sugestao, 'data-key="total"')}</div>
-    <div class="sim-row" style="grid-template-columns:1fr 110px"><span>% Cx G <span class="hint">(o resto é Cx P)</span></span>${numIn("ped-auto", a.pctG, 'data-key="pctG"')}</div>
-    <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>% no sábado <span class="hint">(domingo: ${fmtQtd(100 - a.pctSab)}%)</span></span>${numIn("ped-auto", a.pctSab, 'data-key="pctSab"')}</div>
+    <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(61px,110px)"><span><b>Total de caixas do fim de semana</b></span>${numIn("ped-auto", sugestao, 'data-key="total"')}</div>
+    <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(61px,110px)"><span>% Cx G <span class="hint">(o resto é Cx P)</span></span>${numIn("ped-auto", a.pctG, 'data-key="pctG"')}</div>
+    <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(61px,110px);border:0"><span>% no sábado <span class="hint">(domingo: ${fmtQtd(100 - a.pctSab)}%)</span></span>${numIn("ped-auto", a.pctSab, 'data-key="pctSab"')}</div>
     <ul class="recipe-ings mt">
       <li><span>Sábado ${sab ? ddmm(sab) : "—"}</span><span>${int(div.sab.G)} Cx G + ${int(div.sab.P)} Cx P</span><span><b>${int(div.sab.G + div.sab.P)} cx</b></span></li>
       <li><span>Domingo ${dom ? ddmm(dom) : "—"}</span><span>${int(div.dom.G)} Cx G + ${int(div.dom.P)} Cx P</span><span><b>${int(div.dom.G + div.dom.P)} cx</b></span></li>
@@ -2397,14 +2397,14 @@ function viewVendedorPacoca() {
       <button class="combo-btn normal" data-act="vend-normal" data-val="U"><span class="combo-nome">Entregar 1 pacote</span><span class="combo-preco">${brl(preco)}</span><span class="combo-desc">${esc(t?.desc || "")}</span></button>
       ${db.vendedor.combos[area].map((c) => `<button class="combo-btn" data-act="vend-combo" data-id="${c.id}"><span class="promo-tag">PROMO</span><span class="combo-nome">${esc(c.nome)}</span><span class="combo-preco">${brl(c.preco)}</span><span class="combo-desc">${esc(descItens(area, c.itens))}</span></button>`).join("")}
     </div>
-    <div class="sim-row mt" style="grid-template-columns:1fr 90px 150px;border:0"><span>Entregar vários de uma vez</span>
+    <div class="sim-row mt" style="grid-template-columns:minmax(0,1fr) minmax(50px,90px) minmax(82px,150px);border:0"><span>Entregar vários de uma vez</span>
       <input id="pacQtdLote" class="tbl-input" style="width:100%" inputmode="numeric" placeholder="qtd" />
       <button class="btn btn-sm btn-primary" data-act="pac-entregar-lote">Entregar pacotes</button></div>
 
     <div class="card-head" style="margin-top:22px"><div><h3>2. Registrar pagamento recebido</h3><div class="sub">Quando o cliente pagar (no dia ou depois), registre aqui</div></div></div>
     <div class="pag-row">${["pix", "especie"].map((k) => `<button class="pag-btn ${pag === k ? "active" : ""}" data-act="vend-pag" data-val="${k}">${PAGS[k]}</button>`).join("")}</div>
     <div class="chip-row mt">${[1, 2, 3, 5].map((n) => `<button class="btn" data-act="pac-receber" data-val="${preco * n}">+ ${brl(preco * n)}</button>`).join("")}</div>
-    <div class="sim-row mt" style="grid-template-columns:1fr 110px auto;border:0"><span>Outro valor</span>
+    <div class="sim-row mt" style="grid-template-columns:minmax(0,1fr) minmax(61px,110px) auto;border:0"><span>Outro valor</span>
       <input id="pacRecValor" class="tbl-input" style="width:100%" inputmode="decimal" placeholder="R$" />
       <button class="btn btn-sm btn-primary" data-act="pac-receber">Registrar em ${PAGS[pag]}</button></div>
   </div>
@@ -2829,7 +2829,7 @@ function viewEquipe() {
           <button class="btn btn-sm" data-act="eq-copiar" data-val="gest">Copiar link da gestão</button></div>
       </div>
       <div class="vend-sec">PIN da gestão</div>
-      <div class="sim-row" style="grid-template-columns:1fr 140px;border:0"><span class="hint">Pedido quando alguém tenta sair do modo vendedor</span>
+      <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(77px,140px);border:0"><span class="hint">Pedido quando alguém tenta sair do modo vendedor</span>
         <input inputmode="numeric" data-act="eq-pin" value="${esc(db.config.pinGestao || "")}" placeholder="Sem PIN" /></div>
       <button class="btn btn-sm btn-danger mt" data-act="eq-desconectar">Desconectar este aparelho da nuvem</button>
     </div>
@@ -3130,9 +3130,9 @@ function viewProjecao(area) {
     const total = sum(linhas, (l) => l.custo), faltando = linhas.filter((l) => l.falta > 0).length;
     return `<div class="grid g-21">
       <div class="card"><div class="card-head"><div><h3>Previsão de vendas</h3><div class="sub">Os mesmos números do Simulador do mês da paçoca</div></div></div>
-        <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Pacotes vendidos por dia</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="porDia" value="${s.porDia}" /></div>
-        <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Paçoquitas por pacote</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="porPacote" value="${porPacote}" /></div>
-        <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>Dias de venda no mês</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="dias" value="${s.dias}" /></div>
+        <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(61px,110px)"><span>Pacotes vendidos por dia</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="porDia" value="${s.porDia}" /></div>
+        <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(61px,110px)"><span>Paçoquitas por pacote</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="porPacote" value="${porPacote}" /></div>
+        <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(61px,110px);border:0"><span>Dias de venda no mês</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="projp-par" data-key="dias" value="${s.dias}" /></div>
         <ul class="recipe-ings mt">
           <li><span>Por dia</span><span>${int(s.porDia)} pacotes</span><span>${int(s.porDia * porPacote)} paçoquitas</span></li>
           <li><span><b>No mês (${int(s.dias)} dias)</b></span><span><b>${int(vendas)} pacotes</b></span><span><b>${int(vendas * porPacote)} paçoquitas</b></span></li>
@@ -3151,14 +3151,14 @@ function viewProjecao(area) {
   return `${histSemanasHtml(modo === "hist" ? sel : [])}
   <div class="grid g-21 mt">
     <div class="card"><div class="card-head"><div><h3>Previsão de vendas</h3><div class="sub">Base para o pedido de compra</div></div></div>
-      <div class="sim-row" style="grid-template-columns:1fr 230px"><span>Basear a previsão em</span>
+      <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(127px,230px)"><span>Basear a previsão em</span>
         <select class="inline" data-act="proj-modo"><option value="hist" ${modo === "hist" ? "selected" : ""}>Média histórica por semana</option><option value="fixo" ${modo === "fixo" ? "selected" : ""}>Valor fixo (caixas e % Cx G)</option></select></div>
       ${modo === "hist" ? `
-      <div class="sim-row" style="grid-template-columns:1fr 230px;border:0"><span>Período do pedido</span>
+      <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(127px,230px);border:0"><span>Período do pedido</span>
         <select class="inline" data-act="proj-periodo"><option value="mes" ${sel.length === 4 ? "selected" : ""}>Mês inteiro (1ª a 4ª semana)</option>${[1, 2, 3, 4].map((s) => `<option value="${s}" ${sel.length === 1 && sel[0] === s ? "selected" : ""}>Só a ${s}ª semana</option>`).join("")}</select></div>` : `
-      <div class="sim-row" style="grid-template-columns:1fr 110px"><span>Caixas por fim de semana</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="caixasFds" value="${p.caixasFds}" /></div>
-      <div class="sim-row" style="grid-template-columns:1fr 110px"><span>% Cx G <span class="hint">(o restante é Cx P: ${fmtQtd(100 - p.pctG)}%)</span></span><input class="tbl-input" style="width:100%" inputmode="decimal" data-act="proj-par" data-key="pctG" value="${p.pctG}" /></div>
-      <div class="sim-row" style="grid-template-columns:1fr 110px;border:0"><span>Fins de semana no período</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="fds" value="${p.fds}" /></div>`}
+      <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(61px,110px)"><span>Caixas por fim de semana</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="caixasFds" value="${p.caixasFds}" /></div>
+      <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(61px,110px)"><span>% Cx G <span class="hint">(o restante é Cx P: ${fmtQtd(100 - p.pctG)}%)</span></span><input class="tbl-input" style="width:100%" inputmode="decimal" data-act="proj-par" data-key="pctG" value="${p.pctG}" /></div>
+      <div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(61px,110px);border:0"><span>Fins de semana no período</span><input class="tbl-input" style="width:100%" inputmode="numeric" data-act="proj-par" data-key="fds" value="${p.fds}" /></div>`}
       <ul class="recipe-ings mt">
         <li><span>Média por fim de semana</span><span>${int(r.porFdsG)} Cx G + ${int(r.porFdsP)} Cx P</span><span>${int(r.porFdsG * infoCaixa("G").un + r.porFdsP * infoCaixa("P").un)} doces</span></li>
         <li><span>No período (${int(r.fds)} fds)</span><span>${int(r.G)} Cx G + ${int(r.P)} Cx P</span><span>${int(r.G * infoCaixa("G").un + r.P * infoCaixa("P").un)} doces</span></li>
