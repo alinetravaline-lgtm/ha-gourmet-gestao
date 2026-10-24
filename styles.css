@@ -473,3 +473,24 @@ tr.row-comprar td:first-child b { color: var(--red); }
 .sim-row.quebra-m select { width: 100%; min-width: 0; }
 .sim-row.quebra-m > span:first-child { grid-column: 1 / -1; }
 .prod-stats .stat strong { white-space: nowrap; }
+
+/* Pedidos de produção: painel para print */
+.pedido-print { background: #fff; }
+.pp-head { display: flex; align-items: center; gap: 14px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 2px solid var(--line); }
+.pp-head h2 { margin: 0; font-size: 18px; }
+.pp-head p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.pp-total { margin-left: auto; text-align: right; background: #3b2418; color: #fff; border-radius: 12px; padding: 10px 14px; }
+.pp-total small { display: block; font-size: 11px; opacity: .8; }
+.pp-total strong { display: block; font-size: 22px; white-space: nowrap; }
+.pp-sub { font-size: 14px; margin: 18px 0 8px; }
+.pp-tab td, .pp-tab th { padding: 8px 10px; }
+.pp-obs { margin-top: 14px; padding: 10px 12px; background: #faf7f3; border-radius: 10px; font-size: 13px; }
+.pp-solo { max-width: 860px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 22px; box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+body.ped-print .sidebar, body.ped-print .overlay { display: none !important; }
+body.ped-print .main { margin-left: 0 !important; }
+@media (max-width: 760px) { .pp-head { flex-wrap: wrap; } .pp-total { margin-left: 0; width: 100%; text-align: left; } }
+@media (max-width: 760px) {
+  .pp-solo { padding: 14px; }
+  .pp-tab th, .pp-tab td { padding: 6px 4px; font-size: 11.5px; letter-spacing: 0; }
+  .pp-tab th { font-size: 9.5px; }
+}

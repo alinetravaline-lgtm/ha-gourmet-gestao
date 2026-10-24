@@ -42,6 +42,7 @@ const ICONS = {
   check: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
   money: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>',
   percent: '<path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+  clip: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/>',
   cart: '<circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2 2h2l2.7 12.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L22 7H5.1"/>',
   wallet: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
@@ -575,6 +576,7 @@ const PAGES = [
   { id: "inicio", label: "Início", icon: "dash", sub: "Escolha a área que deseja gerenciar" },
   { id: "pacoca-painel", area: "pacoca", label: "Painel", icon: "dash", sub: "Visão geral da paçoca", section: "Visão geral" },
   { id: "vendedor-pacoca", area: "pacoca", label: "Área do vendedor", icon: "cart", sub: "Contador rápido de vendas da paçoca", section: "Operação" },
+  { id: "pedidos-pacoca", area: "pacoca", label: "Pedidos", icon: "clip", sub: "Pedido de produção para a mão de obra terceirizada" },
   { id: "pacoca", area: "pacoca", label: "Vendas diárias", icon: "cal", sub: "Registro diário de vendas da paçoca" },
   { id: "simulador-pacoca", area: "pacoca", label: "Simulador", icon: "calc", sub: "Projete quanto vai gastar e lucrar por semana e no mês" },
   { id: "estoque-pacoca", area: "pacoca", label: "Estoque", icon: "pkg", sub: "Saldo de paçoquitas e materiais, com baixa automática das vendas" },
@@ -585,6 +587,7 @@ const PAGES = [
   { id: "equipe-pacoca", area: "pacoca", label: "Equipe & App", icon: "cart", sub: "Sincronização entre celulares e app do vendedor" },
   { id: "painel", area: "doces", label: "Painel", icon: "dash", sub: "Visão geral dos doces finos", section: "Visão geral" },
   { id: "vendedor-doces", area: "doces", label: "Área do vendedor", icon: "cart", sub: "Contador rápido de vendas com combos", section: "Operação" },
+  { id: "pedidos-doces", area: "doces", label: "Pedidos", icon: "clip", sub: "Pedido de produção para a mão de obra terceirizada" },
   { id: "vendas", area: "doces", label: "Vendas", icon: "trend", sub: "Faturamento semanal por canal de venda" },
   { id: "estoque", area: "doces", label: "Estoque", icon: "pkg", sub: "Caixas prontas, ingredientes e embalagens, com baixa automática" },
   { id: "produtos", area: "doces", label: "Produtos & Preços", icon: "tag", sub: "Custo, preço e margem de cada produto por canal" },
@@ -1972,6 +1975,76 @@ function viewSimPacoca() {
     <div id="pacGastos">${gastosHtml(gastosSimPacoca())}</div></div>`;
 }
 
+/* ---------- Pedidos de produção (mão de obra terceirizada) ---------- */
+// db.pedidos[area].dias["AAAA-MM-DD"] = { G, P } nos doces ou { U } (pacotes) na paçoca
+const DIAS_SEM = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const diaSemana = (iso) => DIAS_SEM[new Date(iso + "T12:00:00").getDay()];
+const pedidosDe = (area) => { db.pedidos = db.pedidos || {}; return (db.pedidos[area] = db.pedidos[area] || { dias: {}, obs: "" }); };
+const moPorPacote = () => +(db.pacocaCusto.find((c) => /m[ãa]o/i.test(c.nome))?.valor) || 0;
+// Dias do pedido (7 a partir da data escolhida) com quantidades, doces/paçoquitas e mão de obra de cada dia
+function diasPedido(area) {
+  ui.pedIni = ui.pedIni || {};
+  const ini = ui.pedIni[area] || hojeISO(), ped = pedidosDe(area);
+  return Array.from({ length: 7 }, (_, i) => {
+    const data = addDias(ini, i), q = ped.dias[data] || {};
+    if (area === "pacoca") {
+      const U = +q.U || 0;
+      return { data, U, unidades: U * (+db.pacocaSim.porPacote || 1), mo: U * moPorPacote() };
+    }
+    const G = +q.G || 0, P = +q.P || 0, doces = G * unidadesCaixa("G") + P * unidadesCaixa("P");
+    const sabores = {};
+    [["G", G], ["P", P]].forEach(([k, n]) => Object.entries(caixaDe(k).itens).forEach(([s, qt]) => { if (n * (+qt || 0)) sabores[s] = (sabores[s] || 0) + n * (+qt || 0); }));
+    return { data, G, P, doces, sabores, mo: doces * paramVal("maoObraDoce") };
+  });
+}
+function textoPedido(area, dias) {
+  const ativos = dias.filter((d) => (area === "pacoca" ? d.U : d.G + d.P));
+  const tot = sum(ativos, (d) => d.mo), ped = pedidosDe(area);
+  const linhas = ativos.map((d) => area === "pacoca"
+    ? `• ${diaSemana(d.data)} ${ddmm(d.data)}: ${int(d.U)} pacotes (${int(d.unidades)} paçoquitas) · ${brl(d.mo)}`
+    : `• ${diaSemana(d.data)} ${ddmm(d.data)}: ${d.G ? `${int(d.G)} Cx G` : ""}${d.G && d.P ? " + " : ""}${d.P ? `${int(d.P)} Cx P` : ""} = ${int(d.doces)} doces · ${brl(d.mo)}\n   ${Object.entries(d.sabores).map(([s, n]) => `${nomeCurto(s)} ${int(n)}`).join(", ")}`);
+  return `*Pedido de produção · HA Gourmet · ${area === "pacoca" ? "Paçoca" : "Doces finos"}*\n${ddmm(dias[0].data)} a ${ddmm(dias[6].data)}\n\n${linhas.join("\n")}\n\n*Total: ${area === "pacoca" ? `${int(sum(ativos, (d) => d.U))} pacotes` : `${int(sum(ativos, (d) => d.doces))} doces`} · mão de obra ${brl(tot)}*${ped.obs ? `\n\nObs.: ${ped.obs}` : ""}`;
+}
+function painelPedidoHtml(area, dias) {
+  const ativos = dias.filter((d) => (area === "pacoca" ? d.U : d.G + d.P)), ped = pedidosDe(area);
+  const totMo = sum(ativos, (d) => d.mo), doces = area !== "pacoca";
+  const sabores = doces ? [...new Set(ativos.flatMap((d) => Object.keys(d.sabores)))] : [];
+  const unidadeMo = doces ? `${brl(paramVal("maoObraDoce"))} por doce` : `${brl(moPorPacote())} por pacote`;
+  return `<div class="pedido-print">
+    <div class="pp-head"><div class="brand-logo">H&amp;A</div><div><h2>Pedido de produção · ${doces ? "Doces finos" : "Paçoca"}</h2><p>${diaSemana(dias[0].data)} ${ddmm(dias[0].data)} a ${diaSemana(dias[6].data)} ${ddmm(dias[6].data)}</p></div>
+      <div class="pp-total"><small>Mão de obra total</small><strong>${brl(totMo)}</strong><small>${unidadeMo}</small></div></div>
+    ${ativos.length ? `<div class="table-wrap"><table class="pp-tab"><thead><tr><th>Dia</th>${doces ? "<th class=\"num\">Cx G</th><th class=\"num\">Cx P</th><th class=\"num\">Doces</th>" : "<th class=\"num\">Pacotes</th><th class=\"num\">Paçoquitas</th>"}<th class="num">Mão de obra</th></tr></thead><tbody>
+      ${ativos.map((d) => `<tr><td><b>${diaSemana(d.data)} ${ddmm(d.data)}</b></td>${doces ? `<td class="num">${int(d.G)}</td><td class="num">${int(d.P)}</td><td class="num"><b>${int(d.doces)}</b></td>` : `<td class="num"><b>${int(d.U)}</b></td><td class="num">${int(d.unidades)}</td>`}<td class="num"><b>${brl(d.mo)}</b></td></tr>`).join("")}
+      </tbody><tfoot><tr><td>Total</td>${doces ? `<td class="num">${int(sum(ativos, (d) => d.G))}</td><td class="num">${int(sum(ativos, (d) => d.P))}</td><td class="num">${int(sum(ativos, (d) => d.doces))}</td>` : `<td class="num">${int(sum(ativos, (d) => d.U))}</td><td class="num">${int(sum(ativos, (d) => d.unidades))}</td>`}<td class="num">${brl(totMo)}</td></tr></tfoot></table></div>
+    ${doces && sabores.length ? `<h3 class="pp-sub">Docinhos por sabor</h3><div class="table-wrap"><table class="pp-tab"><thead><tr><th>Sabor</th>${ativos.map((d) => `<th class="num">${diaSemana(d.data)} ${ddmm(d.data)}</th>`).join("")}<th class="num">Total</th></tr></thead><tbody>
+      ${sabores.map((s) => `<tr><td><b>${esc(s)}</b></td>${ativos.map((d) => `<td class="num">${d.sabores[s] ? int(d.sabores[s]) : "—"}</td>`).join("")}<td class="num"><b>${int(sum(ativos, (d) => d.sabores[s] || 0))}</b></td></tr>`).join("")}
+      </tbody></table></div><div class="hint" style="margin-top:6px">Composição: ${tiposArea("doces").filter((t) => db.caixas?.[t.key]).map((t) => `${esc(t.nome)} = ${esc(composicaoTxt(t.key))}`).join(" · ")}</div>` : ""}`
+    : '<div class="empty">Preencha as quantidades de cada dia ao lado.</div>'}
+    ${ped.obs ? `<div class="pp-obs"><b>Observações:</b> ${esc(ped.obs)}</div>` : ""}
+  </div>`;
+}
+function viewPedidos(area) {
+  const dias = diasPedido(area), ped = pedidosDe(area), doces = area !== "pacoca";
+  if (ui.pedPrint) {
+    setActions(`<button class="btn" data-act="ped-print">Voltar</button><button class="btn btn-primary" data-act="ped-copiar" data-val="${area}">Copiar texto</button>`);
+    return `<div class="pp-solo">${painelPedidoHtml(area, dias)}</div>`;
+  }
+  setActions(`<button class="btn" data-act="ped-copiar" data-val="${area}">Copiar texto (WhatsApp)</button><button class="btn btn-primary" data-act="ped-print">Tela para print</button>`);
+  const campo = (d, k) => `<input class="tbl-input" style="width:72px" inputmode="numeric" data-act="ped-qtd" data-area="${area}" data-dia="${d.data}" data-key="${k}" value="${d[k] || ""}" placeholder="0" />`;
+  return `<div class="grid g-21">
+    <div class="card"><div class="card-head"><div><h3>Quantidades por dia</h3><div class="sub">${doces ? "Caixas a produzir em cada dia — os docinhos por sabor saem da composição de cada caixa" : "Pacotes a produzir em cada dia"}</div></div>
+      <label class="hint" style="display:flex;align-items:center;gap:6px">A partir de <input type="date" class="inline" data-act="ped-ini" data-area="${area}" value="${dias[0].data}" /></label></div>
+      <div class="table-wrap"><table><thead><tr><th>Dia</th>${doces ? '<th class="num">Cx G</th><th class="num">Cx P</th><th class="num">Doces</th>' : '<th class="num">Pacotes</th><th class="num">Paçoquitas</th>'}<th class="num">Mão de obra</th></tr></thead><tbody>
+      ${dias.map((d) => `<tr><td><b>${diaSemana(d.data)}</b> ${ddmm(d.data)}</td>${doces ? `<td class="num">${campo(d, "G")}</td><td class="num">${campo(d, "P")}</td><td class="num">${int(d.doces)}</td>` : `<td class="num">${campo(d, "U")}</td><td class="num">${int(d.unidades)}</td>`}<td class="num"><b>${brl(d.mo)}</b></td></tr>`).join("")}
+      </tbody><tfoot><tr><td>Total</td>${doces ? `<td class="num">${int(sum(dias, (d) => d.G))}</td><td class="num">${int(sum(dias, (d) => d.P))}</td><td class="num">${int(sum(dias, (d) => d.doces))}</td>` : `<td class="num">${int(sum(dias, (d) => d.U))}</td><td class="num">${int(sum(dias, (d) => d.unidades))}</td>`}<td class="num">${brl(sum(dias, (d) => d.mo))}</td></tr></tfoot></table></div>
+      <label class="hint" style="display:block;margin-top:12px">Observações para a produção<textarea data-act="ped-obs" data-area="${area}" rows="3" style="width:100%;margin-top:4px">${esc(ped.obs || "")}</textarea></label>
+      <div class="hint" style="margin-top:8px">Mão de obra: ${doces ? `${brl(paramVal("maoObraDoce"))} por doce (Personalizar custos)` : `${brl(moPorPacote())} por pacote (Paçoca › Personalizar custos)`}. As quantidades ficam salvas e sincronizadas.</div>
+    </div>
+    <div class="card"><div class="card-head"><div><h3>Painel para enviar</h3><div class="sub">Use "Tela para print" e tire o print para mandar à produção</div></div></div>
+      ${painelPedidoHtml(area, dias)}</div>
+  </div>`;
+}
+
 /* ---------- Paçoca · Custos & Compras ---------- */
 function pacSimHtml() {
   const s = db.pacocaSim, g = gastosSimPacoca(), tot = sum(g.linhas, (l) => l.mes), lucro = g.recMes - tot;
@@ -3061,7 +3134,7 @@ function viewEstoque(area) {
 }
 
 /* =================== Roteamento & eventos =================== */
-const VIEWS = { "simulador-geral": viewSimGeral, "pagamentos-geral": () => viewPagamentos("geral"), "simulador-pacoca": viewSimPacoca, "painel-geral": viewPainelGeral, "dre-geral": viewDreGeral, "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
+const VIEWS = { "pedidos-doces": () => viewPedidos("doces"), "pedidos-pacoca": () => viewPedidos("pacoca"), "simulador-geral": viewSimGeral, "pagamentos-geral": () => viewPagamentos("geral"), "simulador-pacoca": viewSimPacoca, "painel-geral": viewPainelGeral, "dre-geral": viewDreGeral, "insumos-pacoca": viewInsumosPacoca, "dre-pacoca": viewDrePacoca, estoque: () => viewEstoque("doces"), "estoque-pacoca": () => viewEstoque("pacoca"), pagamentos: () => viewPagamentos("doces"), "pagamentos-pacoca": () => viewPagamentos("pacoca"), equipe: viewEquipe, "equipe-pacoca": viewEquipe, "vendedor-doces": () => viewVendedor("doces"), "vendedor-pacoca": () => viewVendedor("pacoca"), personalizar: viewPersonalizar, inicio: viewInicio, "pacoca-painel": viewPacPainel, "pacoca-custos": viewPacCustos, painel: viewPainel, vendas: viewVendas, pacoca: viewPacoca, produtos: viewProdutos, simulador: viewSimulador, receitas: viewReceitas, insumos: viewInsumos, embalagens: viewEmbalagens, dre: viewDre };
 const AFTER = { "painel-geral": afterPainelGeral, "dre-pacoca": afterDrePacoca, "pacoca-painel": afterPacPainel, painel: afterPainel, pacoca: afterPacoca, dre: afterDre };
 let currentPage = null;
 const areaAtual = () => PAGES.find((p) => p.id === currentPage)?.area;
@@ -3102,9 +3175,11 @@ function render() {
     window.scrollTo(0, 0);
     const prev = PAGES.find((p) => p.id === currentPage);
     if (!prev || prev.area !== page.area) ui.mes = 0;
+    ui.pedPrint = false;
   }
   currentPage = page.id;
   document.body.classList.toggle("home-mode", page.id === "inicio");
+  document.body.classList.toggle("ped-print", !!ui.pedPrint && /^pedidos-/.test(page.id));
   renderNav(page);
   $("#pageTitle").textContent = page.area ? `${AREAS[page.area].nome} · ${page.label}` : page.label;
   $("#pageSub").textContent = page.sub;
@@ -3279,6 +3354,12 @@ function onClick(e) {
     }
     case "set-simcanal": db.sim.canal = val; save(); break;
     case "sim-zerar": db.sim.qtd = {}; save(); break;
+    case "ped-print": ui.pedPrint = !ui.pedPrint; window.scrollTo(0, 0); break;
+    case "ped-copiar": {
+      const txt = textoPedido(val, diasPedido(val));
+      (navigator.clipboard?.writeText(txt) || Promise.reject()).then(() => toast("Pedido copiado — cole no WhatsApp")).catch(() => { prompt("Copie o pedido:", txt); });
+      return;
+    }
     case "pacsim-hist": {
       const { meses, geral } = mediaHistoricaPacoca(), x = +val ? meses.find((y) => y.m === +val) : geral;
       if (!x) return;
@@ -3352,6 +3433,14 @@ function onChange(e) {
   if (act === "set-dremes") { ui.dreMes = +el.value; render(); }
   if (act === "set-dremespac") { ui.dreMesPac = +el.value; render(); }
   if (act === "set-pgmes") { ui.pgMes = +el.value; render(); }
+  if (act === "ped-qtd") {
+    const d = pedidosDe(el.dataset.area).dias, dia = el.dataset.dia;
+    d[dia] = { ...(d[dia] || {}), [el.dataset.key]: Math.max(0, Math.round(parseNum(el.value))) };
+    if (!Object.values(d[dia]).some((v) => +v)) delete d[dia];
+    save(); render();
+  }
+  if (act === "ped-ini") { ui.pedIni = ui.pedIni || {}; ui.pedIni[el.dataset.area] = el.value || hojeISO(); render(); }
+  if (act === "ped-obs") { pedidosDe(el.dataset.area).obs = el.value.trim(); save(); render(); }
   if (act === "set-dremesger") { ui.dreMesGer = +el.value; render(); }
   if (act === "venc-freq" || act === "venc-dia") {
     const a = el.dataset.area, cat = el.dataset.cat, r = regraVenc(a, cat);
