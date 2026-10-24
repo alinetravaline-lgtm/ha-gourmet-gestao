@@ -232,6 +232,10 @@ function migrar(data) {
     data.vencImpV1 = true;
   }
   if (data.pacocaSim && !data.pacocaSim.fixos) data.pacocaSim.fixos = { "Comissão vendedor": 0, "Alimentação vendedor": 0, Marketing: 0 };
+  if (data.pacocaSim?.fixos && !data.pacSimDiaV1) {
+    Object.keys(data.pacocaSim.fixos).forEach((k) => { data.pacocaSim.fixos[k] = Math.round(((+data.pacocaSim.fixos[k] || 0) / 6) * 100) / 100; });
+    data.pacSimDiaV1 = true;
+  }
   Object.keys(seed).forEach((k) => { if (!(k in data)) data[k] = seed[k]; });
   data.vendedor.registros = data.vendedor.registros || [];
   (data.pagamentos || []).forEach((p) => { if (p.categoria === "Fornecedor / insumos") p.categoria = "Insumos"; });
@@ -578,7 +582,7 @@ const PAGES = [
   { id: "vendedor-pacoca", area: "pacoca", label: "Área do vendedor", icon: "cart", sub: "Contador rápido de vendas da paçoca", section: "Operação" },
   { id: "pedidos-pacoca", area: "pacoca", label: "Pedidos", icon: "clip", sub: "Pedido de produção para a mão de obra terceirizada" },
   { id: "pacoca", area: "pacoca", label: "Vendas diárias", icon: "cal", sub: "Registro diário de vendas da paçoca" },
-  { id: "simulador-pacoca", area: "pacoca", label: "Simulador", icon: "calc", sub: "Projete quanto vai gastar e lucrar por semana e no mês" },
+  { id: "simulador-pacoca", area: "pacoca", label: "Simulador", icon: "calc", sub: "Projete quanto vai gastar e lucrar por dia de venda e no mês" },
   { id: "estoque-pacoca", area: "pacoca", label: "Estoque", icon: "pkg", sub: "Saldo de paçoquitas e materiais, com baixa automática das vendas" },
   { id: "insumos-pacoca", area: "pacoca", label: "Insumos", icon: "pkg", sub: "Custo de compra dos insumos e ficha do pacote", section: "Cadastros" },
   { id: "dre-pacoca", area: "pacoca", label: "DRE", icon: "pie", sub: "Demonstrativo de resultado da paçoca", section: "Financeiro" },
@@ -600,7 +604,7 @@ const PAGES = [
   { id: "personalizar", area: "doces", label: "Personalizar custos", icon: "gear", sub: "Taxas, metas de margem e custos padrão — tudo que mexe no custo", section: "Configurações" },
   { id: "equipe", area: "doces", label: "Equipe & App", icon: "cart", sub: "Sincronização entre celulares e app do vendedor" },
   { id: "painel-geral", area: "geral", label: "Painel", icon: "dash", sub: "Visão geral de doces + paçoca juntos", section: "Visão geral" },
-  { id: "simulador-geral", area: "geral", label: "Simulador", icon: "calc", sub: "Doces + paçoca juntos: quanto vai gastar e lucrar por semana e no mês" },
+  { id: "simulador-geral", area: "geral", label: "Simulador", icon: "calc", sub: "Doces (por semana) + paçoca (por dia) juntos: quanto vai gastar e lucrar no mês" },
   { id: "dre-geral", area: "geral", label: "DRE unificado", icon: "pie", sub: "Doces + paçoca, com impostos e contabilidade divididos entre as áreas", section: "Financeiro" },
   { id: "pagamentos-geral", area: "geral", label: "Pagamentos", icon: "wallet", sub: "Todas as contas: doces, paçoca e impostos do negócio" },
 ];
@@ -1094,23 +1098,22 @@ function gastosSimDoces() {
   const variavelMes = sum(acc.linhas(), (l) => l.mes) + (recSem * semanas * dasPct()) / 100;
   Object.entries(s.fixos).forEach(([k, v]) => acc.add(grupoDespesa(k), k, (+v || 0) * semanas));
   impostosSimulados(acc, "doces", recSem * semanas);
-  return { recMes: recSem * semanas, semanas, linhas: acc.linhas(), variavelMes, unMes: un * semanas, periodo: "semana" };
+  return { recMes: recSem * semanas, semanas, div: semanas, linhas: acc.linhas(), variavelMes, unMes: un * semanas, periodo: "semana" };
 }
 function gastosSimPacoca() {
   const s = db.pacocaSim, dias = +s.dias || 0, qtd = (+s.porDia || 0) * dias, acc = novoAcumulador();
-  const semanas = Math.max(1, dias / 6);
   const esperado = qtd * (+db.config.precoPacoca || 0), recMes = esperado * (1 - naoRecPctPacoca() / 100);
   db.estoque.pacocaItens.filter((i) => consumoPacote(i) > 0).forEach((i) => acc.add(i.usaPacote ? "Ingredientes" : "Embalagens e materiais", i.nome, qtd * consumoPacote(i) * (+i.custo || 0)));
   acc.add("Impostos", "Imposto NF-e da paçoquita", qtd * impostoPacote());
   db.pacocaCusto.forEach((c) => acc.add(/m[ãa]o/i.test(c.nome) ? "Mão de obra" : "Outros custos", c.nome, qtd * (+c.valor || 0)));
   const variavelMes = sum(acc.linhas(), (l) => l.mes) + (recMes * dasPct()) / 100;
   acc.add("Gasolina", "Gasolina", (+s.gasolinaDia || 0) * dias);
-  Object.entries(s.fixos || {}).forEach(([k, v]) => acc.add(grupoDespesa(k), k, (+v || 0) * semanas));
+  Object.entries(s.fixos || {}).forEach(([k, v]) => acc.add(grupoDespesa(k), k, (+v || 0) * dias));
   impostosSimulados(acc, "pacoca", recMes);
-  return { recMes, esperado, semanas, linhas: acc.linhas(), variavelMes, unMes: qtd, periodo: "semana (6 dias)" };
+  return { recMes, esperado, div: Math.max(1, dias), linhas: acc.linhas(), variavelMes, unMes: qtd, periodo: "dia de venda" };
 }
 function gastosHtml(g) {
-  const tot = sum(g.linhas, (l) => l.mes), lucroMes = g.recMes - tot, sem = (v) => v / g.semanas;
+  const tot = sum(g.linhas, (l) => l.mes), lucroMes = g.recMes - tot, sem = (v) => v / g.div;
   const grupos = [...ORDEM_GASTOS.filter((o) => g.linhas.some((l) => l.grupo === o)), ...new Set(g.linhas.map((l) => l.grupo).filter((x) => !ORDEM_GASTOS.includes(x)))];
   const pctF = (v) => (g.recMes ? pct((v / g.recMes) * 100) : "—");
   const linha = (cls, nome, mes, neg = true) => `<tr class="${cls}"><td>${nome}</td><td class="num ${neg && mes ? "neg" : ""}">${neg && mes ? "−" : ""}${brl(sem(Math.abs(mes)))}</td><td class="num ${neg && mes ? "neg" : ""}">${neg && mes ? "−" : ""}${brl(Math.abs(mes))}</td><td class="num hint">${pctF(Math.abs(mes))}</td></tr>`;
@@ -1145,7 +1148,7 @@ function simResultHtml() {
       <div class="stat"><small>Despesas fixas / mês</small><strong>${brl(r.fixSem * r.semanas)}</strong><div class="hint">gasolina, despesas da semana, DARF, contabilidade</div></div>
     </div>
     <div class="alert ${r.equilibrio === null ? "yellow" : "green"} mt">${icon(r.equilibrio === null ? "alert" : "check")}<div><b>Ponto de equilíbrio</b>
-      <span>${r.equilibrio === null ? "Informe quantidades para calcular." : `Você precisa vender <b>${int(r.equilibrio)} itens por semana</b> (no mix atual) para pagar as despesas fixas.`}</span></div></div>`;
+      <span>${r.equilibrio === null ? "Informe quantidades para calcular." : `Você precisa vender <strong>${int(r.equilibrio)} itens por semana</strong> (no mix atual) para pagar as despesas fixas.`}</span></div></div>`;
 }
 function viewSimulador() {
   const s = db.sim;
@@ -1566,7 +1569,7 @@ function viewSimGeral() {
     <ul class="recipe-ings">
       <li><span>Faturamento no mês</span><span></span><span><b>${brl(g.recMes)}</b></span></li>
       <li><span>Gastos no mês</span><span></span><span class="neg">−${brl(sum(g.linhas, (l) => l.mes))}</span></li>
-      <li><span><b>Lucro líquido</b></span><span class="hint">${brl(lucro / g.semanas)}/semana</span><span class="${lucro >= 0 ? "pos" : "neg"}"><b>${brl(lucro)}</b></span></li>
+      <li><span><b>Lucro líquido</b></span><span class="hint">${brl(lucro / g.div)}/${g.periodo === "semana" ? "semana" : "dia"}</span><span class="${lucro >= 0 ? "pos" : "neg"}"><b>${brl(lucro)}</b></span></li>
     </ul></div>`;
   const qtdDoces = sum(db.produtos.filter((x) => x.canal === db.sim.canal), (x) => +db.sim.qtd[x.id] || 0);
   return `<div class="grid g-21">
@@ -1965,13 +1968,13 @@ function viewSimPacoca() {
       ${linha("Dias de venda no mês", "dias", s.dias, "numeric")}
       ${linha(`% não recebido · pix confiança <span class="hint">(histórico: ${pct(h.nr)})</span>`, "naoRecPct", s.naoRecPct)}
       ${linha("Gasolina por dia (R$)", "gasolinaDia", s.gasolinaDia, "decimal", false)}
-      <h3 style="font-size:14px;margin:22px 0 8px">Outras despesas por semana</h3>
+      <h3 style="font-size:14px;margin:22px 0 8px">Outras despesas por dia de venda</h3>
       ${Object.entries(s.fixos || {}).map(([k, v]) => `<div class="sim-row" style="grid-template-columns:minmax(0,1fr) minmax(77px,140px)"><span>${esc(k)}</span><input inputmode="decimal" data-act="pacsim-fixo" data-key="${esc(k)}" value="${String(v || "").replace(".", ",")}" placeholder="0" /></div>`).join("")}
-      <div class="hint" style="margin-top:8px">Semana = 6 dias de venda. Mão de obra, insumos e NF-e entram por pacote; impostos (DAS, DARF, contabilidade) entram com os valores reais.</div>
+      <div class="hint" style="margin-top:8px">Tudo por dia de venda: o mês = dias de venda × o que acontece em um dia. Mão de obra, insumos e NF-e entram por pacote; impostos (DAS, DARF, contabilidade) entram com os valores reais.</div>
     </div>
     <div class="card" id="pacSim">${pacSimHtml()}</div>
   </div>
-  <div class="card mt"><div class="card-head"><div><h3>Quanto você vai gastar</h3><div class="sub">Calculado a partir das vendas previstas: insumos de cada pacote, mão de obra, gasolina, despesas da semana e impostos reais (NF-e, DAS sobre o recebido e a parte da paçoca em DARF e contabilidade)</div></div></div>
+  <div class="card mt"><div class="card-head"><div><h3>Quanto você vai gastar</h3><div class="sub">Calculado a partir das vendas previstas: insumos de cada pacote, mão de obra, gasolina e despesas por dia de venda, e impostos reais (NF-e, DAS sobre o recebido e a parte da paçoca em DARF e contabilidade)</div></div></div>
     <div id="pacGastos">${gastosHtml(gastosSimPacoca())}</div></div>`;
 }
 
@@ -2160,7 +2163,7 @@ function consumoVendasPacoca(regs) {
 /* ---------- Paçoca · Custos & Compras ---------- */
 function pacSimHtml() {
   const s = db.pacocaSim, g = gastosSimPacoca(), tot = sum(g.linhas, (l) => l.mes), lucro = g.recMes - tot;
-  return `<div class="big-result"><small>Lucro líquido previsto no mês</small><div>${brl(lucro)}</div><small>${brl(lucro / g.semanas)} por semana · ${int(g.unMes)} pacotes · ${int(s.dias)} dias de venda</small></div>
+  return `<div class="big-result"><small>Lucro líquido previsto no mês</small><div>${brl(lucro)}</div><small>${brl(lucro / g.div)} por dia de venda · ${int(g.unMes)} pacotes · ${int(s.dias)} dias de venda</small></div>
     <div class="grid g-2 mt" style="gap:12px">
       <div class="stat"><small>Faturamento esperado</small><strong>${brl(g.esperado)}</strong></div>
       <div class="stat"><small>Recebido (após não recebidos)</small><strong>${brl(g.recMes)}</strong></div>
@@ -2170,7 +2173,7 @@ function pacSimHtml() {
     ${(() => {
       const contrib = g.unMes ? (g.recMes - g.variavelMes) / g.unMes : 0, fixo = tot - g.variavelMes, eq = contrib > 0 && +s.dias ? Math.ceil(fixo / contrib / +s.dias) : null;
       return `<div class="alert ${eq === null ? "yellow" : "green"} mt">${icon(eq === null ? "alert" : "check")}<div><b>Ponto de equilíbrio</b>
-        <span>${eq === null ? "Informe pacotes por dia e dias de venda para calcular." : `Você precisa vender <b>${int(eq)} pacotes por dia</b> (${int(eq * 6)} por semana) para pagar gasolina, despesas e impostos fixos. Cada pacote deixa ${brl(contrib)} depois dos custos variáveis.`}</span></div></div>`;
+        <span>${eq === null ? "Informe pacotes por dia e dias de venda para calcular." : `Você precisa vender <strong>${int(eq)} pacotes por dia</strong> de venda para pagar gasolina, despesas e impostos fixos. Cada pacote deixa ${brl(contrib)} depois dos custos variáveis.`}</span></div></div>`;
     })()}`;
 }
 function viewPacCustos() {
