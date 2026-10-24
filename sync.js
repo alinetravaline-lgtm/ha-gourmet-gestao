@@ -61,6 +61,8 @@ const Sync = (() => {
       setFila([]);
       for (const x of l) await (x.op === "del" ? delRegistro(x.id) : putRegistro(x.r));
     };
+    // Já disponível para o app enquanto os dados iniciais chegam (o recálculo das contas grava de volta na nuvem)
+    impl = { enviarEstado, putRegistro, delRegistro };
     const carregarRegistros = async () => {
       const { data, error } = await sb.from("hag_registros").select("dados").eq("equipe", equipe);
       if (error) throw error;
@@ -103,6 +105,7 @@ const Sync = (() => {
     const enviarEstado = (estado) => F.setDoc(refs.estado, { json: JSON.stringify(estado), _by: client, _at: Date.now() });
     const putRegistro = (r) => F.setDoc(F.doc(refs.regs, r.id), r).catch(erro);
     const delRegistro = (id) => F.deleteDoc(F.doc(refs.regs, id)).catch(erro);
+    impl = { enviarEstado, putRegistro, delRegistro };
 
     F.onSnapshot(refs.estado, (snap) => {
       if (!snap.exists()) {
