@@ -49,7 +49,7 @@ supabase functions deploy clube-checkout clube-portal clube-stripe-webhook clube
 ## 3. Stripe (modo de teste primeiro)
 
 1. Defina `STRIPE_SECRET_KEY` (teste), `CLUBE_APP_URL` e `CLUBE_WEBHOOK_URL=https://<ref>.supabase.co/functions/v1/clube-stripe-webhook` no terminal e rode `node scripts/stripe-configurar.mjs`.
-2. Cadastre como Secrets os IDs impressos (`STRIPE_PRICE_HA_ASSINATURA`, `STRIPE_PRICE_HA_CLUB`, `STRIPE_PORTAL_CONFIG_ID`) e o `STRIPE_WEBHOOK_SECRET`, que aparece uma única vez.
+2. Cadastre como Secrets os IDs impressos (`STRIPE_PRICE_HA_ASSINATURA`, `STRIPE_PRICE_HA_CLUB`, `STRIPE_PORTAL_CONFIG_ID`) e o `STRIPE_WEBHOOK_SECRET`, que aparece uma única vez. Com `--gravar-env supabase/functions/.env`, o script grava esses valores (e a chave) direto no arquivo, sem exibi-los; depois rode `supabase secrets set --env-file supabase/functions/.env`.
 3. Cadastre ao menos uma região em Administração > Regiões de entrega (sem isso, o plano com caixa não abre para venda).
 4. Execute os cenários da tabela "Testes no modo de teste do Stripe" em `docs/integracoes.md` e acompanhe Stripe > Webhooks (entregas 2xx), `clube_stripe_eventos` e a aba Pendências do admin.
 

@@ -5,7 +5,11 @@
 //   $env:STRIPE_SECRET_KEY = "sk_test_..."           # nunca cole a chave em chat ou commit
 //   $env:CLUBE_APP_URL = "https://seu-dominio"       # URL pública do site
 //   $env:CLUBE_WEBHOOK_URL = "https://<ref>.supabase.co/functions/v1/clube-stripe-webhook"
-//   node scripts/stripe-configurar.mjs [--permitir-producao]
+//   node scripts/stripe-configurar.mjs [--permitir-producao] [--gravar-env supabase/functions/.env]
+// Com --gravar-env, a chave, os IDs e o segredo do webhook vão direto para o arquivo (fora do git), sem aparecer
+// no terminal; depois: npx supabase secrets set --env-file supabase/functions/.env
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+
 const API_VERSION = "2026-09-30.endive";
 const PLANOS = [
   { chave: "ha_assinatura", nome: "Assinatura HA Gourmet", valor: 4990 },
@@ -35,6 +39,12 @@ const EVENTOS = [
 const chave = process.env.STRIPE_SECRET_KEY ?? "";
 const appUrl = (process.env.CLUBE_APP_URL ?? "").replace(/\/+$/, "");
 const webhookUrl = process.env.CLUBE_WEBHOOK_URL ?? "";
+const iEnv = process.argv.indexOf("--gravar-env");
+const arquivoEnv = iEnv > -1 ? process.argv[iEnv + 1] : null;
+if (iEnv > -1 && !arquivoEnv) {
+  console.error("Informe o arquivo depois de --gravar-env.");
+  process.exit(1);
+}
 if (!/^(sk|rk)_(test|live)_/.test(chave) || !/^https:\/\//.test(appUrl) || !/^https:\/\//.test(webhookUrl)) {
   console.error("Defina STRIPE_SECRET_KEY, CLUBE_APP_URL e CLUBE_WEBHOOK_URL (https).");
   process.exit(1);
@@ -128,6 +138,28 @@ if (endpointExistente) {
     description: "HA Gourmet Clube",
   });
   segredoNovo = criado.secret;
+}
+
+if (arquivoEnv) {
+  const valores = {
+    CLUBE_APP_URL: appUrl,
+    STRIPE_SECRET_KEY: chave,
+    STRIPE_PRICE_HA_ASSINATURA: precos.ha_assinatura,
+    STRIPE_PRICE_HA_CLUB: precos.ha_club,
+    STRIPE_PORTAL_CONFIG_ID: portal.id,
+    ...(segredoNovo ? { STRIPE_WEBHOOK_SECRET: segredoNovo } : {}),
+  };
+  const linhas = existsSync(arquivoEnv) ? readFileSync(arquivoEnv, "utf8").replace(/^\uFEFF/, "").split(/\r?\n/) : [];
+  for (const [nome, valor] of Object.entries(valores)) {
+    const i = linhas.findIndex((l) => new RegExp(`^#?\\s*${nome}=`).test(l));
+    if (i > -1) linhas[i] = `${nome}=${valor}`;
+    else linhas.push(`${nome}=${valor}`);
+  }
+  writeFileSync(arquivoEnv, linhas.join("\n").replace(/\n*$/, "\n"));
+  console.log(`\nGravado em ${arquivoEnv}: ${Object.keys(valores).join(", ")}`);
+  if (!segredoNovo) console.log("STRIPE_WEBHOOK_SECRET não mudou (endpoint já existia): confira se ele já está no arquivo.");
+  console.log("Próximo passo: npx supabase secrets set --env-file " + arquivoEnv);
+  process.exit(0);
 }
 
 console.log("\nConfigure estes Secrets nas Edge Functions (supabase secrets set ...):");
