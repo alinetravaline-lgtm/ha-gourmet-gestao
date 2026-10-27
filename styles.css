@@ -25,6 +25,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -325,6 +326,23 @@ img.qr { width: 160px; height: 160px; border-radius: 12px; border: 1px solid var
 .pg-check { width: 20px; height: 20px; accent-color: var(--green); cursor: pointer; }
 tr.row-pago td { color: var(--muted); }
 tr.row-pago td b { text-decoration: line-through; font-weight: 600; }
+
+/* Acesso da administração (gestão) */
+body.travado .app { display: none; }
+.acesso { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at top, #fff 0%, var(--bg) 60%); }
+.acesso-card { width: 100%; max-width: 400px; background: var(--card); border: 1px solid var(--line-soft); border-radius: 24px; padding: 28px; box-shadow: 0 20px 50px rgba(59, 36, 24, .08); }
+.acesso-marca { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; margin-bottom: 24px; }
+.acesso-marca b { display: block; font-size: 16px; }
+.acesso-marca small { display: block; font-size: 12px; color: var(--muted); }
+.acesso-card h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -.02em; }
+.acesso-card > div > .hint { margin: 0 0 18px; font-size: 13.5px; }
+.acesso-form { display: grid; gap: 14px; }
+.acesso-form label { display: grid; gap: 6px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.acesso-form .btn { padding: 12px; }
+.acesso-links { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin: 16px 0 0; font-size: 13px; }
+.acesso-acoes { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.acesso .aviso { padding: 11px 13px; border-radius: 12px; background: var(--gold-soft); color: #6d4c18; font-size: 13px; margin-bottom: 12px; }
+.acesso .aviso.erro { background: var(--red-soft); color: var(--red); margin: 0; }
 
 /* Modo vendedor (app dos colaboradores) */
 body.vend-mode .sidebar, body.vend-mode .menu-btn, body.vend-mode .overlay { display: none !important; }

@@ -2,14 +2,216 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HA Gourmet</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>HA Gourmet · Doces finos, barras de chocolate e paçoca</title>
+  <meta name="description" content="Doces finos, mousses, barras de chocolate e paçoca da HA Gourmet. Caixas de presente, encomendas para eventos e o Clube HA Gourmet com benefícios todo mês." />
+  <meta name="theme-color" content="#3b2418" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="HA Gourmet · Doces finos e paçoca" />
+  <meta property="og:description" content="Brigadeiros gourmet, mousses, barras de chocolate, paçoca e o Clube HA Gourmet." />
+  <meta property="og:image" content="fotos/hero.jpg" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <script>
-    // Endereço antigo: a gestão e o vendedor agora são dois aplicativos em pastas separadas
-    location.replace((new URLSearchParams(location.search).get("app") === "vendedor" ? "vendedor/" : "gestao/") + location.hash);
+    // Links antigos da raiz: ?app=vendedor e convites #conectar= continuam abrindo o app certo
+    (() => {
+      const p = new URLSearchParams(location.search);
+      if (p.get("app") === "vendedor") location.replace("vendedor/" + location.hash);
+      else if (/conectar=/.test(location.hash)) location.replace("gestao/" + location.hash);
+    })();
   </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="lp.css" />
 </head>
-<body style="font-family:sans-serif;padding:24px">
-  <p>Abrindo… Se não abrir sozinho: <a href="gestao/">Gestão</a> · <a href="vendedor/">Área do vendedor</a></p>
+<body class="lp">
+  <header class="lp-top">
+    <div class="lp-top-in">
+      <a href="#inicio" class="lp-marca"><span class="brand-logo">H&amp;A</span><span><b>HA Gourmet</b><small>Doces finos</small></span></a>
+      <nav class="lp-nav" id="lpNav" aria-label="Seções">
+        <a href="#doces">Doces</a>
+        <a href="#barras">Barras</a>
+        <a href="#pacoca">Paçoca</a>
+        <a href="#encomendas">Encomendas</a>
+        <a href="#clube">Clube</a>
+        <a href="#contato">Contato</a>
+      </nav>
+      <div class="lp-acoes">
+        <a class="btn btn-primary btn-sm" id="lpAdmin" href="gestao/" hidden>Admin</a>
+        <a class="btn btn-sm" id="lpMembro" href="membros/">Área do membro</a>
+        <a class="btn btn-gold btn-sm hide-m" data-requer="whatsapp" data-whatsapp="Olá! Quero fazer um pedido.">Fazer pedido</a>
+        <button class="lp-menu" id="lpMenu" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="lpNav">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="lp-hero" id="inicio">
+      <div class="lp-wrap lp-hero-grid">
+        <div class="lp-hero-txt">
+          <span class="lp-selo">Doces finos · Barras de chocolate · Paçoca</span>
+          <h1>Doces finos para presentear, celebrar e se dar um mimo</h1>
+          <p>Brigadeiros gourmet, mousses, barras de chocolate e a nossa paçoca, em caixas de presente ou por encomenda para o seu evento.</p>
+          <div class="lp-ctas">
+            <a class="btn btn-gold btn-lg" data-requer="whatsapp" data-whatsapp="Olá! Quero fazer um pedido.">Fazer pedido no WhatsApp</a>
+            <a class="btn btn-lg" href="#clube">Conhecer o Clube</a>
+          </div>
+          <ul class="lp-chips">
+            <li>Caixas de presente</li>
+            <li>Encomendas para eventos</li>
+            <li data-requer="ifood">Também no iFood</li>
+          </ul>
+        </div>
+        <figure class="foto foto-hero"><img src="fotos/hero.jpg" alt="Caixa de doces finos HA Gourmet" onerror="this.remove()" /></figure>
+      </div>
+    </section>
+
+    <section class="lp-sec" id="doces">
+      <div class="lp-wrap">
+        <div class="lp-titulo">
+          <span class="lp-kicker">Doces finos</span>
+          <h2>Brigadeiros e mousses</h2>
+          <p>Receitas da casa em formatos de coração, flor, bolinha e copinho, prontos para a caixa de presente.</p>
+        </div>
+        <div class="lp-cards">
+          <article class="lp-card">
+            <figure class="foto"><img src="fotos/brigadeiros.jpg" alt="Brigadeiros gourmet" loading="lazy" onerror="this.remove()" /></figure>
+            <div class="lp-card-txt">
+              <h3>Brigadeiros gourmet</h3>
+              <ul class="lp-sabores"><li>Brigadeiro</li><li>Ninho com Nutella</li><li>Pistache</li><li>Churros</li></ul>
+            </div>
+          </article>
+          <article class="lp-card">
+            <figure class="foto"><img src="fotos/mousses.jpg" alt="Mousses no copinho" loading="lazy" onerror="this.remove()" /></figure>
+            <div class="lp-card-txt">
+              <h3>Mousses</h3>
+              <ul class="lp-sabores"><li>Limão</li><li>Morango</li><li>Maracujá</li></ul>
+            </div>
+          </article>
+          <article class="lp-card">
+            <figure class="foto"><img src="fotos/caixas.jpg" alt="Caixas de presente com doces" loading="lazy" onerror="this.remove()" /></figure>
+            <div class="lp-card-txt">
+              <h3>Caixas de presente</h3>
+              <p>Caixas kraft e de acrílico, com papel de seda e fita personalizada.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-sec lp-sec-alt" id="barras">
+      <div class="lp-wrap lp-split">
+        <figure class="foto foto-alta"><img src="fotos/barras.jpg" alt="Barras de chocolate HA Gourmet" loading="lazy" onerror="this.remove()" /></figure>
+        <div>
+          <div class="lp-titulo lp-titulo-esq">
+            <span class="lp-kicker">Chocolate</span>
+            <h2>Barras de chocolate</h2>
+            <p>Barras gourmet e trufadas, embaladas uma a uma.</p>
+          </div>
+          <ul class="lp-lista">
+            <li><b>Amargo com Castanha</b><span>Meio amargo com mix de castanhas</span></li>
+            <li><b>Branco com Cereja</b><span>Chocolate branco trufado com cereja em calda</span></li>
+            <li><b>Amargo Trufado Maracujá</b><span>Recheio de mousse de maracujá</span></li>
+            <li><b>Amargo Sensação</b><span>Meio amargo com mousse de morango</span></li>
+            <li><b>Duo</b><span>Meio amargo e branco na mesma barra</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-sec" id="pacoca">
+      <div class="lp-wrap lp-split lp-split-inv">
+        <div>
+          <div class="lp-titulo lp-titulo-esq">
+            <span class="lp-kicker">Paçoca</span>
+            <h2>A paçoca da HA Gourmet</h2>
+            <p>Para o dia a dia, para revender e para levar de presente.</p>
+          </div>
+          <div class="lp-ctas">
+            <a class="btn btn-primary" data-requer="whatsapp" data-whatsapp="Olá! Quero saber mais sobre a paçoca.">Pedir paçoca</a>
+            <a class="btn" data-requer="whatsapp" data-whatsapp="Olá! Tenho interesse em revender a paçoca.">Quero revender</a>
+          </div>
+        </div>
+        <figure class="foto foto-alta"><img src="fotos/pacoca.jpg" alt="Paçoca HA Gourmet" loading="lazy" onerror="this.remove()" /></figure>
+      </div>
+    </section>
+
+    <section class="lp-sec lp-sec-alt" id="encomendas">
+      <div class="lp-wrap">
+        <div class="lp-titulo">
+          <span class="lp-kicker">Encomendas</span>
+          <h2>Doces para o seu evento</h2>
+          <p>Aniversários, festas e datas especiais: o cento de doces vai em caixa própria, com forminhas.</p>
+        </div>
+        <ol class="lp-passos">
+          <li><b>Escolha</b><span>Sabores, formatos e quantidade.</span></li>
+          <li><b>Fale com a gente</b><span>Combinamos a data, a embalagem e a entrega ou retirada.</span></li>
+          <li><b>Aproveite</b><span>Seus doces prontos para servir ou presentear.</span></li>
+        </ol>
+        <div class="lp-ctas lp-centro">
+          <a class="btn btn-gold btn-lg" data-requer="whatsapp" data-whatsapp="Olá! Quero fazer uma encomenda para um evento.">Fazer uma encomenda</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-clube" id="clube">
+      <div class="lp-wrap">
+        <div class="lp-titulo lp-titulo-claro">
+          <span class="lp-kicker">Clube HA Gourmet</span>
+          <h2>Doces e benefícios todo mês</h2>
+          <p>Escolha um dos dois planos mensais. Cobrança recorrente no cartão, cancelamento pela área do membro.</p>
+        </div>
+        <div class="lp-planos">
+          <article class="lp-plano">
+            <h3>Assinatura HA Gourmet</h3>
+            <div class="lp-preco">R$ 49,90<small>/mês</small></div>
+            <ul><li>Caixa com 12 doces gourmet por mês</li><li>1 sabor novo e exclusivo por mês</li><li>5% de desconto em compras</li></ul>
+          </article>
+          <article class="lp-plano lp-plano-club">
+            <h3>HA Gourmet Club</h3>
+            <div class="lp-preco">R$ 97,00<small>/mês</small></div>
+            <ul><li>R$ 90,00 de crédito em produtos por mês</li><li>1 evento presencial por mês</li><li>5% de desconto em compras</li></ul>
+          </article>
+        </div>
+        <div class="lp-ctas lp-centro">
+          <a class="btn btn-gold btn-lg" href="clube/">Ver planos e assinar</a>
+          <a class="btn btn-lg btn-claro" href="membros/">Já sou membro</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="lp-rodape" id="contato">
+    <div class="lp-wrap lp-rodape-grid">
+      <div>
+        <a href="#inicio" class="lp-marca"><span class="brand-logo">H&amp;A</span><span><b>HA Gourmet</b><small>Doces finos</small></span></a>
+        <p class="lp-cidade" data-requer="cidade"></p>
+      </div>
+      <div data-requer="contato">
+        <h4>Fale com a gente</h4>
+        <ul>
+          <li data-requer="whatsapp"><a data-whatsapp="Olá!">WhatsApp</a></li>
+          <li data-requer="instagram"><a data-instagram>Instagram</a></li>
+          <li data-requer="ifood"><a data-ifood>Peça no iFood</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Clube</h4>
+        <ul>
+          <li><a href="clube/">Planos</a></li>
+          <li><a href="cadastro/">Criar conta</a></li>
+          <li><a href="membros/">Área do membro</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="lp-copy">© <span id="lpAno"></span> HA Gourmet</p>
+  </footer>
+
+  <script>window.HAG_BASE = "./";</script>
+  <script src="config.js"></script>
+  <script type="module" src="lp.js"></script>
 </body>
 </html>

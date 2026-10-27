@@ -212,7 +212,7 @@ export function topo(atual) {
   const link = (caminho, texto, extra = "") =>
     `<a href="${BASE}${caminho}" ${extra}>${texto}</a>`;
   return `<header class="cl-top">
-    <a href="${BASE}clube/" class="brand"><div class="brand-logo">H&amp;A</div><div><div class="brand-name">HA Gourmet</div><div class="brand-sub">Assinaturas</div></div></a>
+    <a href="${BASE}" class="brand"><div class="brand-logo">H&amp;A</div><div><div class="brand-name">HA Gourmet</div><div class="brand-sub">Assinaturas</div></div></a>
     <nav>${link("clube/#planos", "Planos")}${link("membros/", "Área do membro", atual === "membros" ? 'aria-current="page"' : "")}${
       atual === "lp" ? link("cadastro/", "Assinar", 'class="cta"') : ""}</nav>
   </header>`;

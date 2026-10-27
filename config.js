@@ -14,3 +14,11 @@ window.HAG_CLUBE = {
   supabaseUrl: window.HAG_SYNC.supabase.url,
   publishableKey: window.HAG_SYNC.supabase.anonKey,
 };
+
+// Contatos exibidos na página inicial. Campo vazio esconde o botão ou link correspondente.
+window.HAG_LOJA = {
+  whatsapp: "", // só números, com DDI e DDD (ex.: 5511999998888)
+  instagram: "", // usuário, sem @
+  ifood: "", // link completo da loja no iFood
+  cidade: "",
+};

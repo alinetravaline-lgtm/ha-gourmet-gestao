@@ -16,7 +16,13 @@
   <link rel="stylesheet" href="../styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
-<body>
+<body class="travado">
+  <div class="acesso" id="acesso">
+    <div class="acesso-card">
+      <a href="../" class="acesso-marca"><span class="brand-logo">H&amp;A</span><span><b>HA Gourmet</b><small>Área administrativa</small></span></a>
+      <div id="acessoConteudo"><p class="hint">Verificando acesso…</p></div>
+    </div>
+  </div>
   <div class="app">
     <aside class="sidebar" id="sidebar">
       <div class="brand">
@@ -32,6 +38,7 @@
         <button id="btnExport">Baixar backup dos dados</button>
         <button id="btnImport">Importar backup</button>
         <button id="btnReset">Restaurar dados da planilha</button>
+        <button type="button" id="btnSair">Sair da conta</button>
         <input type="file" id="fileImport" accept="application/json" hidden />
       </div>
     </aside>
@@ -59,8 +66,6 @@
 
   <script>window.HAG_BASE = "../";</script>
   <script src="../config.js"></script>
-  <script src="../data.js"></script>
-  <script src="../sync.js"></script>
-  <script src="../app.js"></script>
+  <script type="module" src="acesso.js"></script>
 </body>
 </html>
