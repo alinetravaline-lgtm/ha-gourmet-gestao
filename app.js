@@ -494,6 +494,17 @@ if (window.Chart) {
   Chart.defaults.color = "#8a7d74";
   Chart.defaults.plugins.legend.labels.usePointStyle = true;
   Chart.defaults.plugins.legend.labels.boxWidth = 8;
+  Chart.defaults.borderColor = "#f2ece5";
+  Chart.defaults.elements.bar.borderRadius = 6;
+  Chart.defaults.elements.line.tension = 0.35;
+  Chart.defaults.elements.point.radius = 2.5;
+  Chart.defaults.elements.point.hoverRadius = 6;
+  Chart.defaults.interaction.mode = "index";
+  Chart.defaults.interaction.intersect = false;
+  Object.assign(Chart.defaults.plugins.tooltip, {
+    backgroundColor: "#ffffff", titleColor: "#2a211c", bodyColor: "#5d5048", borderColor: "#ece4db", borderWidth: 1,
+    padding: 12, cornerRadius: 12, boxPadding: 4, usePointStyle: true, titleFont: { weight: "700" },
+  });
 }
 const moneyTick = (v) => "R$ " + Number(v).toLocaleString("pt-BR");
 const tooltipBRL = { callbacks: { label: (c) => ` ${c.dataset.label || c.label}: ${brl(c.parsed.y ?? c.parsed)}` } };
