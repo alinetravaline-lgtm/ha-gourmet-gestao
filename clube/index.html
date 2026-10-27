@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>HA Gourmet · Assinatura e Club</title>
+  <meta name="description" content="Assinatura HA Gourmet (R$ 49,90/mês) e HA Gourmet Club (R$ 97,00/mês): doces gourmet, crédito em produtos, descontos e indicação." />
+  <meta name="theme-color" content="#3b2418" />
+  <link rel="icon" href="../icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="clube.css" />
+</head>
+<body class="clube">
+  <div id="topo"></div>
+
+  <section class="cl-hero">
+    <h1>Doces gourmet e benefícios todo mês</h1>
+    <p>Escolha entre receber a caixa mensal de doces da HA Gourmet ou participar do HA Gourmet Club, com crédito mensal em produtos, eventos presenciais e vantagens exclusivas.</p>
+    <a class="btn btn-gold" href="#planos">Conhecer os planos</a>
+  </section>
+
+  <main class="cl-wrap" id="planos">
+    <div class="planos">
+      <article class="plano">
+        <h3>Assinatura HA Gourmet</h3>
+        <div class="preco">R$ 49,90 <small>/ mês</small></div>
+        <ul>
+          <li>Caixa de presente com 12 doces gourmet por mês, entregue no endereço cadastrado</li>
+          <li>1 sabor novo e exclusivo por mês, dentro da caixa</li>
+          <li>5% de desconto em compras de produtos</li>
+          <li>R$ 5,00 de cashback por amigo indicado que assinar</li>
+          <li>Surpresa no mês do seu aniversário</li>
+        </ul>
+        <p class="hint">Entrega somente nas regiões atendidas: o CEP é conferido antes do pagamento.</p>
+        <a class="btn btn-primary" data-plano="ha_assinatura">Assinar por R$ 49,90/mês</a>
+      </article>
+      <article class="plano club">
+        <h3>HA Gourmet Club</h3>
+        <div class="preco">R$ 97,00 <small>/ mês</small></div>
+        <ul>
+          <li>R$ 90,00 de crédito por mês em produtos HA Gourmet, válido no mês da assinatura e não acumulativo</li>
+          <li>5% de desconto em compras de produtos</li>
+          <li>1 evento presencial por mês com negócios, networking e conhecimento</li>
+          <li>R$ 5,00 de cashback por amigo indicado que assinar</li>
+          <li>Presente no mês do seu aniversário</li>
+        </ul>
+        <p class="hint">A caixa mensal de 12 doces é benefício da Assinatura HA Gourmet e não está incluída no Club.</p>
+        <a class="btn btn-primary" data-plano="ha_club">Entrar no Club por R$ 97,00/mês</a>
+      </article>
+    </div>
+
+    <section class="cl-sec">
+      <h2>Compare os planos</h2>
+      <p class="sub">Cobrança mensal recorrente no cartão de crédito. Você escolhe um dos dois planos.</p>
+      <div class="card"><div class="table-wrap" style="margin:0 -20px -20px">
+        <table class="comparativo">
+          <thead><tr><th>Benefício</th><th>Assinatura HA Gourmet</th><th>HA Gourmet Club</th></tr></thead>
+          <tbody>
+            <tr><td>Mensalidade</td><td>R$ 49,90</td><td>R$ 97,00</td></tr>
+            <tr><td>Caixa mensal com 12 doces gourmet</td><td>✓</td><td>—</td></tr>
+            <tr><td>Sabor novo e exclusivo do mês</td><td>✓ (na caixa)</td><td>—</td></tr>
+            <tr><td>Crédito mensal em produtos</td><td>—</td><td>R$ 90,00 (não acumulativo)</td></tr>
+            <tr><td>Desconto em compras de produtos</td><td>5%</td><td>5%</td></tr>
+            <tr><td>Cashback por indicação que assinar</td><td>R$ 5,00</td><td>R$ 5,00</td></tr>
+            <tr><td>Aniversário</td><td>Surpresa no mês</td><td>Presente no mês</td></tr>
+            <tr><td>Evento presencial mensal</td><td>—</td><td>✓</td></tr>
+          </tbody>
+        </table>
+      </div></div>
+    </section>
+
+    <section class="cl-sec">
+      <h2>Como funciona</h2>
+      <p class="sub">Tudo pela sua área de membro, no mesmo site.</p>
+      <div class="passos-lp">
+        <div class="card"><b>1. Cadastre-se</b>Nome, e-mail, telefone, data de nascimento e endereço. Se recebeu um código de indicação, informe no cadastro.</div>
+        <div class="card"><b>2. Assine com cartão</b>O pagamento é feito no ambiente seguro do Stripe e renovado todo mês. Os benefícios são liberados quando o pagamento é confirmado.</div>
+        <div class="card"><b>3. Aproveite</b>Acompanhe caixas, créditos, desconto, eventos e indicações na área do membro. Cancele quando quiser, com efeito ao fim do mês pago.</div>
+      </div>
+    </section>
+
+    <section class="cl-sec">
+      <h2>Indique amigos</h2>
+      <p class="sub">Cada membro tem um código e um link exclusivos. Quando um amigo indicado assina e o primeiro pagamento é confirmado, você ganha R$ 5,00 de cashback em crédito para produtos HA Gourmet.</p>
+    </section>
+
+    <section class="cl-sec faq">
+      <h2>Perguntas frequentes</h2>
+      <details><summary>Como é feito o pagamento?</summary><p>Por cartão de crédito, com cobrança mensal automática processada pelo Stripe. Os dados do cartão não passam pelo nosso site.</p></details>
+      <details><summary>Posso cancelar?</summary><p>Sim, pela área do membro. O cancelamento vale ao fim do período já pago: os benefícios daquele período continuam até o vencimento e não há nova cobrança.</p></details>
+      <details><summary>Posso trocar de plano?</summary><p>A troca automática ainda não está disponível. Fale com a loja para combinar a mudança.</p></details>
+      <details><summary>O crédito de R$ 90,00 do Club vira dinheiro?</summary><p>Não. É crédito para produtos HA Gourmet: não pode ser sacado, transferido, devolvido no cartão nem usado para pagar a mensalidade. O saldo não usado no mês não acumula para o mês seguinte.</p></details>
+      <details><summary>O desconto de 5% vale para quê?</summary><p>Para compras de produtos HA Gourmet. Não se aplica à mensalidade nem ao frete.</p></details>
+      <details><summary>Vocês entregam no meu endereço?</summary><p>A caixa mensal é entregue apenas nas regiões atendidas. Conferimos o CEP do seu cadastro antes do pagamento; se ainda não atendermos sua região, a assinatura com caixa não é aberta.</p></details>
+      <details><summary>Como funciona o aniversário?</summary><p>No mês do seu aniversário, membros com a mensalidade em dia recebem uma surpresa (Assinatura) ou um presente (Club), conforme combinado com a loja.</p></details>
+    </section>
+  </main>
+
+  <footer class="cl-rodape">HA Gourmet · Pagamentos processados pelo Stripe · <a class="link" href="../membros/">Área do membro</a></footer>
+
+  <script>window.HAG_BASE = "../";</script>
+  <script src="../config.js"></script>
+  <script type="module">
+    import { guardarRefDaUrl, sessaoAtual, topo } from "./clube.js";
+    document.getElementById("topo").innerHTML = topo("lp");
+    const ref = guardarRefDaUrl();
+    const logado = await sessaoAtual();
+    for (const a of document.querySelectorAll("[data-plano]")) {
+      const plano = a.dataset.plano;
+      a.href = logado ? `../membros/?plano=${plano}` : `../cadastro/?plano=${plano}${ref ? `&ref=${ref}` : ""}`;
+    }
+    const cta = document.querySelector(".cl-top a.cta");
+    if (cta && ref) cta.href = `../cadastro/?ref=${ref}`;
+  </script>
+</body>
+</html>

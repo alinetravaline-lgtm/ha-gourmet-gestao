@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>HA Gourmet · Cadastro</title>
+  <meta name="theme-color" content="#3b2418" />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="../icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="../clube/clube.css" />
+</head>
+<body class="clube">
+  <div id="topo"></div>
+  <main class="cl-wrap estreito">
+    <div class="card">
+      <div class="card-head"><div><h3>Criar conta</h3><div class="sub" id="planoEscolhido">Depois do cadastro você escolhe e paga o plano.</div></div></div>
+      <form class="form" id="form" novalidate>
+        <label>Nome completo<input name="nome" autocomplete="name" required maxlength="120" /></label>
+        <label>E-mail<input name="email" type="email" autocomplete="email" required /></label>
+        <label>Senha (mínimo 8 caracteres)<input name="senha" type="password" autocomplete="new-password" minlength="8" required /></label>
+        <div class="linha">
+          <label>Telefone com DDD<input name="telefone" type="tel" autocomplete="tel" placeholder="(11) 90000-0000" required /></label>
+          <label>Data de nascimento<input name="nascimento" type="date" required /></label>
+        </div>
+        <label>Código de indicação (opcional)
+          <input name="ref" maxlength="8" autocomplete="off" style="text-transform:uppercase" placeholder="Ex.: ABCD2345" />
+          <span class="hint" id="refInfo"></span>
+        </label>
+        <p class="hint" style="margin:0">Usamos seus dados para a assinatura, entregas, benefícios e contato da loja. O endereço é pedido na área do membro, antes do pagamento.</p>
+        <div class="aviso erro" id="erro" hidden></div>
+        <button class="btn btn-primary" type="submit" style="justify-content:center;padding:12px">Criar conta</button>
+        <p class="hint" style="text-align:center;margin:0">Já tem conta? <a class="link" href="../membros/">Entrar</a></p>
+      </form>
+      <div id="concluido" hidden></div>
+    </div>
+  </main>
+
+  <script>window.HAG_BASE = "../";</script>
+  <script src="../config.js"></script>
+  <script type="module">
+    import { esc, guardarRefDaUrl, mensagem, PLANOS, rpc, sb, sessaoAtual, topo, urlSite } from "../clube/clube.js";
+
+    document.getElementById("topo").innerHTML = topo("cadastro");
+    const params = new URLSearchParams(location.search);
+    const plano = PLANOS[params.get("plano")] ? params.get("plano") : null;
+    if (plano) document.getElementById("planoEscolhido").textContent = `Plano escolhido: ${PLANOS[plano].nome}. O pagamento vem depois do cadastro.`;
+    const destino = urlSite(`membros/${plano ? `?plano=${plano}` : ""}`);
+
+    if (await sessaoAtual()) {
+      document.getElementById("form").hidden = true;
+      document.getElementById("concluido").hidden = false;
+      document.getElementById("concluido").innerHTML = `<div class="aviso">Você já está conectado. A indicação só pode ser informada na criação da conta.</div>
+        <p><a class="btn btn-primary" href="${esc(destino)}">Ir para a área do membro</a></p>`;
+    }
+
+    const form = document.getElementById("form");
+    const refInfo = document.getElementById("refInfo");
+    const refDoLink = guardarRefDaUrl();
+    if (refDoLink) {
+      form.ref.value = refDoLink;
+      refInfo.textContent = "Código do link de indicação. Você pode corrigir antes de concluir.";
+    }
+    let refValidado = null;
+
+    async function validarRef() {
+      const codigo = form.ref.value.trim().toUpperCase();
+      refValidado = null;
+      if (!codigo) { refInfo.textContent = ""; return true; }
+      try {
+        const r = await rpc("clube_validar_codigo", { p_codigo: codigo });
+        if (r.valido) {
+          refValidado = r.codigo;
+          refInfo.innerHTML = '<span class="pos">Código válido.</span>';
+          return true;
+        }
+        refInfo.innerHTML = `<span class="erro-campo">Código não encontrado.</span> <a class="link" href="#" id="semRef">Continuar sem indicação</a>`;
+        document.getElementById("semRef").onclick = (e) => { e.preventDefault(); form.ref.value = ""; refInfo.textContent = ""; };
+        return false;
+      } catch (e) {
+        refInfo.innerHTML = `<span class="erro-campo">${esc(mensagem(e))}</span>`;
+        return false;
+      }
+    }
+    form.ref.addEventListener("change", validarRef);
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const erro = document.getElementById("erro");
+      erro.hidden = true;
+      const v = Object.fromEntries(new FormData(form));
+      const telefone = v.telefone.replace(/\D/g, "");
+      const falhas = [];
+      if (v.nome.trim().length < 2) falhas.push("nome");
+      if (!/^\S+@\S+\.\S+$/.test(v.email)) falhas.push("e-mail");
+      if (v.senha.length < 8) falhas.push("senha (mínimo 8 caracteres)");
+      if (!/^[0-9]{10,13}$/.test(telefone)) falhas.push("telefone");
+      if (!v.nascimento || v.nascimento > new Date().toISOString().slice(0, 10)) falhas.push("data de nascimento");
+      if (falhas.length) { erro.textContent = `Confira: ${falhas.join(", ")}.`; erro.hidden = false; return; }
+      if (!(await validarRef())) { erro.textContent = "Corrija o código de indicação ou continue sem indicação."; erro.hidden = false; return; }
+
+      const botao = form.querySelector("button");
+      botao.disabled = true;
+      const { data, error } = await sb.auth.signUp({
+        email: v.email.trim(),
+        password: v.senha,
+        options: {
+          emailRedirectTo: destino,
+          data: {
+            nome: v.nome.trim(),
+            telefone,
+            nascimento: v.nascimento,
+            ref: refValidado ?? "",
+            ref_origem: refValidado && refValidado === refDoLink ? "link" : "manual",
+          },
+        },
+      });
+      botao.disabled = false;
+      if (error) {
+        erro.textContent = /rate|limit/i.test(error.message) ? mensagem("limite_excedido") : "Não foi possível criar a conta. Confira os dados ou tente entrar.";
+        erro.hidden = false;
+        return;
+      }
+      sessionStorage.removeItem("hag_ref");
+      if (data.session) { location.href = destino; return; }
+      form.hidden = true;
+      const ok = document.getElementById("concluido");
+      ok.hidden = false;
+      ok.innerHTML = `<div class="aviso ok"><b>Quase lá!</b> Enviamos um link de confirmação para ${esc(v.email)}. Depois de confirmar, entre na área do membro para completar o endereço e assinar.</div>`;
+    });
+  </script>
+</body>
+</html>

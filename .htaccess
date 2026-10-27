@@ -1,0 +1,18 @@
+# Hostinger (Apache/LiteSpeed): HTTPS obrigatório, cabeçalhos de segurança e bloqueio de arquivos internos.
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Pastas e arquivos que não devem ser publicados (o deploy também não deve enviá-los).
+RewriteRule ^(supabase|scripts|docs)(/|$) - [R=404,L]
+RewriteRule (^|/)\.(env|git) - [R=404,L]
+
+<IfModule mod_headers.c>
+  Header always set Strict-Transport-Security "max-age=31536000"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  <FilesMatch "(\.html|sw\.js|config\.js|clube\.js|membros\.js|admin\.js)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>

@@ -7,3 +7,10 @@ window.HAG_SYNC = {
     anonKey: "sb_publishable_UhtNk382-CmsYiYDgkSgtA_cB-bjoxx",
   },
 };
+
+// LP, cadastro e área de membros usam o mesmo projeto Supabase, com login (Supabase Auth) e RLS por usuário.
+// Só valores públicos aqui: chaves secretas do Supabase e do Stripe ficam nos Secrets das Edge Functions.
+window.HAG_CLUBE = {
+  supabaseUrl: window.HAG_SYNC.supabase.url,
+  publishableKey: window.HAG_SYNC.supabase.anonKey,
+};

@@ -1,0 +1,41 @@
+# Configuração mínima do Supabase CLI para as Edge Functions do Clube.
+# A autenticação de cada função é feita dentro do código (getUser, segredo de job ou assinatura do Stripe),
+# por isso a verificação automática de JWT fica desligada.
+project_id = "ha-gourmet-gestao"
+
+# Portas do ambiente local (supabase start). A faixa padrão 543xx costuma estar reservada pelo Windows/Hyper-V.
+[api]
+port = 55321
+
+[db]
+port = 55322
+shadow_port = 55320
+
+[studio]
+port = 55323
+
+[inbucket]
+port = 55324
+
+[analytics]
+port = 55327
+
+# Auth local; em produção estas URLs são configuradas no painel do Supabase (ver docs/deploy-hostinger.md).
+[auth]
+site_url = "http://127.0.0.1:8765"
+additional_redirect_urls = ["http://127.0.0.1:8765/membros/", "http://127.0.0.1:8765/cadastro/"]
+
+[functions.clube-checkout]
+verify_jwt = false
+
+[functions.clube-portal]
+verify_jwt = false
+
+[functions.clube-stripe-webhook]
+verify_jwt = false
+
+[functions.clube-jobs]
+verify_jwt = false
+
+[functions.clube-admin]
+verify_jwt = false
