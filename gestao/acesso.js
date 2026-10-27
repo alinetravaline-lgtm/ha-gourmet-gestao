@@ -2,7 +2,7 @@
 // Esta tela esconde a gestão de quem não é admin; as tabelas hag_* continuam acessíveis pela chave pública.
 const MARCA = "hag_admin_ok";
 const VALIDADE_OFFLINE_MS = 30 * 86_400_000;
-const SCRIPTS = ["../data.js", "../sync.js", "../app.js"];
+const SCRIPTS = ["../data.js?v=20261027b", "../sync.js?v=20261027b", "../app.js?v=20261027b"];
 const conteudo = document.getElementById("acessoConteudo");
 
 let clube = null;
