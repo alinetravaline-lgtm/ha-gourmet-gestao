@@ -3,8 +3,8 @@
 window.HAG_SYNC = {
   equipe: "ha-gourmet",
   supabase: {
-    url: "https://lqssncrgwgwpthjivfal.supabase.co",
-    anonKey: "sb_publishable_UhtNk382-CmsYiYDgkSgtA_cB-bjoxx",
+    url: "https://ocwipmbfguiqrbewvaac.supabase.co",
+    anonKey: "sb_publishable_gJ-Ovg_YNccE92arAsd6oQ_91pKSIUN",
   },
 };
 

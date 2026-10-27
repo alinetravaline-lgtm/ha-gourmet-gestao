@@ -20,10 +20,15 @@ const Sync = (() => {
   let impl = null, status = "local", timer = null, ultimoSync = null;
   const ouvintes = [];
 
-  function getCfg() {
-    try { return JSON.parse(localStorage.getItem(CFG_KEY)) || window.HAG_SYNC || null; } catch { return window.HAG_SYNC || null; }
-  }
   const setCfg = (cfg) => localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+  function getCfg() {
+    let salvo = null;
+    try { salvo = JSON.parse(localStorage.getItem(CFG_KEY)); } catch { /* configuração salva inválida */ }
+    const fixo = window.HAG_SYNC || null;
+    // Aparelhos conectados por link guardam o projeto Supabase da época; quando o projeto do app muda, seguem o novo.
+    if (salvo?.supabase && fixo?.supabase && salvo.supabase.url !== fixo.supabase.url) { setCfg(fixo); return fixo; }
+    return salvo || fixo;
+  }
   const clearCfg = () => localStorage.removeItem(CFG_KEY);
   function setStatus(s) { status = s; if (s === "online") ultimoSync = new Date(); ouvintes.forEach((f) => f(s)); }
   function erro(e) { console.error("Sincronização:", e); setStatus(navigator.onLine === false ? "offline" : "erro"); }
