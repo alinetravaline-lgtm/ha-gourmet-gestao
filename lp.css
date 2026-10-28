@@ -48,6 +48,7 @@ body.lp { font-size: 16px; background: var(--bg); color: var(--text); }
   background: var(--maison) url("marca/pattern-verde.svg") center / 140px auto repeat;
 }
 .foto img { width: 100%; height: 100%; object-fit: cover; display: block; position: relative; }
+.foto-baixo img { object-position: center 82%; }
 
 /* Hero */
 .lp-hero {
