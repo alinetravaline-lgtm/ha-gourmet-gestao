@@ -2,7 +2,7 @@
 // Esta tela esconde a gestão de quem não é admin; as tabelas hag_* continuam acessíveis pela chave pública.
 const MARCA = "hag_admin_ok";
 const VALIDADE_OFFLINE_MS = 30 * 86_400_000;
-const SCRIPTS = ["../data.js?v=20261027b", "../sync.js?v=20261027b", "../app.js?v=20261027b"];
+const SCRIPTS = ["../data.js?v=20261028a", "../sync.js?v=20261028a", "../app.js?v=20261028a"];
 const conteudo = document.getElementById("acessoConteudo");
 
 let clube = null;
@@ -33,7 +33,7 @@ async function sair() {
 }
 
 function telaLogin(aviso = "") {
-  conteudo.innerHTML = `<h1>Entrar</h1><p class="hint">Acesso restrito à equipe da HA Gourmet.</p>
+  conteudo.innerHTML = `<h1>Entrar</h1><p class="hint">Acesso restrito à equipe da HA La Vie.</p>
     ${aviso ? `<div class="aviso">${esc(aviso)}</div>` : ""}
     <form class="acesso-form" id="fLogin" novalidate>
       <label>E-mail<input name="email" type="email" autocomplete="email" required /></label>

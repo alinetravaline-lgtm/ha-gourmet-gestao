@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>HA Gourmet · Doces finos, barras de chocolate e paçoca</title>
-  <meta name="description" content="Doces finos, mousses, barras de chocolate e paçoca da HA Gourmet. Caixas de presente, encomendas para eventos e o Clube HA Gourmet com benefícios todo mês." />
-  <meta name="theme-color" content="#3b2418" />
+  <title>HA La Vie Pâtisserie · Doces finos para presentear e celebrar</title>
+  <meta name="description" content="HA La Vie Pâtisserie: brigadeiros gourmet, mousses, barras de chocolate e paçoca. Caixas de presente, encomendas para eventos e o Clube com benefícios todo mês." />
+  <meta name="theme-color" content="#306c62" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="HA Gourmet · Doces finos e paçoca" />
-  <meta property="og:description" content="Brigadeiros gourmet, mousses, barras de chocolate, paçoca e o Clube HA Gourmet." />
-  <meta property="og:image" content="fotos/hero.png" />
+  <meta property="og:title" content="HA La Vie Pâtisserie" />
+  <meta property="og:description" content="Doces para presentear, compartilhar e celebrar. À vida. Aos encontros. Ao que permanece." />
+  <meta property="og:image" content="fotos/hero.webp" />
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <script>
@@ -20,15 +20,14 @@
       else if (/conectar=/.test(location.hash)) location.replace("gestao/" + location.hash);
     })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20261027b" />
-  <link rel="stylesheet" href="lp.css?v=20261027b" />
+  <link rel="preload" href="fontes/Vellmarie-Regular.otf" as="font" type="font/otf" crossorigin />
+  <link rel="stylesheet" href="styles.css?v=20261028a" />
+  <link rel="stylesheet" href="lp.css?v=20261028a" />
 </head>
 <body class="lp">
   <header class="lp-top">
     <div class="lp-top-in">
-      <a href="#inicio" class="lp-marca" aria-label="HA Gourmet, início"><span>HA</span><span>Gourmet</span></a>
+      <a href="#inicio" class="lp-marca"><img src="marca/assinatura-horizontal-clara.svg" alt="HA La Vie Pâtisserie" width="109" height="48" /></a>
       <nav class="lp-nav" id="lpNav" aria-label="Seções">
         <a href="#cardapio">Cardápio</a>
         <a href="#encomendas">Encomendas</a>
@@ -36,7 +35,7 @@
         <a href="#contato">Contato</a>
       </nav>
       <div class="lp-acoes">
-        <a class="lp-pill lp-pill-claro lp-pill-sm" id="lpAdmin" href="gestao/" hidden>Admin</a>
+        <a class="lp-pill lp-pill-verde lp-pill-sm" id="lpAdmin" href="gestao/" hidden>Admin</a>
         <a class="lp-pill lp-pill-borda lp-pill-sm" id="lpMembro" href="membros/">Área do membro</a>
         <button class="lp-menu" id="lpMenu" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="lpNav">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -47,23 +46,25 @@
 
   <main>
     <section class="lp-hero" id="inicio">
-      <div class="lp-wrap">
-        <div class="lp-palco">
-          <h1 class="lp-display"><span>HA</span><span>Gourmet</span></h1>
-          <figure class="lp-hero-foto"><img src="fotos/hero.png" alt="Doces finos HA Gourmet" onerror="this.parentElement.remove()" /></figure>
-          <a class="lp-flutuante" data-requer="whatsapp" data-whatsapp="Olá! Quero fazer um pedido.">
-            Fazer pedido
-            <span aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></span>
-          </a>
-        </div>
-        <div class="lp-hero-base">
-          <p class="lp-tagline">Doces finos para presentear, celebrar e se dar um mimo: brigadeiros, mousses, barras de chocolate e a nossa paçoca.</p>
-          <a class="lp-pill lp-pill-borda" href="#clube">Conhecer o Clube</a>
+      <div class="lp-wrap lp-hero-grid">
+        <div class="lp-hero-txt">
+          <span class="lp-kicker">Pâtisserie · Doces finos</span>
+          <h1>Doces para presentear, compartilhar e celebrar.</h1>
+          <p>Brigadeiros gourmet, mousses, barras de chocolate e a nossa paçoca, feitos à mão para os momentos que merecem ficar.</p>
+          <div class="lp-pills">
+            <a class="lp-pill lp-pill-ouro lp-pill-lg" data-requer="whatsapp" data-whatsapp="Olá! Quero fazer um pedido.">Fazer pedido</a>
+            <a class="lp-pill lp-pill-claro-borda lp-pill-lg" href="#clube">Conhecer o Clube</a>
+          </div>
           <nav class="lp-miniaturas" aria-label="Destaques do cardápio">
-            <a href="#doces" title="Brigadeiros"><img src="fotos/brigadeiros.jpg" alt="" loading="lazy" onerror="this.remove()" /><span>Doces</span></a>
-            <a href="#barras" title="Barras de chocolate"><img src="fotos/barras.jpg" alt="" loading="lazy" onerror="this.remove()" /><span>Barras</span></a>
-            <a href="#pacoca" title="Paçoca"><img src="fotos/pacoca.jpg" alt="" loading="lazy" onerror="this.remove()" /><span>Paçoca</span></a>
+            <a href="#doces"><img src="fotos/brigadeiros.webp" alt="" loading="lazy" onerror="this.remove()" /><span>Doces</span></a>
+            <a href="#barras"><img src="fotos/barras.jpg" alt="" loading="lazy" onerror="this.remove()" /><span>Barras</span></a>
+            <a href="#pacoca"><img src="fotos/pacoca.jpg" alt="" loading="lazy" onerror="this.remove()" /><span>Paçoca</span></a>
           </nav>
+        </div>
+        <div class="lp-hero-visual">
+          <figure class="lp-arco foto"><img src="fotos/hero.webp" alt="Seleção de doces finos HA La Vie" onerror="this.remove()" /></figure>
+          <img class="lp-selo" src="marca/monograma-ouro.svg" alt="" aria-hidden="true" />
+          <p class="lp-manifesto">À vida. Aos encontros. Ao que permanece.</p>
         </div>
       </div>
     </section>
@@ -71,15 +72,15 @@
     <section class="lp-diferenciais" aria-label="Diferenciais">
       <div class="lp-wrap lp-dif-grid">
         <div class="lp-dif">
-          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="7" y="18" width="34" height="23" rx="2"/><path d="M5 12h38v6H5zM24 12v29M24 12c-4-7-12-6-10-1 1 2 6 1 10 1zm0 0c4-7 12-6 10-1-1 2-6 1-10 1z"/></svg>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="7" y="18" width="34" height="23" rx="2"/><path d="M5 12h38v6H5zM24 12v29M24 12c-4-7-12-6-10-1 1 2 6 1 10 1zm0 0c4-7 12-6 10-1-1 2-6 1-10 1z"/></svg>
           <div><h3>Caixas de presente</h3><p>Kraft ou acrílico, com papel de seda e fita personalizada.</p></div>
         </div>
         <div class="lp-dif">
-          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 40h32M11 40V26h26v14M11 31c4 3 9 3 13 0s9-3 13 0M17 26v-5M24 26v-5M31 26v-5M17 17v-2M24 17v-2M31 17v-2"/></svg>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M8 40h32M11 40V26h26v14M11 31c4 3 9 3 13 0s9-3 13 0M17 26v-5M24 26v-5M31 26v-5M17 17v-2M24 17v-2M31 17v-2"/></svg>
           <div><h3>Encomendas para eventos</h3><p>Cento de doces em caixa própria, com forminhas.</p></div>
         </div>
         <div class="lp-dif" data-requer="ifood">
-          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 17h24l-2 24H14zM18 17v-3a6 6 0 0 1 12 0v3"/></svg>
+          <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M12 17h24l-2 24H14zM18 17v-3a6 6 0 0 1 12 0v3"/></svg>
           <div><h3>Também no iFood</h3><p>Peça pelo app e receba em casa.</p></div>
         </div>
       </div>
@@ -87,30 +88,33 @@
 
     <section class="lp-sec" id="cardapio">
       <div class="lp-wrap">
-        <h2 class="lp-titulo">Cardápio</h2>
+        <div class="lp-titulo">
+          <span class="lp-kicker">Cardápio</span>
+          <h2>Criações para celebrar</h2>
+        </div>
         <div class="lp-menu-grid">
           <article class="lp-prato lp-prato-destaque" id="doces">
-            <figure class="foto"><img src="fotos/caixas.jpg" alt="Caixa de presente com doces finos" loading="lazy" onerror="this.remove()" /></figure>
+            <figure class="foto"><img src="fotos/caixas.webp" alt="Caixa de presente com doces finos" loading="lazy" onerror="this.remove()" /></figure>
             <div class="lp-prato-txt">
               <h3>Caixa de presente</h3>
-              <p>Doces finos em formatos de coração, flor, bolinha e copinho, prontos para presentear.</p>
-              <a class="lp-pill lp-pill-escuro" data-requer="whatsapp" data-whatsapp="Olá! Quero montar uma caixa de presente.">Montar minha caixa</a>
+              <p>Doces finos em formatos de coração, flor, bolinha e copinho, prontos para dizer: lembrei de você.</p>
+              <a class="lp-pill lp-pill-ouro" data-requer="whatsapp" data-whatsapp="Olá! Quero montar uma caixa de presente.">Montar minha caixa</a>
             </div>
           </article>
           <article class="lp-prato">
-            <figure class="foto"><img src="fotos/brigadeiros.jpg" alt="Brigadeiros gourmet" loading="lazy" onerror="this.remove()" /></figure>
+            <figure class="foto"><img src="fotos/brigadeiros.webp" alt="Brigadeiros gourmet" loading="lazy" onerror="this.remove()" /></figure>
             <div class="lp-prato-txt">
               <h3>Brigadeiros gourmet</h3>
               <ul class="lp-sabores"><li>Brigadeiro</li><li>Ninho com Nutella</li><li>Pistache</li><li>Churros</li></ul>
-              <a class="lp-pill lp-pill-claro lp-pill-sm" data-requer="whatsapp" data-whatsapp="Olá! Quero pedir brigadeiros.">Pedir</a>
+              <a class="lp-pill lp-pill-verde lp-pill-sm" data-requer="whatsapp" data-whatsapp="Olá! Quero pedir brigadeiros.">Pedir</a>
             </div>
           </article>
           <article class="lp-prato">
-            <figure class="foto"><img src="fotos/mousses.jpg" alt="Mousses no copinho" loading="lazy" onerror="this.remove()" /></figure>
+            <figure class="foto"><img src="fotos/mousses.webp" alt="Mousses no copinho" loading="lazy" onerror="this.remove()" /></figure>
             <div class="lp-prato-txt">
               <h3>Mousses</h3>
               <ul class="lp-sabores"><li>Limão</li><li>Morango</li><li>Maracujá</li></ul>
-              <a class="lp-pill lp-pill-claro lp-pill-sm" data-requer="whatsapp" data-whatsapp="Olá! Quero pedir mousses.">Pedir</a>
+              <a class="lp-pill lp-pill-verde lp-pill-sm" data-requer="whatsapp" data-whatsapp="Olá! Quero pedir mousses.">Pedir</a>
             </div>
           </article>
           <article class="lp-prato" id="barras">
@@ -118,16 +122,16 @@
             <div class="lp-prato-txt">
               <h3>Barras de chocolate</h3>
               <ul class="lp-sabores"><li>Amargo com Castanha</li><li>Branco com Cereja</li><li>Amargo Trufado Maracujá</li><li>Amargo Sensação</li><li>Duo</li></ul>
-              <a class="lp-pill lp-pill-claro lp-pill-sm" data-requer="whatsapp" data-whatsapp="Olá! Quero pedir barras de chocolate.">Pedir</a>
+              <a class="lp-pill lp-pill-verde lp-pill-sm" data-requer="whatsapp" data-whatsapp="Olá! Quero pedir barras de chocolate.">Pedir</a>
             </div>
           </article>
           <article class="lp-prato" id="pacoca">
-            <figure class="foto"><img src="fotos/pacoca.jpg" alt="Paçoca HA Gourmet" loading="lazy" onerror="this.remove()" /></figure>
+            <figure class="foto"><img src="fotos/pacoca.jpg" alt="Paçoca" loading="lazy" onerror="this.remove()" /></figure>
             <div class="lp-prato-txt">
               <h3>Paçoca</h3>
               <p>Para o dia a dia, para revender e para levar de presente.</p>
               <div class="lp-pills">
-                <a class="lp-pill lp-pill-claro lp-pill-sm" data-requer="whatsapp" data-whatsapp="Olá! Quero saber mais sobre a paçoca.">Pedir</a>
+                <a class="lp-pill lp-pill-verde lp-pill-sm" data-requer="whatsapp" data-whatsapp="Olá! Quero saber mais sobre a paçoca.">Pedir</a>
                 <a class="lp-pill lp-pill-borda lp-pill-sm" data-requer="whatsapp" data-whatsapp="Olá! Tenho interesse em revender a paçoca.">Quero revender</a>
               </div>
             </div>
@@ -136,11 +140,14 @@
       </div>
     </section>
 
-    <section class="lp-sec" id="encomendas">
+    <section class="lp-sec lp-sec-champanhe" id="encomendas">
       <div class="lp-wrap">
-        <h2 class="lp-titulo">Doces para o seu evento</h2>
+        <div class="lp-titulo">
+          <span class="lp-kicker">Encomendas</span>
+          <h2>Doces para o seu evento</h2>
+        </div>
         <div class="lp-evento">
-          <figure class="lp-blob foto"><img src="fotos/encomendas.jpg" alt="Doces para eventos" loading="lazy" onerror="this.remove()" /></figure>
+          <figure class="lp-arco lp-arco-claro foto"><img src="fotos/encomendas.webp" alt="Caixa de doces finos para eventos" loading="lazy" onerror="this.remove()" /></figure>
           <ol class="lp-chamadas">
             <li><b>Escolha</b><span>Sabores, formatos e quantidade para aniversários, festas e datas especiais.</span></li>
             <li><b>Fale com a gente</b><span>Combinamos a data, a embalagem e a entrega ou retirada.</span></li>
@@ -148,7 +155,7 @@
           </ol>
         </div>
         <div class="lp-centro">
-          <a class="lp-pill lp-pill-claro lp-pill-lg" data-requer="whatsapp" data-whatsapp="Olá! Quero fazer uma encomenda para um evento.">Fazer uma encomenda</a>
+          <a class="lp-pill lp-pill-verde lp-pill-lg" data-requer="whatsapp" data-whatsapp="Olá! Quero fazer uma encomenda para um evento.">Fazer uma encomenda</a>
         </div>
       </div>
     </section>
@@ -157,12 +164,13 @@
       <div class="lp-wrap">
         <div class="lp-painel">
           <div class="lp-painel-txt">
-            <h2 class="lp-titulo lp-titulo-esq">Clube HA Gourmet</h2>
+            <span class="lp-kicker">Clube</span>
+            <h2>Clube HA Gourmet</h2>
             <p>Doces e benefícios todo mês. Escolha um dos dois planos mensais: cobrança recorrente no cartão e cancelamento pela área do membro.</p>
             <ul class="lp-tags"><li>Caixa mensal com 12 doces</li><li>Sabor exclusivo do mês</li><li>Crédito em produtos</li><li>5% de desconto</li><li>Evento presencial</li></ul>
             <div class="lp-pills">
-              <a class="lp-pill lp-pill-claro lp-pill-lg" href="clube/">Ver planos e assinar</a>
-              <a class="lp-pill lp-pill-borda lp-pill-lg" href="membros/">Já sou membro</a>
+              <a class="lp-pill lp-pill-ouro lp-pill-lg" href="clube/">Ver planos e assinar</a>
+              <a class="lp-pill lp-pill-claro-borda lp-pill-lg" href="membros/">Já sou membro</a>
             </div>
           </div>
           <div class="lp-planos">
@@ -183,27 +191,26 @@
   </main>
 
   <footer class="lp-rodape" id="contato">
-    <div class="lp-wrap">
-      <div class="lp-rodape-painel">
-        <a href="#inicio" class="lp-marca lp-marca-grande" aria-label="HA Gourmet, início"><span>HA</span><span>Gourmet</span></a>
-        <p class="lp-cidade" data-requer="cidade"></p>
-        <nav class="lp-rodape-links" aria-label="Clube">
-          <a href="clube/">Planos</a>
-          <a href="cadastro/">Criar conta</a>
-          <a href="membros/">Área do membro</a>
-        </nav>
-        <div class="lp-redes" data-requer="contato">
-          <a data-requer="whatsapp" data-whatsapp="Olá!" aria-label="WhatsApp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c.5 2.5 2.5 4.5 5 5l1.2-1.2 2 1-.4 1.6c-4 .5-8.7-4.2-8.2-8.2L10.2 7l1 2z"/></svg></a>
-          <a data-requer="instagram" data-instagram aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><circle cx="17" cy="7" r=".8" fill="currentColor"/></svg></a>
-          <a data-requer="ifood" data-ifood aria-label="iFood"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8h12l-1 12H7zM9 8V6a3 3 0 0 1 6 0v2"/></svg></a>
-        </div>
+    <div class="lp-wrap lp-rodape-in">
+      <img class="lp-assinatura" src="marca/assinatura-vertical-verde.svg" alt="HA La Vie Pâtisserie" width="160" height="242" loading="lazy" />
+      <p class="lp-manifesto">À vida. Aos encontros. Ao que permanece.</p>
+      <p class="lp-cidade" data-requer="cidade"></p>
+      <div class="lp-redes" data-requer="contato">
+        <a data-requer="whatsapp" data-whatsapp="Olá!" aria-label="WhatsApp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c.5 2.5 2.5 4.5 5 5l1.2-1.2 2 1-.4 1.6c-4 .5-8.7-4.2-8.2-8.2L10.2 7l1 2z"/></svg></a>
+        <a data-requer="instagram" data-instagram aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="5"/><circle cx="12" cy="12" r="3.6"/><circle cx="17" cy="7" r=".8" fill="currentColor"/></svg></a>
+        <a data-requer="ifood" data-ifood aria-label="iFood"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 8h12l-1 12H7zM9 8V6a3 3 0 0 1 6 0v2"/></svg></a>
       </div>
-      <p class="lp-copy">© <span id="lpAno"></span> HA Gourmet</p>
+      <nav class="lp-rodape-links" aria-label="Clube">
+        <a href="clube/">Planos</a>
+        <a href="cadastro/">Criar conta</a>
+        <a href="membros/">Área do membro</a>
+      </nav>
+      <p class="lp-copy">© <span id="lpAno"></span> HA La Vie Pâtisserie</p>
     </div>
   </footer>
 
   <script>window.HAG_BASE = "./";</script>
-  <script src="config.js?v=20261027b"></script>
-  <script type="module" src="lp.js?v=20261027b"></script>
+  <script src="config.js?v=20261028a"></script>
+  <script type="module" src="lp.js?v=20261028a"></script>
 </body>
 </html>

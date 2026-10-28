@@ -1,14 +1,14 @@
 {
-  "name": "HA Gourmet Vendas",
+  "name": "HA La Vie Vendas",
   "short_name": "HA Vendas",
-  "description": "Área do vendedor da HA Gourmet",
+  "description": "Área do vendedor da HA La Vie",
   "id": "/ha-gourmet-gestao/vendedor/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f7f3ee",
-  "theme_color": "#3b2418",
+  "background_color": "#f5f1e8",
+  "theme_color": "#233329",
   "icons": [
     { "src": "../icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "../icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }

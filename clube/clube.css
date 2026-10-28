@@ -1,12 +1,16 @@
 /* Clube HA Gourmet: LP, cadastro, área de membros e administração. Complementa ../styles.css (mesma paleta). */
 body.clube { font-size: 15px; }
 .cl-top {
-  background: var(--choc); color: #f3e9df; position: sticky; top: 0; z-index: 30;
+  background: var(--choc); color: #f5f1e8; position: sticky; top: 0; z-index: 30;
   padding: 12px max(20px, env(safe-area-inset-left)); display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
 .cl-top a { color: inherit; text-decoration: none; }
 body.clube a.btn { text-decoration: none; }
 .cl-top .brand-name { white-space: nowrap; }
+.cl-marca { gap: 12px; align-items: center; border-bottom: 0; }
+.plano .preco { font-family: var(--font-display); font-weight: 400; font-size: 42px; color: var(--maison); }
+.cl-marca img { height: 40px; width: auto; display: block; }
+.cl-marca .brand-sub { color: var(--champanhe); font-size: 10.5px; text-transform: uppercase; letter-spacing: .16em; border-left: 1px solid rgba(245, 241, 232, .25); padding-left: 12px; }
 .cl-top .brand { padding: 0; }
 .cl-top nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .cl-top nav a { padding: 8px 12px; border-radius: 10px; font-weight: 600; font-size: 14px; }
@@ -14,9 +18,9 @@ body.clube a.btn { text-decoration: none; }
 .cl-top nav a.cta { background: var(--gold); color: var(--choc); }
 .cl-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 64px; }
 .cl-wrap.estreito { max-width: 560px; }
-.cl-hero { background: radial-gradient(circle at top right, #5a3826 0%, var(--choc) 60%); color: #fff; padding: 72px 20px 88px; text-align: center; }
+.cl-hero { background: radial-gradient(circle at top right, #306c62 0%, var(--choc) 60%); color: #fff; padding: 72px 20px 88px; text-align: center; }
 .cl-hero h1 { font-size: clamp(30px, 5vw, 46px); margin: 0 0 14px; letter-spacing: -.02em; }
-.cl-hero p { max-width: 640px; margin: 0 auto 26px; color: #e9d8c6; font-size: 17px; line-height: 1.55; }
+.cl-hero p { max-width: 640px; margin: 0 auto 26px; color: #dce3d6; font-size: 17px; line-height: 1.55; }
 .cl-hero .btn { font-size: 16px; padding: 13px 22px; }
 .btn-gold { background: var(--gold); border-color: var(--gold); color: var(--choc); }
 .btn-gold:hover { filter: brightness(1.05); border-color: var(--gold); }
@@ -47,7 +51,7 @@ body.clube a.btn { text-decoration: none; }
 .form .linha3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
 .form .erro-campo { color: var(--red); font-size: 12.5px; font-weight: 600; }
 textarea.campo { font: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; width: 100%; resize: vertical; }
-.aviso { padding: 12px 14px; border-radius: 12px; background: var(--gold-soft); color: #6d4c18; line-height: 1.5; }
+.aviso { padding: 12px 14px; border-radius: 12px; background: var(--gold-soft); color: #6b5424; line-height: 1.5; }
 .aviso.erro { background: var(--red-soft); color: var(--red); }
 .aviso.ok { background: var(--green-soft); color: var(--green); }
 .saldo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }

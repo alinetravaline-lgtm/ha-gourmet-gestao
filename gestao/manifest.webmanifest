@@ -1,14 +1,14 @@
 {
-  "name": "HA Gourmet Gestão",
+  "name": "HA La Vie Gestão",
   "short_name": "HA Gestão",
-  "description": "Gestão da HA Gourmet: custos, vendas, estoque, DRE e pagamentos",
+  "description": "Gestão da HA La Vie: custos, vendas, estoque, DRE e pagamentos",
   "id": "/ha-gourmet-gestao/gestao/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f7f3ee",
-  "theme_color": "#3b2418",
+  "background_color": "#f5f1e8",
+  "theme_color": "#233329",
   "icons": [
     { "src": "../icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "../icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }

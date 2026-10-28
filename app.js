@@ -3,7 +3,7 @@ const STORE_KEY = "hagourmet_gestao_v1";
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MESES_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const CANAIS_VENDA = ["Outbound", "iFood", "Revenda", "Encomenda"];
-const CORES = { Outbound: "#5a3826", iFood: "#d24b4b", Revenda: "#c8963e", Encomenda: "#3c78c8", "Paçoca": "#2f9e6b" };
+const CORES = { Outbound: "#306c62", iFood: "#d24b4b", Revenda: "#c5a059", Encomenda: "#3c78c8", "Paçoca": "#2f9e6b" };
 
 const $ = (s) => document.querySelector(s);
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -491,10 +491,10 @@ function chart(id, cfg) {
 }
 if (window.Chart) {
   Chart.defaults.font.family = "Inter, system-ui, sans-serif";
-  Chart.defaults.color = "#8a7d74";
+  Chart.defaults.color = "#6e7b70";
   Chart.defaults.plugins.legend.labels.usePointStyle = true;
   Chart.defaults.plugins.legend.labels.boxWidth = 8;
-  Chart.defaults.borderColor = "#f2ece5";
+  Chart.defaults.borderColor = "#ece7da";
   Chart.defaults.elements.bar.borderRadius = 6;
   Chart.defaults.elements.line.tension = 0.35;
   Chart.defaults.elements.point.radius = 2.5;
@@ -502,7 +502,7 @@ if (window.Chart) {
   Chart.defaults.interaction.mode = "index";
   Chart.defaults.interaction.intersect = false;
   Object.assign(Chart.defaults.plugins.tooltip, {
-    backgroundColor: "#ffffff", titleColor: "#2a211c", bodyColor: "#5d5048", borderColor: "#ece4db", borderWidth: 1,
+    backgroundColor: "#ffffff", titleColor: "#233329", bodyColor: "#4a5a50", borderColor: "#e2dccb", borderWidth: 1,
     padding: 12, cornerRadius: 12, boxPadding: 4, usePointStyle: true, titleFont: { weight: "700" },
   });
 }
@@ -587,8 +587,8 @@ function confirmDel(msg, fn) { if (confirm(msg)) { fn(); save(); render(); toast
 /* =================== PÁGINAS =================== */
 const AREAS = {
   pacoca: { nome: "Paçoca", desc: "Vendas diárias, recebimentos, custos e compra mensal da paçoca", inicial: "pacoca-painel", cor: "#2f9e6b" },
-  doces: { nome: "Doces Finos", desc: "Brigadeiros, mousses e barras: vendas por canal, preços, fichas técnicas e DRE", inicial: "painel", cor: "#c8963e" },
-  geral: { nome: "Negócio todo", desc: "Painel e DRE unificados de doces + paçoca, com DAS, DARF e contabilidade divididos entre as áreas", inicial: "painel-geral", cor: "#5a3826" },
+  doces: { nome: "Doces Finos", desc: "Brigadeiros, mousses e barras: vendas por canal, preços, fichas técnicas e DRE", inicial: "painel", cor: "#c5a059" },
+  geral: { nome: "Negócio todo", desc: "Painel e DRE unificados de doces + paçoca, com DAS, DARF e contabilidade divididos entre as áreas", inicial: "painel-geral", cor: "#306c62" },
 };
 const PAGES = [
   { id: "inicio", label: "Início", icon: "dash", sub: "Escolha a área que deseja gerenciar" },
@@ -751,7 +751,7 @@ function viewInicio() {
   };
   const g = resumo(0);
   return `<div class="home">
-    <div class="home-head"><div class="brand-logo big">H&amp;A</div><h1>HA Gourmet</h1><p>Escolha a área que deseja gerenciar</p></div>
+    <div class="home-head"><div class="brand-logo big">H&amp;A</div><h1>HA La Vie</h1><p>Escolha a área que deseja gerenciar</p></div>
     <div class="area-grid">${card("pacoca")}${card("doces")}${cardGeral()}</div>
     <div class="home-total">Negócio todo em ${db.config.ano}: <b>${brl(g.receita)}</b> faturados e <b class="${g.lucro >= 0 ? "pos" : "neg"}">${brl(g.lucro)}</b> de lucro</div>
   </div>`;
@@ -838,10 +838,10 @@ function afterPainel() {
   chart("chMes", {
     type: "bar",
     data: { labels: meses.map((m) => MESES[m - 1]), datasets: [
-      { label: "Faturamento", data: rs.map((r) => r.receita), backgroundColor: "#c8963e", borderRadius: 8, maxBarThickness: 46 },
-      { label: "Lucro", data: rs.map((r) => r.lucro), backgroundColor: "#5a3826", borderRadius: 8, maxBarThickness: 46 },
+      { label: "Faturamento", data: rs.map((r) => r.receita), backgroundColor: "#c5a059", borderRadius: 8, maxBarThickness: 46 },
+      { label: "Lucro", data: rs.map((r) => r.lucro), backgroundColor: "#306c62", borderRadius: 8, maxBarThickness: 46 },
     ] },
-    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#ece7da" } }, x: { grid: { display: false } } } },
   });
   const r = resumo(ui.mes, "doces");
   const labels = Object.keys(r.porCanal);
@@ -968,10 +968,10 @@ function afterPacoca() {
   chart("chPac", {
     type: "bar",
     data: { labels: lista.map((p) => ddmm(p.data)), datasets: [
-      { label: "Recebido", data: lista.map(recPac), backgroundColor: "#c8963e", borderRadius: 6, maxBarThickness: 34, order: 2 },
+      { label: "Recebido", data: lista.map(recPac), backgroundColor: "#c5a059", borderRadius: 6, maxBarThickness: 34, order: 2 },
       { label: "Lucro", data: lista.map(lucroPac), type: "line", borderColor: "#2f9e6b", backgroundColor: "#2f9e6b", tension: .35, pointRadius: 3, order: 1 },
     ] },
-    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#ece7da" } }, x: { grid: { display: false } } } },
   });
 }
 
@@ -1567,8 +1567,8 @@ function afterDre() {
   const tf = sum(db.fixos, (f) => +f.valor || 0);
   chart("chDre", {
     type: "line",
-    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [{ label: "Resultado", data: meses.map((m) => resumo(m, "doces").lucro - rateioImpostos(m, "doces").total - tf), borderColor: "#5a3826", backgroundColor: "rgba(200,150,62,.18)", fill: true, tension: .35 }] },
-    options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+    data: { labels: meses.map((m) => MESES[m - 1]), datasets: [{ label: "Resultado", data: meses.map((m) => resumo(m, "doces").lucro - rateioImpostos(m, "doces").total - tf), borderColor: "#306c62", backgroundColor: "rgba(197, 160, 89,.18)", fill: true, tension: .35 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#ece7da" } }, x: { grid: { display: false } } } },
   });
 }
 
@@ -1694,9 +1694,9 @@ function afterPainelGeral() {
     data: { labels: meses.map((m) => MESES[m - 1]), datasets: [
       { label: "Doces", data: meses.map((m) => resumo(m, "doces").receita), backgroundColor: AREAS.doces.cor, borderRadius: 6, maxBarThickness: 46, stack: "fat" },
       { label: "Paçoca", data: meses.map((m) => resumo(m, "pacoca").receita), backgroundColor: AREAS.pacoca.cor, borderRadius: 6, maxBarThickness: 46, stack: "fat" },
-      { label: "Resultado", type: "line", data: meses.map((m) => resultadoArea(m).res), borderColor: "#5a3826", backgroundColor: "#5a3826", tension: 0.35 },
+      { label: "Resultado", type: "line", data: meses.map((m) => resultadoArea(m).res), borderColor: "#306c62", backgroundColor: "#306c62", tension: 0.35 },
     ] },
-    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { stacked: true, ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { stacked: true, grid: { display: false } } } },
+    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { stacked: true, ticks: { callback: moneyTick }, grid: { color: "#ece7da" } }, x: { stacked: true, grid: { display: false } } } },
   });
   const d = resumo(ui.mes, "doces").receita, p = resumo(ui.mes, "pacoca").receita;
   chart("chGerArea", {
@@ -1830,11 +1830,11 @@ function afterPacPainel() {
   chart("chPacMes", {
     type: "bar",
     data: { labels: meses.map((m) => MESES[m - 1]), datasets: [
-      { label: "Recebido", data: por.map((l) => sum(l, recPac)), backgroundColor: "#c8963e", borderRadius: 8, maxBarThickness: 46 },
+      { label: "Recebido", data: por.map((l) => sum(l, recPac)), backgroundColor: "#c5a059", borderRadius: 8, maxBarThickness: 46 },
       { label: "Lucro", data: por.map((l) => sum(l, lucroPac)), backgroundColor: "#2f9e6b", borderRadius: 8, maxBarThickness: 46 },
       { label: "Não recebido", data: por.map((l) => sum(l, naoRecPac)), backgroundColor: "#d24b4b", borderRadius: 8, maxBarThickness: 46 },
     ] },
-    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+    options: { maintainAspectRatio: false, plugins: { tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#ece7da" } }, x: { grid: { display: false } } } },
   });
 }
 
@@ -1953,7 +1953,7 @@ function afterDrePacoca() {
   chart("chDrePac", {
     type: "line",
     data: { labels: meses.map((m) => MESES[m - 1]), datasets: [{ label: "Resultado", data: meses.map((m) => resumo(m, "pacoca").lucro - rateioImpostos(m, "pacoca").total - tf), borderColor: "#2f9e6b", backgroundColor: "rgba(47,158,107,.15)", fill: true, tension: .35 }] },
-    options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#f0e9e1" } }, x: { grid: { display: false } } } },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: tooltipBRL }, scales: { y: { ticks: { callback: moneyTick }, grid: { color: "#ece7da" } }, x: { grid: { display: false } } } },
   });
 }
 
@@ -2025,7 +2025,7 @@ function textoPedido(area, dias) {
   const linhas = ativos.map((d) => area === "pacoca"
     ? `• ${diaSemana(d.data)} ${ddmm(d.data)}: ${int(d.U)} pacotes (${int(d.unidades)} paçoquitas) · ${brl(d.mo)}`
     : `• ${diaSemana(d.data)} ${ddmm(d.data)}: ${d.G ? `${int(d.G)} Cx G` : ""}${d.G && d.P ? " + " : ""}${d.P ? `${int(d.P)} Cx P` : ""} = ${int(d.doces)} doces · ${brl(d.mo)}\n   ${Object.entries(d.sabores).map(([s, n]) => `${nomeCurto(s)} ${int(n)}`).join(", ")}`);
-  return `*Pedido de produção · HA Gourmet · ${area === "pacoca" ? "Paçoca" : "Doces finos"}*\n${ddmm(dias[0].data)} a ${ddmm(dias[6].data)}\n\n${linhas.join("\n")}\n\n*Total: ${area === "pacoca" ? `${int(sum(ativos, (d) => d.U))} pacotes` : `${int(sum(ativos, (d) => d.doces))} doces`} · mão de obra ${brl(tot)}*${ped.obs ? `\n\nObs.: ${ped.obs}` : ""}`;
+  return `*Pedido de produção · HA La Vie · ${area === "pacoca" ? "Paçoca" : "Doces finos"}*\n${ddmm(dias[0].data)} a ${ddmm(dias[6].data)}\n\n${linhas.join("\n")}\n\n*Total: ${area === "pacoca" ? `${int(sum(ativos, (d) => d.U))} pacotes` : `${int(sum(ativos, (d) => d.doces))} doces`} · mão de obra ${brl(tot)}*${ped.obs ? `\n\nObs.: ${ped.obs}` : ""}`;
 }
 function painelPedidoHtml(area, dias) {
   const ativos = dias.filter((d) => (area === "pacoca" ? d.U : d.G + d.P)), ped = pedidosDe(area);
@@ -3402,7 +3402,7 @@ function render() {
     document.body.classList.add("vend-mode");
     document.body.classList.remove("home-mode");
     $("#nav").innerHTML = "";
-    $("#pageTitle").textContent = "HA Gourmet · Vendas";
+    $("#pageTitle").textContent = "HA La Vie · Vendas";
     $("#pageSub").textContent = AREAS[area].nome;
     destroyCharts();
     setActions("");
