@@ -751,7 +751,7 @@ function viewInicio() {
   };
   const g = resumo(0);
   return `<div class="home">
-    <div class="home-head"><div class="brand-logo big">H&amp;A</div><h1>HA La Vie</h1><p>Escolha a área que deseja gerenciar</p></div>
+    <div class="home-head"><div class="brand-logo big">H&amp;A</div><h1>HA Gourmet</h1><p>Escolha a área que deseja gerenciar</p></div>
     <div class="area-grid">${card("pacoca")}${card("doces")}${cardGeral()}</div>
     <div class="home-total">Negócio todo em ${db.config.ano}: <b>${brl(g.receita)}</b> faturados e <b class="${g.lucro >= 0 ? "pos" : "neg"}">${brl(g.lucro)}</b> de lucro</div>
   </div>`;
@@ -2025,7 +2025,7 @@ function textoPedido(area, dias) {
   const linhas = ativos.map((d) => area === "pacoca"
     ? `• ${diaSemana(d.data)} ${ddmm(d.data)}: ${int(d.U)} pacotes (${int(d.unidades)} paçoquitas) · ${brl(d.mo)}`
     : `• ${diaSemana(d.data)} ${ddmm(d.data)}: ${d.G ? `${int(d.G)} Cx G` : ""}${d.G && d.P ? " + " : ""}${d.P ? `${int(d.P)} Cx P` : ""} = ${int(d.doces)} doces · ${brl(d.mo)}\n   ${Object.entries(d.sabores).map(([s, n]) => `${nomeCurto(s)} ${int(n)}`).join(", ")}`);
-  return `*Pedido de produção · HA La Vie · ${area === "pacoca" ? "Paçoca" : "Doces finos"}*\n${ddmm(dias[0].data)} a ${ddmm(dias[6].data)}\n\n${linhas.join("\n")}\n\n*Total: ${area === "pacoca" ? `${int(sum(ativos, (d) => d.U))} pacotes` : `${int(sum(ativos, (d) => d.doces))} doces`} · mão de obra ${brl(tot)}*${ped.obs ? `\n\nObs.: ${ped.obs}` : ""}`;
+  return `*Pedido de produção · HA Gourmet · ${area === "pacoca" ? "Paçoca" : "Doces finos"}*\n${ddmm(dias[0].data)} a ${ddmm(dias[6].data)}\n\n${linhas.join("\n")}\n\n*Total: ${area === "pacoca" ? `${int(sum(ativos, (d) => d.U))} pacotes` : `${int(sum(ativos, (d) => d.doces))} doces`} · mão de obra ${brl(tot)}*${ped.obs ? `\n\nObs.: ${ped.obs}` : ""}`;
 }
 function painelPedidoHtml(area, dias) {
   const ativos = dias.filter((d) => (area === "pacoca" ? d.U : d.G + d.P)), ped = pedidosDe(area);
@@ -3402,7 +3402,7 @@ function render() {
     document.body.classList.add("vend-mode");
     document.body.classList.remove("home-mode");
     $("#nav").innerHTML = "";
-    $("#pageTitle").textContent = "HA La Vie · Vendas";
+    $("#pageTitle").textContent = "HA Gourmet · Vendas";
     $("#pageSub").textContent = AREAS[area].nome;
     destroyCharts();
     setActions("");

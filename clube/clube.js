@@ -212,7 +212,7 @@ export function topo(atual) {
   const link = (caminho, texto, extra = "") =>
     `<a href="${BASE}${caminho}" ${extra}>${texto}</a>`;
   return `<header class="cl-top">
-    <a href="${BASE}" class="brand cl-marca"><img src="${BASE}marca/assinatura-horizontal-verde.svg" alt="HA La Vie Pâtisserie" width="91" height="40" /><span class="brand-sub">Assinaturas</span></a>
+    <a href="${BASE}" class="brand cl-marca"><span class="marca marca-clara"><img src="${BASE}marca/monograma-ouro.svg" alt="" width="29" height="36" /><span class="marca-nome">HA Gourmet</span></span><span class="brand-sub">Assinaturas</span></a>
     <nav>${link("clube/#planos", "Planos")}${link("membros/", "Área do membro", atual === "membros" ? 'aria-current="page"' : "")}${
       atual === "lp" ? link("cadastro/", "Assinar", 'class="cta"') : ""}</nav>
   </header>`;

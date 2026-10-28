@@ -1,7 +1,7 @@
 {
-  "name": "HA La Vie Gestão",
+  "name": "HA Gourmet Gestão",
   "short_name": "HA Gestão",
-  "description": "Gestão da HA La Vie: custos, vendas, estoque, DRE e pagamentos",
+  "description": "Gestão da HA Gourmet: custos, vendas, estoque, DRE e pagamentos",
   "id": "/ha-gourmet-gestao/gestao/",
   "start_url": "./",
   "scope": "./",

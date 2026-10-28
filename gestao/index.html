@@ -3,17 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>HA La Vie · Gestão</title>
+  <title>HA Gourmet · Gestão</title>
   <meta name="theme-color" content="#233329" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="HA La Vie" />
+  <meta name="apple-mobile-web-app-title" content="HA Gourmet" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="../icons/icon-192.png" />
   <link rel="apple-touch-icon" href="../icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../styles.css?v=20261028a" />
+  <link rel="stylesheet" href="../styles.css?v=20261028c" />
   <!-- Fica no HTML para a gestão não aparecer atrás do login se o CSS vier de um cache antigo -->
   <style>body.travado .app { display: none; }</style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -21,14 +21,14 @@
 <body class="travado">
   <div class="acesso" id="acesso">
     <div class="acesso-card">
-      <a href="../" class="acesso-marca"><img src="../marca/assinatura-horizontal-clara.svg" alt="HA La Vie Pâtisserie" width="118" height="52" /><small>Área administrativa</small></a>
+      <a href="../" class="acesso-marca"><span class="marca"><img src="../marca/monograma-ouro.svg" alt="" width="35" height="44" /><span class="marca-nome">HA Gourmet</span></span><small>Área administrativa</small></a>
       <div id="acessoConteudo"><p class="hint">Verificando acesso…</p></div>
     </div>
   </div>
   <div class="app">
     <aside class="sidebar" id="sidebar">
       <div class="brand brand-assinatura">
-        <img src="../marca/assinatura-horizontal-clara.svg" alt="HA La Vie Pâtisserie" width="109" height="48" />
+        <span class="marca"><img src="../marca/monograma-ouro.svg" alt="" width="33" height="42" /><span class="marca-nome">HA Gourmet</span></span>
         <div class="brand-sub">Gestão do negócio</div>
       </div>
       <nav class="nav" id="nav"></nav>
@@ -64,7 +64,7 @@
   </div>
 
   <script>window.HAG_BASE = "../";</script>
-  <script src="../config.js?v=20261028a"></script>
-  <script type="module" src="acesso.js?v=20261028a"></script>
+  <script src="../config.js?v=20261028c"></script>
+  <script type="module" src="acesso.js?v=20261028c"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 {
-  "name": "HA La Vie Vendas",
+  "name": "HA Gourmet Vendas",
   "short_name": "HA Vendas",
-  "description": "Área do vendedor da HA La Vie",
+  "description": "Área do vendedor da HA Gourmet",
   "id": "/ha-gourmet-gestao/vendedor/",
   "start_url": "./",
   "scope": "./",

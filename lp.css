@@ -1,4 +1,4 @@
-/* Página inicial pública na identidade HA La Vie Pâtisserie: Marfim como respiro, Verde Maison como presença,
+/* Página inicial pública na identidade HA Gourmet: Marfim como respiro, Verde Maison como presença,
    Ouro acetinado nos detalhes. Tokens e fontes vêm de styles.css. */
 body.lp { font-size: 16px; background: var(--bg); color: var(--text); }
 :where(body.lp) a { color: inherit; }
@@ -31,8 +31,9 @@ body.lp { font-size: 16px; background: var(--bg); color: var(--text); }
 .lp-top { position: sticky; top: 0; z-index: 40; background: rgba(245, 241, 232, .86); backdrop-filter: blur(12px); transition: box-shadow .2s ease; }
 .lp-top.rolou { box-shadow: 0 1px 0 var(--line), 0 10px 30px rgba(35, 51, 41, .08); }
 .lp-top-in { max-width: 1180px; margin: 0 auto; padding: 12px 24px; display: flex; align-items: center; gap: 20px; position: relative; }
-.lp-marca { display: inline-flex; }
-.lp-marca img { height: 48px; width: auto; display: block; }
+.lp-marca { display: inline-flex; text-decoration: none; }
+.lp-marca .marca img { height: 44px; }
+.lp-marca .marca-nome { font-size: 28px; }
 .lp-nav { display: flex; gap: 4px; margin: 0 auto; }
 .lp-nav a { padding: 8px 14px; border-radius: 999px; color: var(--maison); font-weight: 700; font-size: 14px; text-decoration: none; }
 .lp-nav a:hover { background: var(--gold-soft); }
@@ -163,7 +164,6 @@ body.lp { font-size: 16px; background: var(--bg); color: var(--text); }
 /* Rodapé */
 .lp-rodape { background: var(--maison); color: var(--bg); padding: 72px 0 28px; }
 .lp-rodape-in { display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center; }
-.lp-assinatura { width: 150px; height: auto; }
 .lp-cidade { margin: 0; color: #d9e0d3; }
 .lp-rodape-links { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .lp-rodape-links a { padding: 8px 14px; border-radius: 999px; color: #d9e0d3; font-weight: 700; text-decoration: none; }
@@ -195,7 +195,8 @@ body.lp { font-size: 16px; background: var(--bg); color: var(--text); }
 @media (max-width: 680px) {
   .lp-wrap, .lp-top-in { padding-left: 18px; padding-right: 18px; }
   .lp-top-in { gap: 10px; }
-  .lp-marca img { height: 40px; }
+  .lp-marca .marca img { height: 36px; }
+  .lp-marca .marca-nome { font-size: 23px; }
   .lp-hero { padding: 44px 0 64px; }
   .lp-hero-txt > p { font-size: 16.5px; }
   .lp-hero .lp-pills .lp-pill { flex: 1 1 100%; }
