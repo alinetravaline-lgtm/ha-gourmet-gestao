@@ -1,0 +1,106 @@
+/* Proposta de revenda HA La Vie: fundo claro, títulos em Vellmarie com destaque dourado.
+   Topo, pílulas e fotos vêm de lp.css; aqui ficam só as peças desta página. */
+body.rv { --rv-ouro: #8a6d33; --rv-ouro-preco: #a08a55; background: #fff; }
+.rv .lp-top { background: rgba(255, 255, 255, .9); border-bottom: 1px solid var(--line-soft); }
+.rv-selo-topo { text-transform: uppercase; letter-spacing: .16em; font-size: 11.5px; border-color: var(--maison); }
+
+.rv-kicker { display: block; font-size: 12px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; color: var(--rv-ouro); }
+.rv-kicker-claro { color: var(--champanhe); }
+.rv em { font-style: italic; color: var(--rv-ouro); }
+.rv-h2 {
+  font-family: var(--font-display); font-weight: 400; color: var(--maison);
+  font-size: clamp(32px, 4.2vw, 48px); line-height: 1.08; margin: 12px 0 36px;
+}
+.rv-h2-ouro { color: var(--rv-ouro-preco); }
+.rv-h2-ouro em { color: #5c4a1e; }
+
+/* Pílulas em contorno, como no modelo */
+.rv-pill-verde { border-color: var(--maison); color: var(--maison); background: transparent; }
+.rv-pill-verde:hover { background: var(--maison); color: #fff; }
+.rv-pill-escura { border-color: var(--choc); color: var(--choc); background: transparent; }
+.rv-pill-escura:hover { background: var(--choc); color: #fff; }
+
+/* Fotos 16:9 com sombra suave */
+.rv-foto-larga { aspect-ratio: 16 / 9; border-radius: 10px; box-shadow: 0 24px 50px rgba(35, 51, 41, .14); }
+.rv-foto-caixa img { object-position: center 86%; }
+
+/* Abertura */
+.rv-hero { padding: 64px 0 80px; }
+.rv-hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 56px; align-items: center; }
+.rv-hero h1 {
+  font-family: var(--font-display); font-weight: 400; color: var(--choc);
+  font-size: clamp(40px, 5vw, 64px); line-height: 1.05; margin: 18px 0 22px;
+}
+.rv-hero-txt > p { color: #3d4a41; font-size: 17px; line-height: 1.65; margin: 0 0 30px; max-width: 540px; }
+.rv-hero-visual { position: relative; }
+.rv-selo {
+  position: absolute; right: -14px; bottom: -36px; width: 92px; height: 92px; padding: 18px; border-radius: 999px;
+  background: #fff; box-shadow: 0 14px 30px rgba(35, 51, 41, .18);
+}
+
+/* Seções */
+.rv-sec { padding: 88px 0; scroll-margin-top: 70px; }
+.rv-cardapio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+.rv-item h3 { margin: 18px 0 8px; font-family: var(--font-display); font-weight: 400; font-size: 25px; color: var(--maison); }
+.rv-item p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
+
+/* Tabela de revenda */
+.rv-sec-tabela { background: var(--surface-2); }
+.rv-tabela-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 64px; align-items: start; }
+.rv-tabela { width: 100%; border-collapse: collapse; }
+.rv-tabela th {
+  padding: 0 0 16px; text-align: left; font-size: 11.5px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--rv-ouro); border-bottom: 1px solid var(--line-soft);
+}
+.rv-tabela th:last-child, .rv-tabela td:last-child { text-align: right; }
+.rv-tabela td { padding: 20px 0; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: 16px; }
+.rv-tabela td:last-child { font-family: var(--font-display); font-size: 28px; color: var(--rv-ouro-preco); white-space: nowrap; }
+.rv-nota { margin: 18px 0 0; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+.rv-metricas { margin: 0; display: grid; }
+.rv-metricas > div { padding: 22px 0; border-bottom: 1px solid var(--line-soft); }
+.rv-metricas > div:first-child { padding-top: 0; }
+.rv-metricas dt { font-size: 11.5px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: var(--choc); }
+.rv-metricas dd { margin: 8px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.rv-metricas strong { display: block; margin-bottom: 4px; font-family: var(--font-display); font-weight: 400; font-size: 36px; line-height: 1.1; color: var(--rv-ouro-preco); }
+
+/* Como funciona */
+.rv-passos { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px; }
+.rv-passos li { border-top: 1px solid var(--line); padding-top: 22px; }
+.rv-num { font-family: var(--font-display); font-size: 40px; line-height: 1; color: var(--rv-ouro-preco); }
+.rv-passos h3 { margin: 14px 0 8px; font-family: var(--font-display); font-weight: 400; font-size: 25px; color: var(--maison); }
+.rv-passos p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.6; }
+
+/* Contato */
+.rv-contato { background: var(--maison); color: var(--bg); padding: 88px 0; scroll-margin-top: 70px; }
+.rv-contato-in { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 18px; }
+.rv-contato h2 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: clamp(32px, 4.2vw, 50px); line-height: 1.08; max-width: 760px; }
+.rv-contato em { color: var(--champanhe); }
+.rv-contato p { margin: 0 0 8px; color: #d9e0d3; font-size: 16.5px; line-height: 1.6; max-width: 560px; }
+.rv-contato .lp-pills { justify-content: center; }
+.rv-assinatura { margin-top: 30px; }
+.rv-assinatura img { height: 44px; }
+
+/* Rodapé */
+.rv-rodape { background: var(--choc); color: var(--bg); padding: 40px 0 34px; }
+.rv-rodape-in { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.rv-manifesto { margin: 0; font-family: var(--font-display); font-size: 24px; color: var(--bg); }
+.rv-manifesto em { color: var(--champanhe); }
+.rv-assina { margin: 0; font-size: 13px; color: #d9e0d3; opacity: .8; }
+
+@media (max-width: 1020px) {
+  .rv-hero-grid, .rv-tabela-grid { grid-template-columns: 1fr; }
+  .rv-hero-grid { gap: 40px; }
+  .rv-tabela-grid { gap: 44px; }
+  .rv-cardapio { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rv-cardapio .rv-item:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 680px) {
+  .rv-hero { padding: 40px 0 64px; }
+  .rv-hero .lp-pills .lp-pill { flex: 1 1 100%; }
+  .rv-selo { width: 72px; height: 72px; padding: 14px; right: 10px; bottom: -28px; }
+  .rv-sec, .rv-contato { padding: 64px 0; }
+  .rv-cardapio, .rv-passos { grid-template-columns: 1fr; }
+  .rv-tabela td { font-size: 15px; }
+  .rv-tabela td:last-child { font-size: 24px; }
+  .rv-selo-topo { letter-spacing: .1em; font-size: 10.5px; }
+}
