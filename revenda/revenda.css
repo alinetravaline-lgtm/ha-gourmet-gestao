@@ -1,4 +1,4 @@
-/* Proposta de revenda HA La Vie: fundo claro, títulos em Vellmarie com destaque dourado.
+/* Proposta de revenda HA Gourmet: fundo claro, títulos em Vellmarie com destaque dourado.
    Topo, pílulas e fotos vêm de lp.css; aqui ficam só as peças desta página. */
 body.rv { --rv-ouro: #8a6d33; --rv-ouro-preco: #a08a55; background: #fff; }
 .rv .lp-top { background: rgba(255, 255, 255, .9); border-bottom: 1px solid var(--line-soft); }
