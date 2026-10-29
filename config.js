@@ -17,8 +17,8 @@ window.HAG_CLUBE = {
 
 // Contatos exibidos na página inicial. Campo vazio esconde o botão ou link correspondente.
 window.HAG_LOJA = {
-  whatsapp: "", // só números, com DDI e DDD (ex.: 5511999998888)
-  instagram: "", // usuário, sem @
+  whatsapp: "5519996023500", // só números, com DDI e DDD (ex.: 5511999998888)
+  instagram: "h.a_gourmet", // usuário, sem @
   ifood: "", // link completo da loja no iFood
-  cidade: "",
+  cidade: "Atendimento em Piracicaba, Americana, Limeira, Campinas e região",
 };
